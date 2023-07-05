@@ -141,7 +141,7 @@
                              __VA_ARGS__)
 #define tid_val() getThreadId(rewriter, loc)
 #define pid_val(dim)                                                           \
-  getProgramId(rewriter, loc, static_cast<mlir::gpu::Dimension>(dim));
+  getProgramId(rewriter, loc, static_cast<mlir::gpu::Dimension>(dim))
 
 // Attributes
 #define i32_arr_attr(...) rewriter.getI32ArrayAttr({__VA_ARGS__})
@@ -215,13 +215,13 @@ namespace spirv {
 /// Returns true if the given `type` is a boolean scalar or vector type.
 bool isBoolScalarOrVector(Type type);
 
-Value createConstantI32(Location loc, PatternRewriter &rewriter, int32_t v);
+Value createConstantI32(Location loc, OpBuilder &builder, int32_t v);
 
 /// Create a 32-bit float constant.
-Value createConstantF32(Location loc, PatternRewriter &rewriter, float v);
+Value createConstantF32(Location loc, OpBuilder &builder, float v);
 
 /// Create a 64-bit float constant.
-Value createConstantF64(Location loc, PatternRewriter &rewriter, float v);
+Value createConstantF64(Location loc, OpBuilder &builder, float v);
 
 /// Create an index type constant.
 Value createIndexConstant(OpBuilder &builder, Location loc,
@@ -352,11 +352,13 @@ Value convertFp32ToBf16(Location loc, ConversionPatternRewriter &rewriter,
 Value convertBf16ToFp32(Location loc, ConversionPatternRewriter &rewriter,
                         const Value &v, bool use_INTELConvertFToBF16Op = false);
 
-spirv::FuncOp appendOrGetFuncOp(Location loc,
-                                ConversionPatternRewriter &rewriter,
-                                StringRef libName, StringRef funcName,
-                                mlir::FunctionType funcType,
-                                const NamedAttrList &extraAttrs = {});
+spirv::FuncOp getNearestFuncOp(Operation *from);
+
+spirv::FuncOp appendOrGetFuncOp(
+    Location loc, OpBuilder &rewriter, StringRef funcName,
+    mlir::FunctionType funcType,
+    spirv::FunctionControl linkage = spirv::FunctionControl::Inline,
+    const NamedAttrList &extraAttrs = {});
 
 Type getSharedMemPtrTy(Type argType);
 

@@ -1,3 +1,7 @@
+
+# VCIntrinsics is required.
+find_package(VCIntrinsics)
+
 add_mlir_conversion_library(TritonGPUToSPIRV
     TritonGPUToSPIRV.cpp
     ViewOpToSPIRV.cpp
@@ -14,6 +18,8 @@ add_mlir_conversion_library(TritonGPUToSPIRV
     TypeConverter.cpp
     Utility.cpp
     DotOpToSPIRV.cpp
+    VCIntrinsicHelper.cpp
+    ESIMDHelper.cpp
 
 
     ADDITIONAL_HEADER_DIRS
@@ -34,4 +40,6 @@ add_mlir_conversion_library(TritonGPUToSPIRV
     TritonIR
     TritonGPUIR
     TritonGPUTransforms
+    LLVMGenXIntrinsics
+    MLIRTargetLLVMIRImport
 )

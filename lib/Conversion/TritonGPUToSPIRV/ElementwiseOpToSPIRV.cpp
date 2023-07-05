@@ -1,9 +1,12 @@
 #include "ElementwiseOpToSPIRV.h"
+#include "triton/Conversion/TritonGPUToSPIRV/ESIMDHelper.h"
+#include "triton/Conversion/TritonGPUToSPIRV/VCIntrinsicHelper.h"
 #include "llvm/ADT/StringMap.h"
 #include <string>
 
 using namespace mlir;
 using namespace mlir::triton;
+using namespace mlir::triton::intel;
 using ::mlir::triton::gpu::getTotalElemsPerThread;
 
 static SmallVector<Value> reorderValues(const SmallVector<Value> &values,
@@ -405,6 +408,215 @@ private:
         b.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
     auto linkageAttr = b.getAttr<::mlir::spirv::LinkageAttributesAttr>(
         funcName.str(), linkageTypeAttr);
+    attributes.set("linkage_attributes", linkageAttr);
+    auto ret =
+        b.create<spirv::FuncOp>(v.getLoc(), funcName, funcType,
+                                spirv::FunctionControl::Inline, attributes);
+    return ret;
+  }
+};
+
+class SIMDTest : public ConvertTritonGPUOpToSPIRVPattern<arith::AddIOp> {
+public:
+  using OpAdaptor = typename arith::AddIOp::Adaptor;
+
+  explicit SIMDTest(TritonGPUToSPIRVTypeConverter &converter,
+                    MLIRContext *context, PatternBenefit benefit = 1,
+                    bool use_INTELConvertFToBF16Op = false)
+      : ConvertTritonGPUOpToSPIRVPattern<arith::AddIOp>(converter, context,
+                                                        benefit),
+        use_INTELConvertFToBF16Op(use_INTELConvertFToBF16Op) {}
+
+  bool use_INTELConvertFToBF16Op = false;
+  LogicalResult
+  matchAndRewrite(arith::AddIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto resultTy = op.getType();
+    Location loc = op->getLoc();
+    // element type
+    auto resultElementTy = getElementTypeOrSelf(resultTy);
+    Type elemTy = this->getTypeConverter()->convertType(resultElementTy);
+    SmallVector<Value> resultVals;
+
+    //        auto aTy = mlir::VectorType::get(128, f16_ty);
+    //        auto bTy = mlir::VectorType::get(128, i32_ty);
+    //        auto cTy = mlir::VectorType::get(128, i32_ty);
+    //        auto dTy = mlir::VectorType::get(128, i32_ty);
+    //        SmallVector<mlir::Type*, 4> funcTys;
+    //        funcTys.push_back(&dTy);
+    //        funcTys.push_back(&aTy);
+    //        funcTys.push_back(&bTy);
+    //        funcTys.push_back(&cTy);
+
+    std::string simdFunc = "SIMDwrapper";
+#if 1
+    auto mod = op->getParentOfType<ModuleOp>();
+    unsigned threadsPerWarp =
+        triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
+    auto simdLenght = threadsPerWarp * 1;
+    auto valueTy = i32_ty;
+    auto valSIMDTy = mlir::VectorType::get({(int64_t)simdLenght}, valueTy);
+
+    auto aTy = mlir::VectorType::get(simdLenght, f16_ty);
+    auto bTy = mlir::VectorType::get(simdLenght, i32_ty);
+    auto cTy = mlir::VectorType::get(simdLenght, i32_ty);
+    auto dTy = mlir::VectorType::get(simdLenght, i32_ty);
+    VCIBuilder builder(threadsPerWarp, rewriter);
+    auto dpas2Intrinsic = builder.create<GenXDPAS2>(dTy, cTy, bTy, aTy);
+    //    Value ret = dpas2Intrinsic(cVal, bVal, aVal);
+    //    SmallVector<mlir::Type*, 4> funcTys;
+    //    funcTys.push_back(&dTy);
+    //    funcTys.push_back(&aTy);
+    //    funcTys.push_back(&bTy);
+    //    funcTys.push_back(&cTy);
+
+    //  auto xmxIntrinsic =
+    //  triton::intel::getGenXName(llvm::GenXIntrinsic::ID::genx_dpas, funcTys);
+    //  llvm::outs() << "johnlu xmxIntrinsic name:" << xmxIntrinsic << "\n";
+
+    auto simdFunTy =
+        mlir::FunctionType::get(rewriter.getContext(), {valSIMDTy}, {dTy});
+    spirv::FuncOp wrapper;
+    {
+      // SIMD function
+      NamedAttrList attributes;
+      wrapper = mlir::triton::intel::appendOrGetESIMDFunc(rewriter, simdFunc,
+                                                          simdFunTy, loc);
+      if (wrapper.empty()) {
+        auto block = wrapper.addEntryBlock();
+        auto entryBlock = &wrapper.getFunctionBody().front();
+
+        OpBuilder rewriter(entryBlock, entryBlock->begin());
+
+        Value retVal = rewriter.create<spirv::UndefOp>(loc, bTy);
+
+        for (int i = 0; i < simdLenght; i++)
+          retVal = insert_val(dTy, i32_val(i + 10), retVal,
+                              rewriter.getI32ArrayAttr(i));
+
+        rewriter.create<spirv::ReturnValueOp>(loc, TypeRange(),
+                                              ValueRange{retVal});
+      }
+    }
+    auto funPtrTy = spirv::FunctionPointerINTELType::get(
+        simdFunTy, spirv::StorageClass::Function);
+    spirv::INTELConstantFunctionPointerOp funValue =
+        rewriter.create<spirv::INTELConstantFunctionPointerOp>(loc, funPtrTy,
+                                                               simdFunc);
+
+    //  std::cout << "johnlu address of" << std::endl;
+    //  (*this)->print(llvm::outs());
+    //  llvm::outs().flush();
+    //  std::cout << std::endl;
+    Type simtDTy;
+    if (simdLenght / 16 > 1)
+      simtDTy = mlir::VectorType::get(simdLenght / 16, i32_ty);
+    else
+      simtDTy = i32_ty;
+
+    std::string intfSIMDFunc =
+        "_Z33__regcall3____builtin_invoke_simd" + simdFunc;
+    auto simtToSIMDFunTy = mlir::FunctionType::get(
+        rewriter.getContext(), {funPtrTy, valueTy}, {simtDTy});
+    {
+      // SIMT -> SIMD calling abi
+      auto simtWrapper =
+          spirv::appendOrGetFuncOp(loc, rewriter, intfSIMDFunc, simtToSIMDFunTy,
+                                   spirv::FunctionControl::Inline);
+
+      simtWrapper->setAttr(
+          spirv::SPIRVDialect::getAttributeName(
+              spirv::Decoration::LinkageAttributes),
+          spirv::LinkageAttributesAttr::get(
+              rewriter.getContext(), intfSIMDFunc,
+              spirv::LinkageTypeAttr::get(rewriter.getContext(),
+                                          spirv::LinkageType::Import)));
+    }
+
+    auto funCall = rewriter.create<spirv::FunctionCallOp>(
+        loc, TypeRange{simtDTy}, intfSIMDFunc,
+        ValueRange{funValue, i32_val(0)});
+    auto ret = funCall.getReturnValue();
+
+    auto printFuncTy = mlir::FunctionType::get(
+        rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty}, TypeRange());
+    spirv::FuncOp funcOp = SIMDTest::appendOrGetFuncOp(
+        rewriter, op, "libdevice", "print_scalar", printFuncTy);
+
+    for (int i = 0; i < (simdLenght / 16); i++) {
+      Value scalar;
+      if (simdLenght / 16 > 1)
+        scalar = extract_val(i32_ty, ret, rewriter.getI32ArrayAttr(i));
+      else
+        scalar = ret;
+      Value tid = tid_val();
+      Value warp = udiv(tid, i32_val(16));
+      Value lane = urem(tid, i32_val(16));
+      rewriter.create<spirv::FunctionCallOp>(
+          loc, TypeRange(), "print_scalar",
+          ValueRange{warp, lane, i32_val(i), scalar});
+    }
+
+#endif
+    //
+    SmallVector<SmallVector<Value>> allOperands;
+    auto operands = adaptor.getOperands();
+    for (const auto &operand : operands) {
+      auto argTy = op->getOperand(0).getType();
+      auto sub_operands = this->getTypeConverter()->unpackLLElements(
+          loc, operand, rewriter, argTy);
+      sub_operands = unpackI32(sub_operands, argTy, rewriter, loc,
+                               this->getTypeConverter());
+      allOperands.resize(sub_operands.size());
+      auto vs = llvm::enumerate(sub_operands);
+      for (const auto &v : vs)
+        allOperands[v.index()].push_back(v.value());
+    }
+    if (allOperands.size() == 0)
+      allOperands.push_back({});
+    for (const SmallVector<Value> &operands : allOperands) {
+      Value curr = rewriter.create<spirv::IAddOp>(
+          loc, elemTy, operands, adaptor.getAttributes().getValue());
+      //      Value curr =
+      //          ((ConcreteT *)(this))
+      //              ->createDestOp(op, adaptor, rewriter, elemTy, operands,
+      //              loc);
+      if (!bool(curr))
+        return failure();
+      resultVals.push_back(curr);
+    }
+    if (op->getNumOperands() > 0) {
+      auto argTy = op->getOperand(0).getType();
+      resultVals = reorderValues(resultVals, argTy, resultTy);
+    }
+    resultVals =
+        packI32(resultVals, resultTy, rewriter, loc, this->getTypeConverter());
+    Value view = this->getTypeConverter()->packLLElements(loc, resultVals,
+                                                          rewriter, resultTy);
+    rewriter.replaceOp(op, view);
+
+    return success();
+  }
+
+  static spirv::FuncOp appendOrGetFuncOp(ConversionPatternRewriter &rewriter,
+                                         const Value &v, StringRef libName,
+                                         StringRef funcName,
+                                         mlir::FunctionType funcType,
+                                         const NamedAttrList &extraAttrs = {}) {
+    auto funcAttr = StringAttr::get(v.getContext(), funcName);
+    Operation *funcOp =
+        SymbolTable::lookupNearestSymbolFrom(v.getDefiningOp(), funcAttr);
+    if (funcOp)
+      return cast<spirv::FuncOp>(*funcOp);
+
+    mlir::OpBuilder b(v.getDefiningOp()->getParentOfType<spirv::FuncOp>());
+    NamedAttrList attributes(extraAttrs);
+    attributes.set("libname", StringAttr::get(v.getContext(), libName));
+    attributes.set("libpath", StringAttr::get(v.getContext(), ""));
+    auto linkageTypeAttr =
+        b.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+    auto linkageAttr = b.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+        funcName.lower(), linkageTypeAttr);
     attributes.set("linkage_attributes", linkageAttr);
     auto ret =
         b.create<spirv::FuncOp>(v.getLoc(), funcName, funcType,
@@ -998,7 +1210,7 @@ void populateElementwiseOpToSPIRVPatterns(
   patterns.add<ElementwiseOpSPIRVConversion<SRC_OP, DST_OP>>(                  \
       typeConverter, context, benefit);
   POPULATE_BINARY_OP(arith::SubIOp, spirv::ISubOp) // -
-  POPULATE_BINARY_OP(arith::AddIOp, spirv::IAddOp) // +
+  //  POPULATE_BINARY_OP(arith::AddIOp, spirv::IAddOp) // +
   POPULATE_BINARY_OP(arith::MulIOp, spirv::IMulOp) // *
   POPULATE_BINARY_OP(arith::DivSIOp, spirv::SDivOp)
   POPULATE_BINARY_OP(arith::DivUIOp, spirv::UDivOp)
@@ -1009,6 +1221,8 @@ void populateElementwiseOpToSPIRVPatterns(
   POPULATE_BINARY_OP(arith::OrIOp, arith::OrIOp)   // |
   POPULATE_BINARY_OP(arith::XOrIOp, arith::XOrIOp) // ^
 #undef POPULATE_BINARY_OP
+
+  patterns.add<SIMDTest>(typeConverter, context, benefit);
 
 #define POPULATE_UNARY_OP(SRC_OP, DST_OP)                                      \
   patterns.add<ElementwiseOpSPIRVConversion<SRC_OP, DST_OP>>(                  \

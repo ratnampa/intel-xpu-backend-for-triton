@@ -19,22 +19,22 @@ bool isBoolScalarOrVector(Type type) {
   return false;
 }
 
-Value createConstantI32(Location loc, PatternRewriter &rewriter, int32_t v) {
-  auto i32ty = rewriter.getIntegerType(32);
-  return rewriter.create<spirv::ConstantOp>(loc, i32ty,
-                                            IntegerAttr::get(i32ty, v));
+Value createConstantI32(Location loc, OpBuilder &builder, int32_t v) {
+  auto i32ty = builder.getIntegerType(32);
+  return builder.create<spirv::ConstantOp>(loc, i32ty,
+                                           IntegerAttr::get(i32ty, v));
 }
 
-Value createConstantF32(Location loc, PatternRewriter &rewriter, float v) {
-  auto type = type::f32Ty(rewriter.getContext());
-  return rewriter.create<spirv::ConstantOp>(loc, type,
-                                            rewriter.getF32FloatAttr(v));
+Value createConstantF32(Location loc, OpBuilder &builder, float v) {
+  auto type = type::f32Ty(builder.getContext());
+  return builder.create<spirv::ConstantOp>(loc, type,
+                                           builder.getF32FloatAttr(v));
 }
 
-Value createConstantF64(Location loc, PatternRewriter &rewriter, float v) {
-  auto type = type::f64Ty(rewriter.getContext());
-  return rewriter.create<spirv::ConstantOp>(loc, type,
-                                            rewriter.getF64FloatAttr(v));
+Value createConstantF64(Location loc, OpBuilder &builder, float v) {
+  auto type = type::f64Ty(builder.getContext());
+  return builder.create<spirv::ConstantOp>(loc, type,
+                                           builder.getF64FloatAttr(v));
 }
 
 // Create an index type constant.
@@ -365,32 +365,22 @@ spirv::FuncOp getNearestFuncOp(Operation *from) {
   return nullptr;
 }
 
-spirv::FuncOp appendOrGetFuncOp(Location loc,
-                                ConversionPatternRewriter &rewriter,
-                                StringRef libName, StringRef funcName,
-                                mlir::FunctionType funcType,
+spirv::FuncOp appendOrGetFuncOp(Location loc, OpBuilder &builder,
+                                StringRef funcName, mlir::FunctionType funcType,
+                                spirv::FunctionControl linkage,
                                 const NamedAttrList &extraAttrs) {
   spirv::FuncOp func =
-      getNearestFuncOp(rewriter.getBlock()->getParent()->getParentOp());
+      getNearestFuncOp(builder.getBlock()->getParent()->getParentOp());
   assert(func && "cannot find func op");
-  auto funcAttr = StringAttr::get(rewriter.getContext(), funcName);
+  auto funcAttr = StringAttr::get(builder.getContext(), funcName);
   Operation *funcOp = SymbolTable::lookupNearestSymbolFrom(func, funcAttr);
   if (funcOp)
     return cast<spirv::FuncOp>(*funcOp);
 
   mlir::OpBuilder b(func);
-  NamedAttrList attributes(extraAttrs);
-  attributes.set("libname", StringAttr::get(rewriter.getContext(), libName));
-  attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
-  attributes.set(
-      "linkage_attributes",
-      ArrayAttr::get(rewriter.getContext(),
-                     {
-                         StringAttr::get(rewriter.getContext(), funcName),
-                         StringAttr::get(rewriter.getContext(), "Import"),
-                     }));
-  auto ret = b.create<spirv::FuncOp>(
-      loc, funcName, funcType, spirv::FunctionControl::Inline, attributes);
+
+  auto ret =
+      b.create<spirv::FuncOp>(loc, funcName, funcType, linkage, extraAttrs);
   return ret;
 }
 
