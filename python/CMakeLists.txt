@@ -56,6 +56,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
     target_link_options(intel_xpu_backend_for_triton PRIVATE ${LLVM_LDFLAGS})
 
     file(INSTALL
+         ${CMAKE_CURRENT_SOURCE_DIR}/lib/libprint_utils.spv
          ${CMAKE_CURRENT_SOURCE_DIR}/lib/libsycl-fallback-imf.spv
          ${CMAKE_CURRENT_SOURCE_DIR}/lib/libsycl-fallback-imf-fp64.spv
          DESTINATION ${PYTHON_THIRD_PARTY_PATH}/xpu/lib)

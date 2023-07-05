@@ -1,5 +1,7 @@
 #include "../DotOpToSPIRV.h"
 #include "../Utility.h"
+#include "triton/Conversion/TritonGPUToSPIRV/ESIMDHelper.h"
+#include "triton/Conversion/TritonGPUToSPIRV/VCIntrinsicHelper.h"
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
 using namespace mlir;
@@ -218,10 +220,120 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   llvm::outs() << "johnlu mmaType: " << mmaType << "\n";
   llvm::outs().flush();
 
+  //  std::string libName = "libdevice";
+  //  std::string curPrint = "print_cur_float";
+  //  std::string accPrint = "print_acc_float";
+  //  std::string outPrint = "print_output_float";
+  //  std::string writeIndexPrint = "print_write_index";
+  //  appendOrGetFuncOp(rewriter, op, libName, writeIndexPrint,
+  //                    mlir::FunctionType::get(rewriter.getContext(), {i32_ty,
+  //                    i32_ty, i32_ty}, TypeRange()));
+
+  //  spirv::FuncOp func = spirv::appendOrGetFuncOp(loc, rewriter, "libdevice",
+  //  "llvm.genx.dpas",
+  //   mlir::FunctionType::get(rewriter.getContext(), {i32_ty, i32_ty, i32_ty},
+  //   TypeRange()),
+  //                                                  spirv::FunctionControl::Inline,attributes);
+
+  std::string simdFunc = "SIMDwrapper";
+#if 1
+  auto valueTy = i32_ty;
+  auto valSIMDTy = mlir::VectorType::get({(int64_t)32}, valueTy);
+
+  auto aTy = mlir::VectorType::get(128, f16_ty);
+  auto bTy = mlir::VectorType::get(128, i32_ty);
+  auto cTy = mlir::VectorType::get(128, i32_ty);
+  auto dTy = mlir::VectorType::get(128, i32_ty);
+  SmallVector<mlir::Type *, 4> funcTys;
+  funcTys.push_back(&dTy);
+  funcTys.push_back(&aTy);
+  funcTys.push_back(&bTy);
+  funcTys.push_back(&cTy);
+
+  //  auto xmxIntrinsic =
+  //  triton::intel::getGenXName(llvm::GenXIntrinsic::ID::genx_dpas, funcTys);
+  //  llvm::outs() << "johnlu xmxIntrinsic name:" << xmxIntrinsic << "\n";
+
+  auto simdFunTy =
+      mlir::FunctionType::get(rewriter.getContext(), {valSIMDTy}, {dTy});
+  spirv::FuncOp wrapper;
+  {
+    // SIMD function
+    NamedAttrList attributes;
+    wrapper = mlir::triton::intel::appendOrGetESIMDFunc(rewriter, simdFunc,
+                                                        simdFunTy, loc);
+    if (wrapper.empty()) {
+      auto block = wrapper.addEntryBlock();
+      auto entryBlock = &wrapper.getFunctionBody().front();
+
+      OpBuilder rewriter(entryBlock, entryBlock->begin());
+
+      Value retVal = rewriter.create<spirv::UndefOp>(loc, bTy);
+
+      rewriter.create<spirv::ReturnValueOp>(loc, TypeRange(),
+                                            ValueRange{retVal});
+    }
+  }
+  auto funPtrTy = spirv::FunctionPointerINTELType::get(
+      simdFunTy, spirv::StorageClass::Function);
+  spirv::INTELConstantFunctionPointerOp funValue =
+      rewriter.create<spirv::INTELConstantFunctionPointerOp>(loc, funPtrTy,
+                                                             simdFunc);
+
+  //  std::cout << "johnlu address of" << std::endl;
+  //  (*this)->print(llvm::outs());
+  //  llvm::outs().flush();
+  //  std::cout << std::endl;
+#if 0
+  auto symbolOp = SymbolTable::lookupNearestSymbolFrom(funValue->getParentOp(),
+                                     funValue.getVariableAttr());
+    if(symbolOp) {
+      std::cout << "start symbolTableOp" << std::endl;
+      symbolOp->print(llvm::outs());
+      llvm::outs().flush();
+      std::cout << std::endl;
+      std::cout << "end symbolTableOp" << std::endl;
+      auto funcOp = dyn_cast_or_null<spirv::FuncOp>(symbolOp);
+      std::cout << "start symbolOp type" << std::endl;
+      funcOp.getFunctionType().print(llvm::outs());
+      llvm::outs().flush();
+      std::cout << std::endl;
+      std::cout << "end symbolOp type" << std::endl;
+      std::cout << "start pointer type" << std::endl;
+      funValue->getResult(0).print(llvm::outs());
+//      funValue.getPointer().print(llvm::outs());
+      llvm::outs().flush();
+      std::cout << std::endl;
+      std::cout << "end pointer type" << std::endl;
+    }
+#endif
+
+  auto simtDTy = mlir::VectorType::get(128 / 32, i32_ty);
+  std::string intfSIMDFunc = "_Z33__regcall3____builtin_invoke_simd" + simdFunc;
+  auto simtToSIMDFunTy = mlir::FunctionType::get(
+      rewriter.getContext(), {funPtrTy, valueTy}, {simtDTy});
+  {
+    // SIMT -> SIMD calling abi
+    auto simtWrapper =
+        spirv::appendOrGetFuncOp(loc, rewriter, intfSIMDFunc, simtToSIMDFunTy,
+                                 spirv::FunctionControl::Inline);
+
+    simtWrapper->setAttr(
+        spirv::SPIRVDialect::getAttributeName(
+            spirv::Decoration::LinkageAttributes),
+        spirv::LinkageAttributesAttr::get(
+            rewriter.getContext(), intfSIMDFunc,
+            spirv::LinkageTypeAttr::get(rewriter.getContext(),
+                                        spirv::LinkageType::Import)));
+  }
+#endif
   auto callMma = [&](unsigned m, unsigned n, unsigned k) {
     //    Type elemTy = getMmaRetType(mmaType, op.getContext())
     //                      .cast<spirv::StructType>()
     //                      .getElementType(0);
+    rewriter.create<spirv::FunctionCallOp>(loc, TypeRange{simtDTy},
+                                           intfSIMDFunc,
+                                           ValueRange{funValue, i32_val(0)});
     Type elemTy = mmaType.cast<spirv::StructType>().getElementType(0);
     llvm::outs() << "johnlu elemTy: " << elemTy << "\n";
     llvm::outs().flush();
