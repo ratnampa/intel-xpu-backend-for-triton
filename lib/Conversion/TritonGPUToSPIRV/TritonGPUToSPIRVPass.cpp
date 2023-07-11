@@ -16,6 +16,7 @@
 #include "triton/Analysis/Membar.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
+#include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
 #include "ConvertLayoutOpToSPIRV.h"
 #include "DotOpToSPIRV.h"
@@ -554,8 +555,8 @@ private:
       OpBuilder builder(cvtOp);
       auto srcType = cvtOp.getOperand().getType().cast<RankedTensorType>();
       auto dstType = cvtOp.getType().cast<RankedTensorType>();
-      auto srcMma =
-          srcType.getEncoding().dyn_cast<triton::gpu::MmaEncodingAttr>();
+      auto srcMma = srcType.getEncoding()
+                        .dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
       auto dstDotOp =
           dstType.getEncoding().dyn_cast<triton::gpu::DotOperandEncodingAttr>();
       if (srcMma && dstDotOp && !isMmaToDotShortcut(srcType, dstType)) {

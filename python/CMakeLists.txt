@@ -26,6 +26,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
             TritonAnalysis
             TritonTransforms
             TritonGPUTransforms
+            TritonIntelGPUTransforms
             TritonSPIRV
             TritonGPUToSPIRV
             ${dialect_libs}
@@ -44,6 +45,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
             TritonGPUTransforms
             ${dialect_libs}
             ${conversion_libs}
+            TritonIntelAnalysis
             )
     target_link_libraries(intel_xpu_backend_for_triton PRIVATE ${LLVM_LIBRARIES})
     target_link_libraries(intel_xpu_backend_for_triton PRIVATE ${INTEL_EXTENSION_LIBRARIES})

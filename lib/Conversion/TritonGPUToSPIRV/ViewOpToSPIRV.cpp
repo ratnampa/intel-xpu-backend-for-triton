@@ -1,4 +1,5 @@
 #include "ViewOpToSPIRV.h"
+#include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
 using namespace mlir;
 using namespace mlir::triton;
@@ -22,6 +23,15 @@ struct SplatOpSPIRVConversion
                                   ConversionPatternRewriter &rewriter,
                                   Location loc) {
     auto tensorTy = resType.cast<RankedTensorType>();
+    Attribute layout = tensorTy.getEncoding();
+
+    if (auto xmxOp =
+            layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
+      // TODO: add const op for mma encoding.
+      auto ty = typeConverter->convertType(tensorTy);
+      return undef(ty);
+    }
+
     auto srcType = typeConverter->convertType(elemType);
     auto spirvSrc = bitcast(constVal, srcType);
     size_t elemsPerThread = getTotalElemsPerThread(tensorTy);
@@ -64,6 +74,9 @@ struct ArithConstantSplatOpSPIRVConversion
     if (!value.dyn_cast<SplatElementsAttr>())
       return failure();
 
+    llvm::outs() << "johnlu value: " << value << "\n";
+    llvm::outs().flush();
+
     auto loc = op->getLoc();
 
     auto values = op.getValue().dyn_cast<SplatElementsAttr>();
@@ -99,6 +112,7 @@ struct ArithConstantSplatOpSPIRVConversion
       constOp = mlir::spirv::convertFp32ToBf16(loc, rewriter, constOp,
                                                use_INTELConvertFToBF16Op);
     }
+
     auto llStruct = SplatOpSPIRVConversion::convertSplatLikeOp(
         elemType, op.getType(), constOp, getTypeConverter(), rewriter, loc);
     rewriter.replaceOp(op, llStruct);

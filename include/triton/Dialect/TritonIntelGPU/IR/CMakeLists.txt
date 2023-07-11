@@ -1,0 +1,10 @@
+set(LLVM_TARGET_DEFINITIONS TritonIntelGPUAttrDefs.td)
+mlir_tablegen(Dialect.h.inc -gen-dialect-decls -dialect=triton_intel_gpu)
+mlir_tablegen(Dialect.cpp.inc -gen-dialect-defs -dialect=triton_intel_gpu)
+#mlir_tablegen(Ops.h.inc -gen-op-decls)
+#mlir_tablegen(Ops.cpp.inc -gen-op-defs)
+add_public_tablegen_target(TritonIntelGPUTableGen)
+
+mlir_tablegen(TritonIntelGPUAttrDefs.h.inc -gen-attrdef-decls --attrdefs-dialect=triton_intel_gpu)
+mlir_tablegen(TritonIntelGPUAttrDefs.cpp.inc -gen-attrdef-defs --attrdefs-dialect=triton_intel_gpu)
+add_public_tablegen_target(TritonIntelGPUAttrDefsIncGen)
