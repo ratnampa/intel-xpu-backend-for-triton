@@ -1,5 +1,7 @@
 #include "DotOpToSPIRV.h"
 #include "Utility.h"
+#include "triton/Analysis/IntelUtility.h"
+#include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
 using namespace mlir;
 using namespace mlir::triton;
@@ -8,6 +10,10 @@ using ::mlir::triton::gpu::DotOperandEncodingAttr;
 using ::mlir::triton::gpu::MmaEncodingAttr;
 
 LogicalResult convertFMADot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
+                            TritonGPUToSPIRVTypeConverter *typeConverter,
+                            ConversionPatternRewriter &rewriter);
+
+LogicalResult convertXMXDot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
                             TritonGPUToSPIRVTypeConverter *typeConverter,
                             ConversionPatternRewriter &rewriter);
 
@@ -28,6 +34,14 @@ struct DotOpSPIRVConversion
     size_t reduceAxis = 1;
     unsigned K = AShape[reduceAxis];
     bool isOuter = K == 1;
+
+    auto mmaLayout = D.getType()
+                         .cast<RankedTensorType>()
+                         .getEncoding()
+                         .dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
+    if (!isOuter && mmaLayout) {
+      return convertXMXDot(op, adaptor, getTypeConverter(), rewriter);
+    }
 
     if (D.getType()
             .cast<RankedTensorType>()

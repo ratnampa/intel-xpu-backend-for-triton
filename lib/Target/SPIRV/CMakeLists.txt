@@ -1,6 +1,8 @@
 # SPIRV Tools is required to disassemble the spirv module
 find_package(SPIRV_Tools)
 
+set_target_properties(SPIRV-Tools-shared PROPERTIES EXCLUDE_FROM_ALL ON)
+
 # SPIRV-LLVM Translator is required.
 find_package(SPIRVToLLVMTranslator)
 

@@ -504,7 +504,10 @@ class XPUBackend(BaseBackend):
                 max_num_sub_groups,
                 max_num_sub_groups)
         capability = {"num_warps": num_warps, "threads_per_warp": threads_per_warp, "num_stages": 2}  # noqa: E501
-        return capability
+        if "A770" in arch["dev_name"]:
+            capability["ATS"] = 1
+
+    return capability
 
     def make_launcher_stub(self, name, signature, constants, ids):
         # name of files that are cached

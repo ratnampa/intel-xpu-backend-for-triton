@@ -2,6 +2,7 @@
 #include "Utility.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "triton/Conversion/MLIRTypes.h"
+#include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
 using namespace mlir;
 using namespace mlir::triton;
@@ -186,17 +187,19 @@ Type TritonGPUToSPIRVTypeConverter::getElementTypeForStruct(
   auto dotOpLayout = layout.dyn_cast<DotOperandEncodingAttr>();
   if (!dotOpLayout)
     return elemTy;
-  auto mmaParent = dotOpLayout.getParent().dyn_cast<MmaEncodingAttr>();
+  auto mmaParent = dotOpLayout.getParent()
+                       .dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
   if (!mmaParent)
     return elemTy;
-  if (mmaParent.isAmpere()) {
-    int bitwidth = elemTy.getIntOrFloatBitWidth();
-    assert(bitwidth <= 32);
-    return IntegerType::get(ctx, 32);
-  } else {
-    assert(mmaParent.isVolta());
-    return vec_ty(elemTy, 2);
-  }
+  return elemTy;
+  //  if (mmaParent.isAmpere()) {
+  //    int bitwidth = elemTy.getIntOrFloatBitWidth();
+  //    assert(bitwidth <= 32);
+  //    return IntegerType::get(ctx, 32);
+  //  } else {
+  //    assert(mmaParent.isVolta());
+  //    return vec_ty(elemTy, 2);
+  //  }
 }
 
 Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
@@ -220,6 +223,59 @@ Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
     }
     return spirv::StructType::get(types);
   }
+
+#if 0
+  if (auto dotOp = layout.dyn_cast<DotOperandEncodingAttr>()) {
+    auto xmxEndocing = dotOp.getParent().dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
+    auto opIdx = dotOp.getOpIdx();
+    if (opIdx == 0) {
+      // A
+      auto shapeA = xmxEndocing.getShapeA();
+      auto packedA = xmxEndocing.getPackedA();
+      assert(packedA.size() == 0 && "wrong packed A");
+      eltType = spirv::JointMatrixINTELType::get(eltType, spirv::Scope::Subgroup, shapeA[0], shapeA[1], spirv::MatrixLayout::RowMajor);
+      auto warpsPerCTA = xmxEndocing.getWarpsPerCTA();
+      unsigned tilesRow = ceil<unsigned>(shape[0], shapeA[0] * warpsPerCTA[0]);
+      unsigned tilesCol = ceil<unsigned>(shape[1], shapeA[1] * warpsPerCTA[1]);
+      unsigned numElementsPerThread = tilesRow * tilesCol;
+      SmallVector<Type, 4> types(numElementsPerThread, eltType);
+      return spirv::StructType::get(types);
+
+    } else {
+      assert(opIdx == 1 && "wrong op idx of dot op");
+      // B
+      auto shapeB = xmxEndocing.getShapeB();
+      auto packedB = xmxEndocing.getPackedB();
+      spirv::MatrixLayout layoutB = spirv::MatrixLayout::RowMajor;
+      if (packedB.size()) {
+        layoutB = spirv::MatrixLayout::PackedB;
+      }
+      eltType = spirv::JointMatrixINTELType::get(eltType, spirv::Scope::Subgroup, shapeB[0], shapeB[1], layoutB);
+
+      auto warpsPerCTA = xmxEndocing.getWarpsPerCTA();
+      unsigned tilesRow = ceil<unsigned>(shape[0], shapeB[0] * warpsPerCTA[0]);
+      unsigned tilesCol = ceil<unsigned>(shape[1], shapeB[1] * warpsPerCTA[1]);
+      unsigned numElementsPerThread = tilesRow * tilesCol;
+      SmallVector<Type, 4> types(numElementsPerThread, eltType);
+      return spirv::StructType::get(types);
+    }
+  }
+
+  if (auto xmxOp = layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
+      // C
+      auto shapeC = xmxOp.getShapeC();
+      auto packedC = xmxOp.getPackedC();
+      assert(packedC.size() == 0 && "wrong packed C");
+      eltType = spirv::JointMatrixINTELType::get(eltType, spirv::Scope::Subgroup, shapeC[0], shapeC[1], spirv::MatrixLayout::RowMajor);
+
+      auto shapePerCTA = xmxOp.getShapePerCTA(shape);
+      unsigned tilesRow = ceil<unsigned>(shape[0], shapePerCTA[0]);
+      unsigned tilesCol = ceil<unsigned>(shape[1], shapePerCTA[1]);
+      unsigned numElementsPerThread = tilesRow * tilesCol;
+      SmallVector<Type, 4> types(numElementsPerThread, eltType);
+      return spirv::StructType::get(types);
+  }
+#endif
 
   unsigned numElementsPerThread = getTotalElemsPerThread(type);
   SmallVector<Type, 4> types(numElementsPerThread, eltType);

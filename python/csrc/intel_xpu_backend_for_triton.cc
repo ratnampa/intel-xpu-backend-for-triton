@@ -6,6 +6,8 @@
 #include "mlir/Support/FileUtilities.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
+#include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
+#include "triton/Dialect/TritonIntelGPU/Transforms/Passes.h"
 
 #include <Python.h>
 #include <cctype>
@@ -172,6 +174,7 @@ void init_triton_translation(py::module &m) {
         mlir::DialectRegistry registry;
         registry.insert<mlir::triton::TritonDialect,
                         mlir::triton::gpu::TritonGPUDialect,
+                        mlir::triton::gpu::intel::TritonIntelGPUDialect,
                         mlir::math::MathDialect, mlir::arith::ArithDialect,
                         mlir::index::IndexDialect, mlir::scf::SCFDialect,
                         mlir::cf::ControlFlowDialect>();
@@ -328,7 +331,14 @@ void init_triton_translation(py::module &m) {
            })
       .def("add_scf_to_cfg", [](mlir::PassManager &self) {
         self.addPass(mlir::createConvertSCFToCFPass());
-      });
+      })
+      .def("add_triton_intel_gpu_accelerate_matmul_pass",
+           [](mlir::PassManager &self, py::dict computeCapability) {
+             auto capabilities =
+                 computeCapability.cast<std::map<std::string, int>>();
+             self.addPass(
+                 mlir::createTritonIntelGPUAccelerateMatmulPass(capabilities));
+           });
 }
 
 void init_intel_xpu_backend_for_triton(py::module &m) {
