@@ -2,7 +2,7 @@
 #
 include(FetchContent)
 
-if (NOT SPIRVTOOLS_FOUND)
+if (NOT SPIRV_TOOLS_FOUND)
 
     # Download spirv.hpp from the official SPIRV-Headers repository.
     # One can skip this step by manually setting
@@ -27,10 +27,7 @@ if (NOT SPIRVTOOLS_FOUND)
     endif()
 
     SET(SPIRV-Headers_SOURCE_DIR ${EXTERNAL_SPIRV_HEADERS_SOURCE_DIR})
-
-    SET(SPIRVTOOLS_FOUND TRUE)
-
-    SET(SPIRVTOOLS_INCLUDE_DIR)
+    SET(LLVM_EXTERNAL_SPIRV_HEADERS_SOURCE_DIR  "${EXTERNAL_SPIRV_HEADERS_SOURCE_DIR}" CACHE INTERNAL "LLVM_EXTERNAL_SPIRV_HEADERS_SOURCE_DIR")
 
     if(NOT DEFINED EXTERNAL_SPIRV_TOOLS_SOURCE_DIR)
         set(EXTERNAL_SPIRV_TOOLS_SOURCE_DIR
@@ -50,4 +47,11 @@ if (NOT SPIRVTOOLS_FOUND)
         FetchContent_MakeAvailable(spirv-tools)
     endif()
 
-endif (NOT SPIRVTOOLS_FOUND)
+    find_package_handle_standard_args(
+            SPIRV_Tools
+            FOUND_VAR SPIRV_TOOLS_FOUND
+            REQUIRED_VARS
+                EXTERNAL_SPIRV_TOOLS_SOURCE_DIR)
+
+
+endif (NOT SPIRV_TOOLS_FOUND)

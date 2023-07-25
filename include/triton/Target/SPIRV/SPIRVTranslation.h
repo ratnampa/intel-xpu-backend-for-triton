@@ -11,6 +11,8 @@
 namespace mlir {
 namespace triton {
 
+LogicalResult llvmToSPIRV(std::string llvmCode, std::ostream &output);
+
 // add external dependent libs
 void addExternalLibs(mlir::ModuleOp &module,
                      const std::vector<std::string> &names,
@@ -24,6 +26,8 @@ LogicalResult disassembleSPIRV(uint32_t *binary_ptr, size_t binary_size,
 // Translate TritonGPU dialect to SPIRV, return null if failed.
 std::string translateTritonGPUToSPIRVIR(mlir::ModuleOp module,
                                         std::map<std::string, int>);
+
+LogicalResult translateLLVMIRToSPIRV(llvm::Module &module, raw_ostream &output);
 
 } // namespace triton
 } // namespace mlir

@@ -90,18 +90,11 @@ def spirv_get_kernel_name(spirv: str) -> str:
     This Kernel name is required when launching the kernel.
     '''
     assert spirv
-    decl_ops = []
-    for line in spirv.split('\n'):
-        line = line.strip()
-        if line.startswith('OpName'):
-            decl_ops += [line.split()[-1]]
     def_ops = []
     for line in spirv.split('\n'):
         line = line.strip()
-        if re.compile(r'\bOpEntryPoint\b').search(line):
-            def_op = line.split()[2][1:]
-            if '"{}"'.format(def_op) in decl_ops:
-                def_ops += [def_op]
+        if "spir_kernel" in line:
+            def_ops += [re.compile(r'@(.*)\(').split(line.split()[3].strip())[1]]
     assert len(def_ops) == 1, "expect only one kernel per spriv"
     return def_ops[0]
 
