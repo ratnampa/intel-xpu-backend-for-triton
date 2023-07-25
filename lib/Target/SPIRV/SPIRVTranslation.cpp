@@ -1,4 +1,5 @@
 #include "mlir/Conversion/Passes.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/Dialect/SPIRV/IR/TargetAndABI.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
@@ -13,19 +14,105 @@
 #include "triton/Conversion/TritonGPUToSPIRV/TritonGPUToSPIRVPass.h"
 #include "triton/Tools/Sys/GetEnv.hpp"
 
+#include "LLVMSPIRVLib.h"
 #include "SPIRV-Tools/tools/io.h"
 #include "spirv-tools/libspirv.hpp"
 #include "spirv-tools/linker.hpp"
 #include "spirv-tools/optimizer.hpp"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 
+#include "llvm/IR/Verifier.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/Support/SourceMgr.h"
 #include <dlfcn.h>
 #include <filesystem>
+
+#include "triton/Target/SPIRV/SPIRVTranslation.h"
 
 namespace mlir {
 namespace triton {
 
+namespace fs = std::filesystem;
+
 static spv_target_env defaultSPIRVTargetEnv = SPV_ENV_OPENCL_2_2;
+
+static std::unique_ptr<llvm::Module> spirvToLLVM(uint32_t *binary_ptr,
+                                                 size_t binary_size,
+                                                 llvm::LLVMContext &context) {
+
+  llvm::Module *module;
+  std::string Err;
+  SPIRV::TranslatorOpts opts;
+  opts.setAllowedToUseExtension(
+      SPIRV::ExtensionID::SPV_EXT_shader_atomic_float_add);
+  opts.setAllowedToUseExtension(SPIRV::ExtensionID::SPV_KHR_expect_assume);
+  opts.setAllowedToUseExtension(SPIRV::ExtensionID::SPV_INTEL_vector_compute);
+  std::string spirvIR =
+      std::string((const char *)binary_ptr, binary_size * sizeof(uint32_t));
+  std::istringstream is(spirvIR);
+  if (!readSpirv(context, opts, is, module, Err)) {
+    llvm::report_fatal_error(
+        StringRef("Fails to load SPIR-V as LLVM Module: " + Err));
+  }
+
+  llvm::raw_string_ostream ErrorOS(Err);
+  if (llvm::verifyModule(*module, &ErrorOS)) {
+    llvm::report_fatal_error(
+        StringRef("Fails to verify module: " + ErrorOS.str()));
+  }
+
+  return std::unique_ptr<llvm::Module>(module);
+}
+
+LogicalResult llvmToSPIRV(llvm::Module &module, raw_ostream &output) {
+
+  llvm::LLVMContext context;
+
+  // create triple
+  std::string triple = "spir64-unknown-unknown";
+  //  std::string proc = "sm_" + std::to_string(maxCC);
+  //  std::string layout = "";
+  //  std::string features = "";
+  // std::string features = "+ptx" + std::to_string(maxPTX);
+  //  initLLVM();
+  // verify and store llvm
+  //  llvm::legacy::PassManager pm;
+  //  pm.add(llvm::createVerifierPass());
+  //  pm.run(module);
+  module.print(llvm::outs(), nullptr);
+
+  // create machine
+  module.setTargetTriple(triple);
+
+  // translate module to SPIRV IR
+  std::string Err;
+  SPIRV::TranslatorOpts opts;
+  bool Success = false;
+  std::ostringstream os;
+  Success = writeSpirv(&module, opts, os, Err);
+
+  if (!Success) {
+    llvm::report_fatal_error(
+        StringRef("failed to save LLVM as SPIR-V: " + Err));
+  }
+
+  std::string spirvIR = os.str();
+  if (::triton::tools::getBoolEnv("MLIR_ENABLE_DUMP")) {
+    std::string spirvDisassemble;
+    llvm::raw_string_ostream disassemble(spirvDisassemble);
+    if (failed(disassembleSPIRV((uint32_t *)spirvIR.c_str(),
+                                spirvIR.length() / sizeof(uint32_t),
+                                disassemble)))
+      llvm::report_fatal_error("Failed to assemble SPIRV.");
+    llvm::dbgs() << "SPIRV IR:\n" << spirvDisassemble << "\n";
+  }
+
+  output << spirvIR;
+  output.flush();
+
+  return mlir::success();
+}
 
 LogicalResult assembleSPIRV(std::string spirvCode, raw_ostream &output) {
   auto DisMessagePrinter = [](spv_message_level_t Level, const char *source,
@@ -101,6 +188,39 @@ getInterfaceVariables(spirv::FuncOp funcOp,
         funcOp.getContext(), cast<spirv::GlobalVariableOp>(var).getSymName()));
   }
   return success();
+}
+
+static bool linkExternLib(llvm::Module &module, llvm::StringRef name,
+                          llvm::StringRef path) {
+  llvm::SMDiagnostic err;
+  auto &ctx = module.getContext();
+
+  auto extMod = llvm::parseIRFile(path, err, ctx);
+  if (!extMod) {
+    llvm::errs() << "Failed to load " << path;
+    return true;
+  }
+
+  extMod->setTargetTriple(module.getTargetTriple());
+  extMod->setDataLayout(module.getDataLayout());
+
+  if (llvm::Linker::linkModules(module, std::move(extMod),
+                                llvm::Linker::Flags::LinkOnlyNeeded)) {
+    llvm::errs() << "Failed to link " << path;
+    return true;
+  }
+
+  //  // check if ROCM
+  //  if (!isROCM) {
+  //    if (name == "libdevice") {
+  //      linkLibdevice(module);
+  //    }
+  //    // else {
+  //    //   assert(false && "unknown extern lib: ");
+  //    // }
+  //  }
+
+  return false;
 }
 
 static bool linkExternLib(std::vector<uint32_t> &binary,
@@ -187,6 +307,108 @@ static bool optimizeSPIRVModule(std::vector<uint32_t> &binary) {
   return false;
 }
 
+static std::filesystem::path getThisLibraryPath() {
+#ifdef _WIN32
+  /* Get module of the specified address */
+  HMODULE hModule;
+  GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                     reinterpret_cast<LPCSTR>(&getThisLibraryPath), &hModule);
+  if (NULL == hModule) {
+    return std::filesystem::path();
+  }
+
+  char fileName[1024]; // this is way beyond Windows MAX_PATH limit.
+  DWORD dwSize = GetModuleFileNameA(hModule, fileName, sizeof(fileName));
+  if (0 == dwSize || sizeof(fileName) == dwSize) {
+    return std::filesystem::path();
+  }
+  return std::filesystem::path(fileName);
+#else
+  Dl_info fileinfo;
+  if (dladdr(reinterpret_cast<void *>(&getThisLibraryPath), &fileinfo) == 0) {
+    return std::filesystem::path();
+  }
+  return std::filesystem::path(fileinfo.dli_fname);
+#endif
+}
+
+static std::map<std::string, std::string> getExternLibs(mlir::ModuleOp module) {
+  std::map<std::string, std::string> externLibs;
+  SmallVector<LLVM::LLVMFuncOp> funcs;
+  module.walk([&](LLVM::LLVMFuncOp func) {
+    if (func.isExternal())
+      funcs.push_back(func);
+  });
+
+  for (LLVM::LLVMFuncOp func : funcs) {
+    if (auto libnameAttr = func->getDiscardableAttr("libname")) {
+      auto name = libnameAttr.dyn_cast<StringAttr>();
+      auto path = func.getOperation()
+                      ->getDiscardableAttr("libpath")
+                      .dyn_cast<StringAttr>();
+      if (name) {
+        std::string libName = name.str();
+        externLibs[libName] = path.str();
+      }
+    }
+  }
+
+  if (auto externsAttr = module->getDiscardableAttr("triton_gpu.externs")) {
+    for (auto &attr : externsAttr.cast<DictionaryAttr>()) {
+      externLibs[attr.getName().strref().trim().str()] =
+          attr.getValue().dyn_cast<StringAttr>().strref().trim().str();
+    }
+  }
+
+  if (!funcs.empty()) {
+    std::vector<std::string> lib_names = {
+        "libsycl-fallback-imf.spv", "libsycl-fallback-imf-fp64.spv",
+        "libsycl-fallback-imf-bf16.spv", "libsycl-imf-dl.spv",
+        "libsycl-imf-dl-fp64.spv"};
+    // first search for environmental path
+    std::string env_path = ::triton::tools::getenv("TRITON_LIBDEVICE_PATH");
+    if (!env_path.empty()) {
+      for (auto &lib_name : lib_names) {
+        externLibs.try_emplace(lib_name, env_path + "/" + lib_name);
+      }
+      return externLibs;
+    }
+    // Search for math lib relative to its library path if used from Python
+    // Then native code is in `triton/_C/libtriton.so` and libdevice in
+    // `triton/third_party/sycl/lib/libsycl-fallback-imf.spv`
+    static const auto this_library_path = getThisLibraryPath();
+    static const auto runtime_path =
+        this_library_path.parent_path().parent_path() / "third_party" / "xpu" /
+        "lib";
+    if (fs::exists(runtime_path)) {
+      for (auto &lib_name : lib_names) {
+        externLibs.try_emplace(lib_name, (runtime_path / lib_name).string());
+      }
+    } else {
+      static const auto this_file_path = std::filesystem::path(__FILE__);
+      static const auto compiletime_path = this_file_path.parent_path()
+                                               .parent_path()
+                                               .parent_path()
+                                               .parent_path() /
+                                           "python" / "triton" / "third_party" /
+                                           "xpu" / "lib";
+      if (!fs::exists(compiletime_path)) {
+        std::string error_msg = "Can't find libdevice at neither " +
+                                runtime_path.string() + " nor " +
+                                compiletime_path.string();
+        llvm::report_fatal_error(error_msg.c_str());
+      }
+      for (auto &lib_name : lib_names) {
+        externLibs.try_emplace(lib_name,
+                               (compiletime_path / lib_name).string());
+      }
+    }
+  }
+
+  return externLibs;
+}
+
 static std::map<std::string, std::string>
 getExternLibs(spirv::ModuleOp module) {
   std::map<std::string, std::string> externLibs;
@@ -236,17 +458,10 @@ getExternLibs(spirv::ModuleOp module) {
       }
       return externLibs;
     }
-    namespace fs = std::filesystem;
     // Search for math lib relative to its library path if used from Python
     // Then native code is in `triton/_C/libtriton.so` and libdevice in
     // `triton/third_party/sycl/lib/libsycl-fallback-imf.spv`
-    static const auto this_library_path = [] {
-      Dl_info fileinfo;
-      if (dladdr(reinterpret_cast<void *>(&getExternLibs), &fileinfo) == 0) {
-        return std::filesystem::path();
-      }
-      return std::filesystem::path(fileinfo.dli_fname);
-    }();
+    static const auto this_library_path = getThisLibraryPath();
     static const auto runtime_path =
         this_library_path.parent_path().parent_path() / "third_party" / "xpu" /
         "lib";
@@ -401,22 +616,30 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
   if (failed(spirv::serialize(spirvModules[0], binary)))
     return failure();
 
+  llvm::LLVMContext context;
+  context.setOpaquePointers(false);
+  auto llvmModule = spirvToLLVM(binary.data(), binary.size(), context);
+
   // Link external libraries before perform optimizations.
   // This allows the optimizers to inline and perform
   // analyses on the used library functions, and eliminate any unused functions
   // as dead code.
-  auto externLibs = getExternLibs(spirvModules[0]);
-  std::vector<uint32_t> linked_binary(binary.data(),
-                                      binary.data() + binary.size());
-  if (!linkExternLib(linked_binary, externLibs))
-    return failure();
+  auto externLibs = getExternLibs(module);
+  for (auto &lib : externLibs) {
+    if (linkExternLib(*llvmModule, lib.first, lib.second))
+      return failure();
+  }
 
-  if (!optimizeSPIRVModule(linked_binary))
-    return failure();
+  auto optPipeline = mlir::makeOptimizingTransformer(
+      /*optLevel=*/3, /*sizeLevel=*/0,
+      /*targetMachine=*/nullptr);
 
-  if (failed(
-          disassembleSPIRV(linked_binary.data(), linked_binary.size(), output)))
+  if (auto err = optPipeline(llvmModule.get())) {
+    llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
     return failure();
+  }
+
+  llvmModule->print(output, nullptr);
 
   return mlir::success();
 }
@@ -465,7 +688,26 @@ translateTritonGPUToSPIRVIR(mlir::ModuleOp module,
     return spirvModule;
   }
 
+  if (::triton::tools::getBoolEnv("LLVM_IR_ENABLE_DUMP")) {
+    //    std::string mod_string;
+    //    std::unique_ptr<llvm::raw_string_ostream> ir_ss(
+    //        new llvm::raw_string_ostream(mod_string));
+    //    llvmIR->print(*ir_ss, nullptr);
+    std::cout << "// -----// LLVM IR Dump //----- //\n"
+              << spirvModule << std::endl;
+  }
+
   return spirvModule;
+}
+
+LogicalResult translateLLVMIRToSPIRV(llvm::Module &module,
+                                     raw_ostream &output) {
+
+  if (failed(llvmToSPIRV(module, output))) {
+    llvm::report_fatal_error(StringRef("Translate to SPIRV IR failed"));
+  }
+
+  return mlir::success();
 }
 
 void addExternalLibs(mlir::ModuleOp &module,

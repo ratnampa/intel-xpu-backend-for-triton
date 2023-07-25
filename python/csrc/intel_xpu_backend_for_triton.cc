@@ -207,10 +207,23 @@ void init_triton_translation(py::module &m) {
 
   m.def("compile_spirv_to_spvbin",
         [](const std::string &spirvCode, int capability) -> py::object {
+          // create LLVM module from C++
+          llvm::LLVMContext context;
+          std::unique_ptr<llvm::MemoryBuffer> buffer =
+              llvm::MemoryBuffer::getMemBuffer(spirvCode.c_str());
+          llvm::SMDiagnostic error;
+          std::unique_ptr<llvm::Module> module =
+              llvm::parseIR(buffer->getMemBufferRef(), error, context);
+          if (!module) {
+            llvm::report_fatal_error(
+                "failed to parse IR: " + error.getMessage() +
+                "lineno: " + std::to_string(error.getLineNo()));
+          }
+          // translate module to SPIRV
           std::string spvbin;
           llvm::raw_string_ostream os(spvbin);
 
-          if (failed(::mlir::triton::assembleSPIRV(spirvCode, os)))
+          if (failed(::mlir::triton::translateLLVMIRToSPIRV(*module, os)))
             llvm::report_fatal_error("Failed to assemble SPIRV.");
 
           py::bytes bytes(spvbin);
