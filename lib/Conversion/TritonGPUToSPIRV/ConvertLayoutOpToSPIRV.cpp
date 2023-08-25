@@ -31,6 +31,13 @@ Value convertLayout(int opIdx, Value B, Value llB, BlockedEncodingAttr dLayout,
                     ConversionPatternRewriter &rewriter);
 }
 
+namespace XMXToShared {
+Value convertLayout(ConversionPatternRewriter &rewriter, Location loc,
+                    Value val, Value spirvVal, RankedTensorType sharedType,
+                    Value smemBase,
+                    TritonGPUToSPIRVTypeConverter *typeConverter, Value thread);
+}
+
 struct ConvertLayoutOpSPIRVConversion
     : public ConvertTritonGPUOpToSPIRVPattern<triton::gpu::ConvertLayoutOp> {
 public:
@@ -46,6 +53,11 @@ public:
     auto dstTy = dst.getType().cast<RankedTensorType>();
     Attribute srcLayout = srcTy.getEncoding();
     Attribute dstLayout = dstTy.getEncoding();
+    // forwarding on mma->shared, lower distributed->shared otherwise
+    if (srcLayout.isa<triton::gpu::intel::IntelMmaEncodingAttr>() &&
+        dstLayout.isa<SharedEncodingAttr>()) {
+      return lowerMMAToShared(op, adaptor, rewriter);
+    }
     if (isaDistributedLayout(srcLayout) &&
         dstLayout.isa<SharedEncodingAttr>()) {
       return lowerDistributedToShared(op, adaptor, rewriter);
@@ -157,10 +169,10 @@ private:
       SmallVector<Value> multiDimOffset(rank);
       multiDimOffset[0] = elemId < 2 ? mmaRowIdx[0] : mmaRowIdx[1];
       multiDimOffset[1] = elemId % 2 == 0 ? mmaColIdx[0] : mmaColIdx[1];
-      multiDimOffset[0] = add(multiDimOffset[0],
-                              i32_val(multiDimCTAInRepId[0] * shapePerCTA[0]));
-      multiDimOffset[1] = add(multiDimOffset[1],
-                              i32_val(multiDimCTAInRepId[1] * shapePerCTA[1]));
+      multiDimOffset[0] = add(multiDimOffset[0], i32_val(multiDimCTAInRepId[0] *
+                                                         shapePerCTATile[0]));
+      multiDimOffset[1] = add(multiDimOffset[1], i32_val(multiDimCTAInRepId[1] *
+                                                         shapePerCTATile[1]));
       return multiDimOffset;
     }
     llvm_unreachable("unexpected layout in getMultiDimOffset");
@@ -474,6 +486,25 @@ private:
     return success();
   }
 
+  // work around for joint matrix
+  LogicalResult lowerMMAToShared(triton::gpu::ConvertLayoutOp op,
+                                 OpAdaptor adaptor,
+                                 ConversionPatternRewriter &rewriter) const {
+    auto loc = op.getLoc();
+    Value src = op.getSrc();
+    Value dst = op.getResult();
+    Value smemBase = getSharedMemoryBase(loc, rewriter, dst);
+    auto dstTy = dst.getType().cast<RankedTensorType>();
+
+    auto thread = getThreadId(rewriter, loc);
+    Value res =
+        XMXToShared::convertLayout(rewriter, loc, src, adaptor.getSrc(), dstTy,
+                                   smemBase, getTypeConverter(), thread);
+
+    rewriter.replaceOp(op, res);
+    return success();
+  }
+
   // blocked -> shared.
   // Swizzling in shared memory to avoid bank conflict. Normally used for
   // A/B operands of dots.
@@ -538,8 +569,9 @@ private:
                 .dyn_cast_or_null<triton::gpu::intel::IntelMmaEncodingAttr>()) {
       res = lowerSharedToDotOperandMMA(op, adaptor, rewriter, mmaLayout,
                                        dstTensorTy, isOuter);
-    } else if (auto blockedLayout = dotOperandLayout.getParent()
-                                 .dyn_cast_or_null<BlockedEncodingAttr>()) {
+    } else if (auto blockedLayout =
+                   dotOperandLayout.getParent()
+                       .dyn_cast_or_null<BlockedEncodingAttr>()) {
       auto dotOpLayout =
           dstTensorTy.getEncoding().cast<DotOperandEncodingAttr>();
       auto thread = getThreadId(rewriter, loc);

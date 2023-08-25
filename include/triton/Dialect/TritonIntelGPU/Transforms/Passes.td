@@ -23,4 +23,16 @@ def TritonIntelGPUAccelerateMatmul : Pass<"tritonintelgpu-accelerate-matmul", "m
   ];
 }
 
+def TritonIntelGPUDecomposeConversions: Pass<"tritonintelgpu-decompose-conversions", "mlir::ModuleOp"> {
+  let summary = "Decompose convert[mma -> blocked] into convert[mma -> shared -> blocked]";
+
+  let description = "Because of the JointMatrix Type is opaque. store it to memory and load it back ";
+
+  let constructor = "mlir::createTritonIntelGPUDecomposeConversionsPass()";
+
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::gpu::intel::TritonIntelGPUDialect",
+                           "mlir::triton::TritonDialect"];
+}
+
 #endif

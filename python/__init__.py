@@ -79,7 +79,7 @@ def optimize_ttgir(mod, num_stages, arch):
     pm.enable_debug()
     pm.add_tritongpu_coalesce_pass()
     pm.add_tritongpu_remove_layout_conversions_pass()
-    # pm.add_triton_intel_gpu_accelerate_matmul_pass(arch)
+    pm.add_triton_intel_gpu_accelerate_matmul_pass(arch)
     pm.add_tritongpu_remove_layout_conversions_pass()
     pm.add_tritongpu_optimize_dot_operands_pass()
     pm.add_tritongpu_pipeline_pass(num_stages)
@@ -87,6 +87,7 @@ def optimize_ttgir(mod, num_stages, arch):
     pm.add_tritongpu_optimize_dot_operands_pass()
     pm.add_tritongpu_remove_layout_conversions_pass()
     pm.add_tritongpu_decompose_conversions_pass()
+    pm.add_triton_intel_gpu_decompose_conversions_pass()
     pm.add_tritongpu_reorder_instructions_pass()
     pm.add_cse_pass()
     pm.add_symbol_dce_pass()
@@ -507,7 +508,7 @@ class XPUBackend(BaseBackend):
         if "A770" in arch["dev_name"]:
             capability["ATS"] = 1
 
-    return capability
+        return capability
 
     def make_launcher_stub(self, name, signature, constants, ids):
         # name of files that are cached

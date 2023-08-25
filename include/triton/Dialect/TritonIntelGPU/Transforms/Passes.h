@@ -7,6 +7,9 @@ namespace mlir {
 std::unique_ptr<Pass> createTritonIntelGPUAccelerateMatmulPass(
     std::map<std::string, int> computeCapability = {});
 
+std::unique_ptr<Pass> createTritonIntelGPUDecomposeConversionsPass(
+    std::map<std::string, int> computeCapability = {});
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "triton/Dialect/TritonIntelGPU/Transforms/Passes.h.inc"
