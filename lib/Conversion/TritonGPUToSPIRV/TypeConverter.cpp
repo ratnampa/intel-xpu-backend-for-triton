@@ -206,7 +206,6 @@ Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
     RankedTensorType type) {
   auto ctx = type.getContext();
   Attribute layout = type.getEncoding();
-  SmallVector<int64_t> shape(type.getShape().begin(), type.getShape().end());
   Type eltType = getElementTypeForStruct(type);
 
   if (auto shared_layout = layout.dyn_cast<SharedEncodingAttr>()) {
@@ -224,23 +223,18 @@ Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
     return spirv::StructType::get(types);
   }
 
-#if 0
   if (auto dotOp = layout.dyn_cast<DotOperandEncodingAttr>()) {
-    auto xmxEndocing = dotOp.getParent().dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
+    auto xmxEndocing =
+        dotOp.getParent().dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
     auto opIdx = dotOp.getOpIdx();
     if (opIdx == 0) {
       // A
       auto shapeA = xmxEndocing.getShapeA();
       auto packedA = xmxEndocing.getPackedA();
       assert(packedA.size() == 0 && "wrong packed A");
-      eltType = spirv::JointMatrixINTELType::get(eltType, spirv::Scope::Subgroup, shapeA[0], shapeA[1], spirv::MatrixLayout::RowMajor);
-      auto warpsPerCTA = xmxEndocing.getWarpsPerCTA();
-      unsigned tilesRow = ceil<unsigned>(shape[0], shapeA[0] * warpsPerCTA[0]);
-      unsigned tilesCol = ceil<unsigned>(shape[1], shapeA[1] * warpsPerCTA[1]);
-      unsigned numElementsPerThread = tilesRow * tilesCol;
-      SmallVector<Type, 4> types(numElementsPerThread, eltType);
-      return spirv::StructType::get(types);
-
+      eltType = spirv::JointMatrixINTELType::get(
+          eltType, spirv::Scope::Subgroup, shapeA[0], shapeA[1],
+          spirv::MatrixLayout::RowMajor);
     } else {
       assert(opIdx == 1 && "wrong op idx of dot op");
       // B
@@ -250,32 +244,36 @@ Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
       if (packedB.size()) {
         layoutB = spirv::MatrixLayout::PackedB;
       }
-      eltType = spirv::JointMatrixINTELType::get(eltType, spirv::Scope::Subgroup, shapeB[0], shapeB[1], layoutB);
-
-      auto warpsPerCTA = xmxEndocing.getWarpsPerCTA();
-      unsigned tilesRow = ceil<unsigned>(shape[0], shapeB[0] * warpsPerCTA[0]);
-      unsigned tilesCol = ceil<unsigned>(shape[1], shapeB[1] * warpsPerCTA[1]);
-      unsigned numElementsPerThread = tilesRow * tilesCol;
-      SmallVector<Type, 4> types(numElementsPerThread, eltType);
-      return spirv::StructType::get(types);
+      eltType = spirv::JointMatrixINTELType::get(
+          eltType, spirv::Scope::Subgroup, shapeB[0], shapeB[1], layoutB);
     }
+
+    auto shapePerCTA = triton::gpu::getShapePerCTA(type);
+    int bitwidth = type.getElementType().getIntOrFloatBitWidth();
+    auto rep = xmxEndocing.getXMXRep(shapePerCTA, bitwidth, opIdx);
+    unsigned numElementsPerThread = product<int64_t>(rep);
+    SmallVector<Type, 4> types(numElementsPerThread, eltType);
+    return spirv::StructType::get(types);
   }
 
-  if (auto xmxOp = layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
-      // C
-      auto shapeC = xmxOp.getShapeC();
-      auto packedC = xmxOp.getPackedC();
-      assert(packedC.size() == 0 && "wrong packed C");
-      eltType = spirv::JointMatrixINTELType::get(eltType, spirv::Scope::Subgroup, shapeC[0], shapeC[1], spirv::MatrixLayout::RowMajor);
+  if (auto xmxOp =
+          layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
+    // C
+    SmallVector<int64_t> shape(type.getShape().begin(), type.getShape().end());
+    auto shapeC = xmxOp.getShapeC();
+    auto packedC = xmxOp.getPackedC();
+    assert(packedC.size() == 0 && "wrong packed C");
+    eltType = spirv::JointMatrixINTELType::get(eltType, spirv::Scope::Subgroup,
+                                               shapeC[0], shapeC[1],
+                                               spirv::MatrixLayout::RowMajor);
 
-      auto shapePerCTA = xmxOp.getShapePerCTA(shape);
-      unsigned tilesRow = ceil<unsigned>(shape[0], shapePerCTA[0]);
-      unsigned tilesCol = ceil<unsigned>(shape[1], shapePerCTA[1]);
-      unsigned numElementsPerThread = tilesRow * tilesCol;
-      SmallVector<Type, 4> types(numElementsPerThread, eltType);
-      return spirv::StructType::get(types);
+    auto shapePerCTA = xmxOp.getShapePerCTATile(shape);
+    unsigned tilesRow = ceil<unsigned>(shape[0], shapePerCTA[0]);
+    unsigned tilesCol = ceil<unsigned>(shape[1], shapePerCTA[1]);
+    unsigned numElementsPerThread = tilesRow * tilesCol;
+    SmallVector<Type, 4> types(numElementsPerThread, eltType);
+    return spirv::StructType::get(types);
   }
-#endif
 
   unsigned numElementsPerThread = getTotalElemsPerThread(type);
   SmallVector<Type, 4> types(numElementsPerThread, eltType);

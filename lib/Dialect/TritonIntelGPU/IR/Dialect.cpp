@@ -107,11 +107,10 @@ SmallVector<unsigned> IntelMmaEncodingAttr::getSizePerThread() const {
 };
 
 SmallVector<unsigned>
-IntelMmaEncodingAttr::getShapePerCTA(ArrayRef<int64_t> tensorShape) const {
+IntelMmaEncodingAttr::getShapePerCTATile(ArrayRef<int64_t> tensorShape) const {
   auto shapeC = getShapeC();
   return {shapeC[0] * getWarpsPerCTA()[0], shapeC[1] * getWarpsPerCTA()[1]};
 }
-
 SmallVector<unsigned>
 IntelMmaEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
                                         Type eltTy) const {
@@ -119,7 +118,7 @@ IntelMmaEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
   assert(rank == 2 && "Unexpected rank of mma layout");
 
   SmallVector<unsigned> elemsPerThread(rank);
-  auto shapePerCTA = getShapePerCTA(shape);
+  auto shapePerCTA = getShapePerCTA({1, 1}, shape);
   unsigned tilesRow = ceil<unsigned>(shape[0], shapePerCTA[0]);
   unsigned tilesCol = ceil<unsigned>(shape[1], shapePerCTA[1]);
   auto sizePerThread = getSizePerThread();
@@ -128,10 +127,52 @@ IntelMmaEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
 
   return elemsPerThread;
 }
-
 unsigned IntelMmaEncodingAttr::getTotalElemsPerThread(ArrayRef<int64_t> shape,
                                                       Type eltTy) const {
   return product<unsigned>(getElemsPerThread(shape, eltTy));
+}
+SmallVector<unsigned> IntelMmaEncodingAttr::getCTASplitNum() const {
+  SmallVector<unsigned> res{1, 1};
+  return res;
+}
+SmallVector<unsigned> IntelMmaEncodingAttr::getCTAOrder() const {
+  SmallVector<unsigned> res{0, 1};
+  return res;
+}
+SmallVector<unsigned> IntelMmaEncodingAttr::getCTAsPerCGA() const {
+  SmallVector<unsigned> res{1, 1};
+  return res;
+}
+unsigned IntelMmaEncodingAttr::getNumCTAs() const { return 1; }
+SmallVector<int64_t> IntelMmaEncodingAttr::getXMXRep(ArrayRef<int64_t> shape,
+                                                     int bitwidth,
+                                                     int opIdx) const {
+  SmallVector<int> shapePerWarp = {8, 8, 4 * 64 / bitwidth};
+  auto warpsPerCTA = getWarpsPerCTA();
+  if (opIdx == 0)
+    return {std::max<int64_t>(1, shape[0] / (shapePerWarp[0] * warpsPerCTA[0])),
+            std::max<int64_t>(1, shape[1] / shapePerWarp[2])};
+  else {
+    assert(opIdx == 1);
+    return {
+        std::max<int64_t>(1, shape[0] / shapePerWarp[2]),
+        std::max<int64_t>(1, shape[1] / (shapePerWarp[1] * warpsPerCTA[1]))};
+  }
+}
+unsigned IntelMmaEncodingAttr::getTotalElemsPerThreadForOperands(
+    ArrayRef<int64_t> shape, mlir::Type eltTy, int opIdx) const {
+  auto shapePerCTA = getShapePerCTA(*this, shape);
+  int warpsPerCTAM = getWarpsPerCTA()[0];
+  int warpsPerCTAN = getWarpsPerCTA()[1];
+  auto rep = getXMXRep(shapePerCTA, eltTy.getIntOrFloatBitWidth(), opIdx);
+  if (opIdx == 0)
+    return rep[0] * rep[1];
+  else // if (opIdx == 1)
+    return rep[0] * rep[1];
+}
+Attribute IntelMmaEncodingAttr::getCTALayout() const {
+  return CTALayoutAttr::get(getContext(), getCTAsPerCGA(), getCTASplitNum(),
+                            getCTAOrder());
 }
 
 Attribute IntelMmaEncodingAttr::parse(AsmParser &parser, Type type) {

@@ -410,6 +410,9 @@ public:
     int numCTAs = triton::gpu::TritonGPUDialect::getNumCTAs(mod);
     int threadsPerWarp = triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
 
+    llvm::outs() << "johnlu mod:\n" << mod << "\n";
+    llvm::outs().flush();
+
     // Preprocess
     decomposeMmaToDotOperand(mod, numWarps, threadsPerWarp, numCTAs);
     decomposeBlockedToDotOperand(mod);
@@ -549,6 +552,34 @@ private:
 
   void decomposeMmaToDotOperand(ModuleOp mod, int numWarps, int threadsPerWarp,
                                 int numCTAs) const {
+    // Replace `mma -> dot_op` with `mma -> blocked -> dot_op`
+    // unless certain conditions are met
+    mod.walk([&](triton::gpu::ConvertLayoutOp cvtOp) -> void {
+      OpBuilder builder(cvtOp);
+      auto srcType = cvtOp.getOperand().getType().cast<RankedTensorType>();
+      auto dstType = cvtOp.getType().cast<RankedTensorType>();
+      auto srcMma = srcType.getEncoding()
+                        .dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
+      auto dstDotOp =
+          dstType.getEncoding().dyn_cast<triton::gpu::DotOperandEncodingAttr>();
+      if (srcMma && dstDotOp && !isMmaToDotShortcut(srcType, dstType)) {
+        auto tmpType = RankedTensorType::get(
+            dstType.getShape(), dstType.getElementType(),
+            triton::gpu::BlockedEncodingAttr::get(
+                mod.getContext(), srcType.getShape(), getSizePerThread(srcMma),
+                getOrder(srcMma), numWarps, threadsPerWarp, numCTAs));
+        auto tmp = builder.create<triton::gpu::ConvertLayoutOp>(
+            cvtOp.getLoc(), tmpType, cvtOp.getOperand());
+        auto newConvert = builder.create<triton::gpu::ConvertLayoutOp>(
+            cvtOp.getLoc(), dstType, tmp);
+        cvtOp.replaceAllUsesWith(newConvert.getResult());
+        cvtOp.erase();
+      }
+    });
+  }
+
+  void decomposeMmaToBlocked(ModuleOp mod, int numWarps, int threadsPerWarp,
+                             int numCTAs) const {
     // Replace `mma -> dot_op` with `mma -> blocked -> dot_op`
     // unless certain conditions are met
     mod.walk([&](triton::gpu::ConvertLayoutOp cvtOp) -> void {

@@ -5,6 +5,7 @@ add_mlir_conversion_library(TritonGPUToSPIRV
     TritonGPUToSPIRVPass.cpp
     ConvertLayoutOpToSPIRV/SharedToDotOperandFMA.cpp
     ConvertLayoutOpToSPIRV/SharedToDotOperandXMX.cpp
+    ConvertLayoutOpToSPIRV/XMXToShared.cpp
     ConvertLayoutOpToSPIRV.cpp
     DotOpToSPIRV/FMA.cpp
     DotOpToSPIRV/XMX.cpp

@@ -290,7 +290,7 @@ Value JointMatrixMatmulLoader::operator()(int mat0, int mat1, Value ptr,
         spirv::MatrixLayoutAttr::get(ctx, elemTy.getMatrixLayout()),
         spirv::ScopeAttr::get(ctx, elemTy.getScope()),
         spirv::MemoryAccessAttr::get(ctx, spirv::MemoryAccess::None),
-        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 16));
+        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 64));
     return ret;
   } else {
     llvm_unreachable("unimplemented Shared -> DotOperandMmav2 code path");
@@ -518,23 +518,6 @@ getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
   return load;
 }
 
-SmallVector<int64_t> getXMXRep(const DotOperandEncodingAttr &encoding,
-                               ArrayRef<int64_t> shape, int bitwidth) {
-  auto mmaParent =
-      encoding.getParent().cast<triton::gpu::intel::IntelMmaEncodingAttr>();
-  SmallVector<int> shapePerWarp = {8, 8, 4 * 64 / bitwidth};
-  auto warpsPerCTA = mmaParent.getWarpsPerCTA();
-  if (encoding.getOpIdx() == 0)
-    return {std::max<int64_t>(1, shape[0] / (shapePerWarp[0] * warpsPerCTA[0])),
-            std::max<int64_t>(1, shape[1] / shapePerWarp[2])};
-  else {
-    assert(encoding.getOpIdx() == 1);
-    return {
-        std::max<int64_t>(1, shape[0] / shapePerWarp[2]),
-        std::max<int64_t>(1, shape[1] / (shapePerWarp[1] * warpsPerCTA[1]))};
-  }
-}
-
 Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
               RankedTensorType dotOpType, const SharedMemoryObject &smemObj,
               TritonGPUToSPIRVTypeConverter *typeConverter, Value thread,
@@ -553,8 +536,9 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
   int mmaInstrM = 8, mmaInstrN = 8, mmaInstrK = 4 * 64 / bitwidth;
   int matShapeM = 8, matShapeN = 8, matShapeK = 4 * 64 / bitwidth;
 
-  auto numRep = getXMXRep(encoding, tensorTy.getShape(), bitwidth);
-  int kWidth = encoding.getMMAv2kWidth();
+  auto numRep =
+      mmaLayout.getXMXRep(tensorTy.getShape(), bitwidth, encoding.getOpIdx());
+  int kWidth = encoding.getKWidth();
 
   auto warpsPerCTA = mmaLayout.getWarpsPerCTA();
   auto order = triton::gpu::getOrder(mmaLayout);
@@ -609,6 +593,9 @@ Value convertLayout(int opIdx, ConversionPatternRewriter &rewriter,
                     const SharedMemoryObject &smemObj,
                     TritonGPUToSPIRVTypeConverter *typeConverter,
                     Value thread) {
+
+  llvm::outs() << "johnlu srcType:" << tensor.getType() << "\n";
+  llvm::outs().flush();
   if (opIdx == 0)
     return loadArg(rewriter, loc, tensor, dotOpType, smemObj, typeConverter,
                    thread, true);

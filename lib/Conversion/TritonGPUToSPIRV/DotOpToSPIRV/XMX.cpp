@@ -176,16 +176,19 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   auto bTensorTy = b.getType().cast<RankedTensorType>();
   auto dTensorTy = d.getType().cast<RankedTensorType>();
 
-  SmallVector<int64_t> aShape(aTensorTy.getShape().begin(),
-                              aTensorTy.getShape().end());
-  auto dShape = dTensorTy.getShape();
+  auto aShapePerCTA = triton::gpu::getShapePerCTA(aTensorTy);
+  auto bShapePerCTA = triton::gpu::getShapePerCTA(bTensorTy);
+  auto dShapePerCTA = triton::gpu::getShapePerCTA(dTensorTy);
+
   int bitwidth = aTensorTy.getElementType().getIntOrFloatBitWidth();
-  auto repA =
-      aTensorTy.getEncoding().cast<DotOperandEncodingAttr>().getMMAv2Rep(
-          aTensorTy.getShape(), bitwidth);
-  auto repB =
-      bTensorTy.getEncoding().cast<DotOperandEncodingAttr>().getMMAv2Rep(
-          bTensorTy.getShape(), bitwidth);
+  auto dotOpA = aTensorTy.getEncoding().cast<DotOperandEncodingAttr>();
+  auto repA = dotOpA.getParent()
+                  .cast<triton::gpu::intel::IntelMmaEncodingAttr>()
+                  .getXMXRep(aShapePerCTA, bitwidth, dotOpA.getOpIdx());
+  auto dotOpB = bTensorTy.getEncoding().cast<DotOperandEncodingAttr>();
+  auto repB = dotOpB.getParent()
+                  .cast<triton::gpu::intel::IntelMmaEncodingAttr>()
+                  .getXMXRep(bShapePerCTA, bitwidth, dotOpB.getOpIdx());
 
   assert(repA[1] == repB[0]);
   int repM = repA[0], repN = repB[1], repK = repA[1];

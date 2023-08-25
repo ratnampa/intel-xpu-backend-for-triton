@@ -329,15 +329,20 @@ void init_triton_translation(py::module &m) {
            [](mlir::PassManager &self) {
              self.addPass(mlir::createTritonGPUDecomposeConversionsPass());
            })
-      .def("add_scf_to_cfg", [](mlir::PassManager &self) {
-        self.addPass(mlir::createConvertSCFToCFPass());
-      })
+      .def("add_scf_to_cfg",
+           [](mlir::PassManager &self) {
+             self.addPass(mlir::createConvertSCFToCFPass());
+           })
       .def("add_triton_intel_gpu_accelerate_matmul_pass",
            [](mlir::PassManager &self, py::dict computeCapability) {
              auto capabilities =
                  computeCapability.cast<std::map<std::string, int>>();
              self.addPass(
                  mlir::createTritonIntelGPUAccelerateMatmulPass(capabilities));
+           })
+      .def("add_triton_intel_gpu_decompose_conversions_pass",
+           [](mlir::PassManager &self) {
+             self.addPass(mlir::createTritonIntelGPUDecomposeConversionsPass());
            });
 }
 
