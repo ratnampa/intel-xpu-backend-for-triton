@@ -35,7 +35,8 @@ namespace XMXToShared {
 Value convertLayout(ConversionPatternRewriter &rewriter, Location loc,
                     Value val, Value spirvVal, RankedTensorType sharedType,
                     Value smemBase,
-                    TritonGPUToSPIRVTypeConverter *typeConverter, Value thread);
+                    TritonGPUToSPIRVTypeConverter *typeConverter,
+                    Value subGroupID);
 }
 
 struct ConvertLayoutOpSPIRVConversion
@@ -611,7 +612,7 @@ private:
         dotOpType.getEncoding().dyn_cast<DotOperandEncodingAttr>();
     res = SharedToDotOperandXMX::convertLayout(
         dotOperandLayout.getOpIdx(), rewriter, loc, src, dotOpType, smemObj,
-        getTypeConverter(), tid_val());
+        getTypeConverter(), getSubgroupId(rewriter, loc));
 
     return res;
   }

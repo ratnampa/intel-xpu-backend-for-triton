@@ -6,8 +6,9 @@
 #include "mlir/IR/OpImplementation.h"
 #include "triton/Analysis/Utility.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
-#include "triton/Dialect/TritonIntelGPU/IR/Dialect.cpp.inc"
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
+
+#include "triton/Dialect/TritonIntelGPU/IR/Dialect.cpp.inc"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;

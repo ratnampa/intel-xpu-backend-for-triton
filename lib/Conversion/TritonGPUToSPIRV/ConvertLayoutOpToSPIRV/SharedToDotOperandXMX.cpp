@@ -284,13 +284,14 @@ Value JointMatrixMatmulLoader::operator()(int mat0, int mat1, Value ptr,
         mul(i32_val(matIdx[order[1]] * stridedLoadMatOffset * stridedMatShape),
             stridedSmemOffset);
     Value readPtr = gep(shemPtrTy, ptr, stridedOffset);
-    readPtr = bitcast(readPtr, ptr_ty(i32_ty, spirv::StorageClass::Workgroup));
+
     Value ret = rewriter.create<spirv::INTELJointMatrixLoadOp>(
         loc, elemTy, readPtr, stridedOffset,
         spirv::MatrixLayoutAttr::get(ctx, elemTy.getMatrixLayout()),
         spirv::ScopeAttr::get(ctx, elemTy.getScope()),
-        spirv::MemoryAccessAttr::get(ctx, spirv::MemoryAccess::None),
-        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 64));
+        spirv::MemoryAccessAttr{}, mlir::IntegerAttr{});
+    //        spirv::MemoryAccessAttr::get(ctx, spirv::MemoryAccess::Volatile),
+    //        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 64));
     return ret;
   } else {
     llvm_unreachable("unimplemented Shared -> DotOperandMmav2 code path");
