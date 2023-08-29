@@ -44,10 +44,7 @@ static std::unique_ptr<llvm::Module> spirvToLLVM(uint32_t *binary_ptr,
   llvm::Module *module;
   std::string Err;
   SPIRV::TranslatorOpts opts;
-  opts.setAllowedToUseExtension(
-      SPIRV::ExtensionID::SPV_EXT_shader_atomic_float_add);
-  opts.setAllowedToUseExtension(SPIRV::ExtensionID::SPV_KHR_expect_assume);
-  opts.setAllowedToUseExtension(SPIRV::ExtensionID::SPV_INTEL_vector_compute);
+  opts.enableAllExtensions();
   std::string spirvIR =
       std::string((const char *)binary_ptr, binary_size * sizeof(uint32_t));
   std::istringstream is(spirvIR);
@@ -88,6 +85,7 @@ LogicalResult llvmToSPIRV(llvm::Module &module, raw_ostream &output) {
   // translate module to SPIRV IR
   std::string Err;
   SPIRV::TranslatorOpts opts;
+  opts.enableAllExtensions();
   bool Success = false;
   std::ostringstream os;
   Success = writeSpirv(&module, opts, os, Err);
@@ -101,11 +99,10 @@ LogicalResult llvmToSPIRV(llvm::Module &module, raw_ostream &output) {
   if (::triton::tools::getBoolEnv("MLIR_ENABLE_DUMP")) {
     std::string spirvDisassemble;
     llvm::raw_string_ostream disassemble(spirvDisassemble);
-    if (failed(disassembleSPIRV((uint32_t *)spirvIR.c_str(),
-                                spirvIR.length() / sizeof(uint32_t),
-                                disassemble)))
-      llvm::report_fatal_error("Failed to assemble SPIRV.");
-    llvm::dbgs() << "SPIRV IR:\n" << spirvDisassemble << "\n";
+    if (!failed(disassembleSPIRV((uint32_t *)spirvIR.c_str(),
+                                 spirvIR.length() / sizeof(uint32_t),
+                                 disassemble)))
+      llvm::dbgs() << "SPIRV IR:\n" << spirvDisassemble << "\n";
   }
 
   output << spirvIR;

@@ -286,6 +286,19 @@ public:
     return threadId;
   }
 
+  Value getSubgroupId(ConversionPatternRewriter &rewriter, Location loc) const {
+    auto spirvIndexTy = this->getTypeConverter()->getIndexType();
+
+    auto cast = rewriter.create<UnrealizedConversionCastOp>(
+        loc, TypeRange{spirvIndexTy},
+        ValueRange{rewriter.create<::mlir::gpu::SubgroupIdOp>(
+            loc, rewriter.getIndexType())});
+
+    Value subgroupId = rewriter.create<::mlir::arith::TruncIOp>(
+        loc, i32_ty, cast.getResult(0));
+    return subgroupId;
+  }
+
   // -----------------------------------------------------------------------
   // Shared memory utilities
   // -----------------------------------------------------------------------
