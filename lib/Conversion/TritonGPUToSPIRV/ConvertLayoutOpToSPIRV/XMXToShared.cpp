@@ -17,8 +17,6 @@ using ::mlir::triton::gpu::getTotalElemsPerThread;
 using ::mlir::triton::gpu::isaDistributedLayout;
 using ::mlir::triton::gpu::SharedEncodingAttr;
 
-extern Type getSharedMemPtrTy(Type argType);
-
 void storeXMXToShared(Value src, Value spirvSrc, Value smemBase,
                       Value subGroupID, Location loc,
                       ConversionPatternRewriter &rewriter,
@@ -88,7 +86,7 @@ Value storeArg(ConversionPatternRewriter &rewriter, Location loc, Value val,
   auto outOrd = dstSharedLayout.getOrder();
   auto dstShapePerCTA = triton::gpu::getShapePerCTA(sharedType);
 
-  Type smemPtrTy = getSharedMemPtrTy(tensorTy.getElementType());
+  Type smemPtrTy = spirv::getSharedMemPtrTy(tensorTy.getElementType());
   smemBase = bitcast(smemBase, smemPtrTy);
 
   storeXMXToShared(val, spirvVal, smemBase, subGroupID, loc, rewriter,

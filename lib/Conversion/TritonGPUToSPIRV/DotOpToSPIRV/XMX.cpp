@@ -184,11 +184,11 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   auto dotOpA = aTensorTy.getEncoding().cast<DotOperandEncodingAttr>();
   auto repA = dotOpA.getParent()
                   .cast<triton::gpu::intel::IntelMmaEncodingAttr>()
-                  .getXMXRep(aShapePerCTA, bitwidth, dotOpA.getOpIdx());
+                  .getXMXRep(aShapePerCTA, dotOpA.getOpIdx());
   auto dotOpB = bTensorTy.getEncoding().cast<DotOperandEncodingAttr>();
   auto repB = dotOpB.getParent()
                   .cast<triton::gpu::intel::IntelMmaEncodingAttr>()
-                  .getXMXRep(bShapePerCTA, bitwidth, dotOpB.getOpIdx());
+                  .getXMXRep(bShapePerCTA, dotOpB.getOpIdx());
 
   assert(repA[1] == repB[0]);
   int repM = repA[0], repN = repB[1], repK = repA[1];

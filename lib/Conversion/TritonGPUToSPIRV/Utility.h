@@ -363,6 +363,9 @@ spirv::FuncOp appendOrGetFuncOp(Location loc,
                                 StringRef libName, StringRef funcName,
                                 mlir::FunctionType funcType,
                                 const NamedAttrList &extraAttrs = {});
+
+Type getSharedMemPtrTy(Type argType);
+
 } // namespace spirv
 } // namespace mlir
 

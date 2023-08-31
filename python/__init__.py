@@ -444,8 +444,8 @@ class XPUBackend(BaseBackend):
 
         context = _triton.context()
 
-        stages["ttgir"] = (lambda path: _triton.parse_mlir_module(Path(path).read_text(), context),
-                           lambda src: optimize_ttgir(ttir_to_ttgir(src, arch["num_warps"]), arch["num_stages"], arch))
+        stages["intel_ttgir"] = (lambda path: _triton.parse_mlir_module(Path(path).read_text(), context),
+                                 lambda src: optimize_ttgir(ttir_to_ttgir(src, arch["num_warps"]), arch["num_stages"], arch))
         stages["spirv"] = (lambda path: Path(path).read_text(),
                            lambda src: ttgir_to_spirv(src, extern_libs, arch))
         stages["spvbin"] = (lambda path: Path(path).read_bytes(),

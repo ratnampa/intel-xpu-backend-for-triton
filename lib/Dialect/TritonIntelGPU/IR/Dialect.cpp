@@ -146,17 +146,17 @@ SmallVector<unsigned> IntelMmaEncodingAttr::getCTAsPerCGA() const {
 }
 unsigned IntelMmaEncodingAttr::getNumCTAs() const { return 1; }
 SmallVector<int64_t> IntelMmaEncodingAttr::getXMXRep(ArrayRef<int64_t> shape,
-                                                     int bitwidth,
                                                      int opIdx) const {
-  SmallVector<int> shapePerWarp = {8, 8, 4 * 64 / bitwidth};
   auto warpsPerCTA = getWarpsPerCTA();
-  if (opIdx == 0)
+  if (opIdx == 0) {
+    auto shapePerWarp = getShapeA();
     return {std::max<int64_t>(1, shape[0] / (shapePerWarp[0] * warpsPerCTA[0])),
-            std::max<int64_t>(1, shape[1] / shapePerWarp[2])};
-  else {
+            std::max<int64_t>(1, shape[1] / shapePerWarp[1])};
+  } else {
     assert(opIdx == 1);
+    auto shapePerWarp = getShapeB();
     return {
-        std::max<int64_t>(1, shape[0] / shapePerWarp[2]),
+        std::max<int64_t>(1, shape[0] / shapePerWarp[0]),
         std::max<int64_t>(1, shape[1] / (shapePerWarp[1] * warpsPerCTA[1]))};
   }
 }
@@ -165,7 +165,7 @@ unsigned IntelMmaEncodingAttr::getTotalElemsPerThreadForOperands(
   auto shapePerCTA = getShapePerCTA(*this, shape);
   int warpsPerCTAM = getWarpsPerCTA()[0];
   int warpsPerCTAN = getWarpsPerCTA()[1];
-  auto rep = getXMXRep(shapePerCTA, eltTy.getIntOrFloatBitWidth(), opIdx);
+  auto rep = getXMXRep(shapePerCTA, opIdx);
   if (opIdx == 0)
     return rep[0] * rep[1];
   else // if (opIdx == 1)

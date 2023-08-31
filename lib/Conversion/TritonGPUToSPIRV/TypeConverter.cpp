@@ -249,8 +249,7 @@ Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
     }
 
     auto shapePerCTA = triton::gpu::getShapePerCTA(type);
-    int bitwidth = type.getElementType().getIntOrFloatBitWidth();
-    auto rep = xmxEndocing.getXMXRep(shapePerCTA, bitwidth, opIdx);
+    auto rep = xmxEndocing.getXMXRep(shapePerCTA, opIdx);
     unsigned numElementsPerThread = product<int64_t>(rep);
     SmallVector<Type, 4> types(numElementsPerThread, eltType);
     return spirv::StructType::get(types);
