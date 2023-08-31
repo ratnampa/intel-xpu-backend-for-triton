@@ -52,9 +52,7 @@ def IntelMmaEncodingAttr : DistributedEncoding<"IntelMmaEncoding", [TritonGPUMMA
     SmallVector<unsigned> getShapePerCTATile(ArrayRef<int64_t> tensorShape) const;
     unsigned getTotalElemsPerThreadForOperands(ArrayRef<int64_t> shape, Type eltTy, int opIdx) const;
 
-    SmallVector<int64_t> getXMXRep(ArrayRef<int64_t> shape,
-                                     int bitwidth,
-                                     int opIdx) const;
+    SmallVector<int64_t> getXMXRep(ArrayRef<int64_t> shape, int opIdx) const;
 
     Attribute getCTALayout() const;
   }];

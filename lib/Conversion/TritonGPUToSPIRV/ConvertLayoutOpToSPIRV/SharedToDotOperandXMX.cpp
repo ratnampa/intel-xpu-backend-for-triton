@@ -24,22 +24,18 @@ public:
                           ArrayRef<uint32_t> warpsPerCTA, uint32_t kOrder,
                           int kWidth, ArrayRef<Value> smemStrides,
                           ArrayRef<int64_t> tileShape, ArrayRef<int> instrShape,
-                          ArrayRef<int> matShape, int perPhase, int maxPhase,
-                          int elemBytes, ConversionPatternRewriter &rewriter,
+                          int perPhase, int maxPhase, int elemBytes,
+                          ConversionPatternRewriter &rewriter,
                           TritonGPUToSPIRVTypeConverter *typeConverter,
                           const Location &loc);
 
   // lane = thread % 32
   // warpOff = (thread/32) % warpsPerTile(0)
-  llvm::SmallVector<Value> computeOffsets(Value warpOff, Value lane,
-                                          Value cSwizzleOffset) {
-    if (canUseLdmatrix)
-      return computeLdmatrixMatOffs(warpOff, lane, cSwizzleOffset);
-    else
-      return computeLdsMatOffs(warpOff, lane, cSwizzleOffset);
-    return {};
+  Value computeOffsets(Value warpOff, Value lane) {
+    return mul(warpOff, i32_val(tileShape[kDim]));
   }
 
+#if 0
   // Compute the offset to the matrix this thread(indexed by warpOff and lane)
   // mapped to.
   SmallVector<Value> computeLdmatrixMatOffs(Value warpId, Value lane,
@@ -47,10 +43,10 @@ public:
   // compute 8-bit matrix offset.
   SmallVector<Value> computeLdsMatOffs(Value warpOff, Value lane,
                                        Value cSwizzleOffset);
+#endif
 
   // Load the matrix value.
-  Value operator()(int mat0, int mat1, Value ptr, Type matTy,
-                   Type shemPtrTy) const;
+  Value operator()(int mat0, int mat1, Value ptr, Type matTy) const;
 
 private:
   SmallVector<uint32_t> order;
@@ -63,10 +59,16 @@ private:
   int perPhase;
   int maxPhase;
   int elemBytes;
+
   ConversionPatternRewriter &rewriter;
   const Location &loc;
   MLIRContext *ctx{};
 
+  int kDim;
+  int strideRrows;
+  int strideCols;
+  int strideLoad;
+#if 0
   // ldmatrix loads a matrix of size stridedMatShape x contiguousMatShape
   int contiguousMatShape;
   int stridedMatShape;
@@ -89,8 +91,10 @@ private:
   int inWarpMatOffset;
   // Offset in number of matrices to increment on non-k dim across warps
   int warpMatOffset;
+#endif
 };
 
+#if 0
 SmallVector<Value>
 JointMatrixMatmulLoader::computeLdmatrixMatOffs(Value warpId, Value lane,
                                                 Value cSwizzleOffset) {
@@ -167,7 +171,7 @@ JointMatrixMatmulLoader::computeLdmatrixMatOffs(Value warpId, Value lane,
 
   return offs;
 }
-
+#endif
 // clang-format off
 // Each `ldmatrix.x4` loads data as follows when `needTrans == False`:
 //
@@ -191,7 +195,7 @@ JointMatrixMatmulLoader::computeLdmatrixMatOffs(Value warpId, Value lane,
 // lower quadrants. This pattern repeats every warpsPerTile[0] (resp. warpsPerTile[1]) blocks
 // along the row (resp. col) dimension.
 // clang-format on
-
+#if 0
 SmallVector<Value>
 JointMatrixMatmulLoader::computeLdsMatOffs(Value warpOff, Value lane,
                                            Value cSwizzleOffset) {
@@ -259,127 +263,43 @@ JointMatrixMatmulLoader::computeLdsMatOffs(Value warpOff, Value lane,
 
   return offs;
 }
-
-Value JointMatrixMatmulLoader::operator()(int mat0, int mat1, Value ptr,
-                                          Type matTy, Type shemPtrTy) const {
-  //  assert(mat0 % 2 == 0 && mat1 % 2 == 0 && "smem matrix load must be
-  //  aligned");
-  int matIdx[2] = {mat0, mat1};
-
-  //  int ptrIdx{-1};
-  //
-  //  if (canUseLdmatrix)
-  //    ptrIdx = matIdx[order[0]] / (instrShape[order[0]] / matShape[order[0]]);
-  //  else
-  //    ptrIdx = matIdx[order[0]] * 4 / elemBytes;
-
+#endif
+Value JointMatrixMatmulLoader::operator()(int repRow, int repCol, Value ptr,
+                                          Type matTy) const {
   // The struct should have exactly the same element types.
-  auto resTy = matTy.cast<spirv::StructType>();
   auto elemTy = matTy.cast<spirv::StructType>()
                     .getElementType(0)
                     .cast<spirv::JointMatrixINTELType>();
 
-  if (canUseLdmatrix) {
-    Value stridedOffset =
-        mul(i32_val(matIdx[order[1]] * stridedLoadMatOffset * stridedMatShape),
-            stridedSmemOffset);
-    Value readPtr = gep(shemPtrTy, ptr, stridedOffset);
+  Value offsetM = mul(i32_val(repRow), i32_val(strideRrows));
+  Value offsetN = mul(i32_val(repCol), i32_val(strideCols));
+  Value offsetWithinTile = add(offsetM, offsetN);
+  Value readPtr = gep(ptr, offsetWithinTile);
 
-    Value ret = rewriter.create<spirv::INTELJointMatrixLoadOp>(
-        loc, elemTy, readPtr, stridedOffset,
-        spirv::MatrixLayoutAttr::get(ctx, elemTy.getMatrixLayout()),
-        spirv::ScopeAttr::get(ctx, elemTy.getScope()),
-        spirv::MemoryAccessAttr{}, mlir::IntegerAttr{});
-    //        spirv::MemoryAccessAttr::get(ctx, spirv::MemoryAccess::Volatile),
-    //        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 64));
-    return ret;
-  } else {
-    llvm_unreachable("unimplemented Shared -> DotOperandMmav2 code path");
-#if 0
-    if (needTrans && (4 / elemBytes) != kWidth)
-      llvm_unreachable("unimplemented Shared -> DotOperandMmav2 code path");
-    // base pointers
-    std::array<std::array<Value, 4>, 2> ptrs;
-    int vecWidth = 4 / elemBytes;
-    for (int i = 0; i < vecWidth; i++)
-      ptrs[0][i] = getPtr(ptrIdx + i);
-    for (int i = 0; i < vecWidth; i++)
-      ptrs[1][i] = getPtr(ptrIdx + i + vecWidth);
-    // static offsets along outer dimension
-    int _i0 = matIdx[order[1]] * (stridedLoadMatOffset * stridedMatShape);
-    int _i1 = _i0;
-    if (needTrans)
-      _i1 += stridedLoadMatOffset * stridedMatShape;
-    else
-      _i1 += (kOrder == 1 ? 1 : stridedLoadMatOffset) * stridedMatShape;
-    Value i0 = mul(i32_val(_i0), stridedSmemOffset);
-    Value i1 = mul(i32_val(_i1), stridedSmemOffset);
-    std::array<Value, 2> ii = {i0, i1};
-    // load 4 32-bit values from shared memory
-    // (equivalent to ldmatrix.x4)
-    SmallVector<SmallVector<Value>> vptrs(4, SmallVector<Value>(vecWidth));
-    for (int i = 0; i < 4; ++i)
-      for (int j = 0; j < vecWidth; ++j)
-        vptrs[i][j] = gep(shemPtrTy, ptrs[i / 2][j], ii[i % 2]);
-    // row + trans and col + no-trans are equivalent
-    bool isActualTrans =
-        (needTrans && kOrder == 1) || (!needTrans && kOrder == 0);
-    // pack loaded vectors into 4 32-bit values
-    int inc = needTrans ? 1 : kWidth;
-    VectorType packedTy = vec_ty(int_ty(8 * elemBytes), inc);
-    int canonBits = std::min(32, 8 * elemBytes * inc);
-    int canonWidth = (8 * elemBytes * inc) / canonBits;
-    Type canonInt = int_ty(canonBits);
-    std::array<Value, 4> retElems;
-    retElems.fill(undef(vec_ty(canonInt, 32 / canonBits)));
-    for (int r = 0; r < 2; ++r) {
-      for (int em = 0; em < 2 * vecWidth; em += inc) {
-        int e = em % vecWidth;
-        int m = em / vecWidth;
-        int idx = m * 2 + r;
-        Value ptr = bitcast(vptrs[idx][e],
-                            ptr_ty(packedTy, spirv::StorageClass::Workgroup));
-        Value val = load(ptr);
-        Value canonval = bitcast(val, vec_ty(canonInt, canonWidth));
-        for (int w = 0; w < canonWidth; ++w) {
-          int ridx = idx + w * kWidth / vecWidth;
-          retElems[ridx] =
-              insert_element(retElems[ridx],
-                             extract_element(canonval, i32_val(w)), i32_val(e));
-        }
-      }
-    }
-    if (isActualTrans)
-      std::swap(retElems[1], retElems[2]);
-    return bitcast(retElems[0], i32_ty);
-#endif
-  }
+  Value stride = i32_val(strideLoad);
+
+  Value ret = rewriter.create<spirv::INTELJointMatrixLoadOp>(
+      loc, elemTy, readPtr, stride,
+      spirv::MatrixLayoutAttr::get(ctx, elemTy.getMatrixLayout()),
+      spirv::ScopeAttr::get(ctx, elemTy.getScope()), spirv::MemoryAccessAttr{},
+      mlir::IntegerAttr{});
+  //        spirv::MemoryAccessAttr::get(ctx, spirv::MemoryAccess::Volatile),
+  //        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 64));
+  return ret;
 }
 
 JointMatrixMatmulLoader::JointMatrixMatmulLoader(
     int warpsPerTile, ArrayRef<uint32_t> order, ArrayRef<uint32_t> warpsPerCTA,
     uint32_t kOrder, int kWidth, ArrayRef<Value> smemStrides,
-    ArrayRef<int64_t> tileShape, ArrayRef<int> instrShape,
-    ArrayRef<int> matShape, int perPhase, int maxPhase, int elemBytes,
-    ConversionPatternRewriter &rewriter,
+    ArrayRef<int64_t> tileShape, ArrayRef<int> instrShape, int perPhase,
+    int maxPhase, int elemBytes, ConversionPatternRewriter &rewriter,
     TritonGPUToSPIRVTypeConverter *typeConverter, const Location &loc)
     : order(order.begin(), order.end()),
-      warpsPerCTA(warpsPerCTA.begin(), warpsPerCTA.end()), kOrder(kOrder),
+      warpsPerCTA(warpsPerCTA.begin(), warpsPerCTA.end()), kDim(kOrder),
       kWidth(kWidth), tileShape(tileShape.begin(), tileShape.end()),
-      instrShape(instrShape.begin(), instrShape.end()),
-      matShape(matShape.begin(), matShape.end()), perPhase(perPhase),
+      instrShape(instrShape.begin(), instrShape.end()), perPhase(perPhase),
       maxPhase(maxPhase), elemBytes(elemBytes), rewriter(rewriter), loc(loc),
       ctx(rewriter.getContext()) {
-  contiguousMatShape = matShape[order[0]];
-  stridedMatShape = matShape[order[1]];
-
-  stridedSmemOffset = smemStrides[order[1]];
-
-  // rule: k must be the fast-changing axis.
-  needTrans = kOrder != order[0];
-  canUseLdmatrix = elemBytes == 2 || (!needTrans);
-  canUseLdmatrix = canUseLdmatrix && (kWidth == 4 / elemBytes);
-
   llvm::outs() << "johnlu tileShape:";
   for (auto &num : tileShape) {
     llvm::outs() << " " << num;
@@ -394,13 +314,23 @@ JointMatrixMatmulLoader::JointMatrixMatmulLoader(
   llvm::outs() << "\n";
   llvm::outs().flush();
 
-  llvm::outs() << "johnlu matShape:";
-  for (auto &num : matShape) {
-    llvm::outs() << " " << num;
-  }
-  llvm::outs() << "\n";
-  llvm::outs().flush();
+  llvm::outs() << "johnlu strideRows:" << strideRrows << "\n";
+  llvm::outs() << "johnlu strideCols:" << strideCols << "\n";
+  llvm::outs() << "johnlu strideLoad:" << strideLoad << "\n";
+  llvm::outs() << "johnlu kDim:" << kDim << "\n";
+  llvm::outs() << "johnlu warpsPerTile:" << warpsPerTile << "\n";
+
 #if 0
+  contiguousMatShape = matShape[order[0]];
+  stridedMatShape = matShape[order[1]];
+
+  stridedSmemOffset = smemStrides[order[1]];
+
+  // rule: k must be the fast-changing axis.
+  needTrans = kOrder != order[0];
+  canUseLdmatrix = elemBytes == 2 || (!needTrans);
+  canUseLdmatrix = canUseLdmatrix && (kWidth == 4 / elemBytes);
+
   if (canUseLdmatrix) {
     // Each CTA, the warps is arranged as [1xwarpsPerTile] if not transposed,
     // otherwise [warpsPerTilex1], and each warp will perform a mma.
@@ -412,11 +342,9 @@ JointMatrixMatmulLoader::JointMatrixMatmulLoader(
     numPtrs *= 4 / elemBytes;
   }
   numPtrs = std::max<int>(numPtrs, 2);
-#endif
 
   // Special rule for i8/u8, 4 ptrs for each matrix
   // if (!canUseLdmatrix && elemBytes == 1)
-
   int loadOffsetInMat[2];
   loadOffsetInMat[kOrder] =
       2; // instrShape[kOrder] / matShape[kOrder], always 2
@@ -432,20 +360,7 @@ JointMatrixMatmulLoader::JointMatrixMatmulLoader(
   inWarpMatOffset = kOrder == 1 ? 1 : warpsPerTile;
   // The stride (in number of matrices) of each warp
   warpMatOffset = instrShape[kOrder ^ 1] / matShape[kOrder ^ 1];
-}
-
-Type getSharedMemPtrTy(Type argType) {
-  MLIRContext *ctx = argType.getContext();
-  if (argType.isF16())
-    return ptr_ty(type::f16Ty(ctx), spirv::StorageClass::Workgroup);
-  else if (argType.isBF16())
-    return ptr_ty(type::i16Ty(ctx), spirv::StorageClass::Workgroup);
-  else if (argType.isF32())
-    return ptr_ty(type::f32Ty(ctx), spirv::StorageClass::Workgroup);
-  else if (argType.getIntOrFloatBitWidth() == 8)
-    return ptr_ty(type::i8Ty(ctx), spirv::StorageClass::Workgroup);
-  else
-    llvm::report_fatal_error("xmx data type not supported");
+#endif
 }
 
 Value composeValuesToDotOperandLayoutStruct(
@@ -473,8 +388,8 @@ getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
                 const SharedMemoryObject &smemObj,
                 triton::gpu::intel::IntelMmaEncodingAttr mmaLayout,
                 int warpsPerTile, uint32_t kOrder, int kWidth,
-                SmallVector<int> instrShape, SmallVector<int> matShape,
-                Value warpId, Value lane, ValueTable &vals, bool isA,
+                SmallVector<int> instrShape, Value subGroupID, Value lane,
+                ValueTable &vals, bool isA,
                 TritonGPUToSPIRVTypeConverter *typeConverter,
                 ConversionPatternRewriter &rewriter, Location loc) {
   auto tensorTy = tensor.getType().cast<RankedTensorType>();
@@ -492,27 +407,24 @@ getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
     JointMatrixMatmulLoader loader(
         warpsPerTile, sharedLayout.getOrder(), mmaLayout.getWarpsPerCTA(),
         kOrder, kWidth, smemObj.strides, tensorTy.getShape() /*tileShape*/,
-        instrShape, matShape, perPhase, maxPhase, elemBytes, rewriter,
-        typeConverter, loc);
-    // Offset of a slice within the original tensor in shared memory
-    Value cSwizzleOffset = smemObj.getCSwizzleOffset(order[0]);
-    SmallVector<Value> offs =
-        loader.computeOffsets(warpId, lane, cSwizzleOffset);
+        instrShape, perPhase, maxPhase, elemBytes, rewriter, typeConverter,
+        loc);
+
+    Value offet = loader.computeOffsets(subGroupID, lane);
     // initialize pointers
     Value ptr;
     Value smemBase = smemObj.getBaseBeforeSlice(order[0], loc, rewriter);
-    Type smemPtrTy = getSharedMemPtrTy(eltTy);
-    ptr = bitcast(gep(smemPtrTy, smemBase, offs[0]), smemPtrTy);
+    llvm::outs() << "johnlu JointMatrixMatmulLoader smemBase:" << smemBase
+                 << "\n";
+    llvm::outs().flush();
+    Type smemPtrTy = spirv::getSharedMemPtrTy(eltTy);
+    ptr = bitcast(gep(smemBase, offet), smemPtrTy);
+
     // actually load from shared memory
     auto matTy = typeConverter->convertType(dstType);
 
-    llvm::outs() << "johnlu dstType:" << dstType << "\n";
-    llvm::outs().flush();
-    llvm::outs() << "johnlu matTy:" << matTy << "\n";
-    llvm::outs().flush();
-    auto matrix =
-        loader((kOrder == 1) ? a : b /*mat0*/, (kOrder == 1) ? b : a /*mat1*/,
-               ptr, matTy, getSharedMemPtrTy(eltTy));
+    auto matrix = loader((kOrder == 1) ? a : b /*mat0*/,
+                         (kOrder == 1) ? b : a /*mat1*/, ptr, matTy);
     vals[{a, b}] = matrix;
   };
 
@@ -524,7 +436,7 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
               TritonGPUToSPIRVTypeConverter *typeConverter, Value thread,
               bool isA) {
   auto tensorTy = tensor.getType().cast<RankedTensorType>();
-  int bitwidth = tensorTy.getElementTypeBitWidth();
+
   DotOperandEncodingAttr encoding =
       dotOpType.getEncoding().dyn_cast<DotOperandEncodingAttr>();
   auto mmaLayout =
@@ -534,11 +446,15 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
                              tensorTy.getShape().end());
 
   ValueTable vals;
-  int mmaInstrM = 8, mmaInstrN = 8, mmaInstrK = 4 * 64 / bitwidth;
-  int matShapeM = 8, matShapeN = 8, matShapeK = 4 * 64 / bitwidth;
+  auto shapePerCTATile = mmaLayout.getShapePerCTATile(shape);
+  //  auto order = getOrder(mmaLayout);
+  //  unsigned tiledRows = ceil<unsigned>(shape[0], shapePerCTATile[0]);
+  //  unsigned tiledCols = ceil<unsigned>(shape[1], shapePerCTATile[1]);
+  auto shapeA = mmaLayout.getShapeA();
+  auto shapeB = mmaLayout.getShapeB();
+  int mmaInstrM = shapeA[0], mmaInstrN = shapeB[1], mmaInstrK = shapeA[1];
 
-  auto numRep =
-      mmaLayout.getXMXRep(tensorTy.getShape(), bitwidth, encoding.getOpIdx());
+  auto numRep = mmaLayout.getXMXRep(tensorTy.getShape(), encoding.getOpIdx());
   int kWidth = encoding.getKWidth();
 
   auto warpsPerCTA = mmaLayout.getWarpsPerCTA();
@@ -556,25 +472,53 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
 
   int warpsPerTile;
   if (isA)
-    warpsPerTile = std::min<int>(warpsPerCTA[0], shape[0] / mmaInstrK);
+    warpsPerTile = std::min<int>(warpsPerCTA[0], shape[0] / mmaInstrM);
   else
-    warpsPerTile = std::min<int>(warpsPerCTA[1], shape[1] / mmaInstrK);
+    warpsPerTile = std::min<int>(warpsPerCTA[1], shape[1] / mmaInstrN);
+
+  llvm::outs() << "johnlu load joint matrix operand " << (isA ? "A:" : "B:")
+               << tensor.getType() << "\n";
+  llvm::outs() << "johnlu load joint matrix operand " << dotOpType << "\n";
+  llvm::outs() << "johnlu load joint matrix warpsPerTile " << warpsPerTile
+               << "\n";
+
+  llvm::outs() << "johnlu load joint matrix mmaInstrM " << mmaInstrM << "\n";
+  llvm::outs() << "johnlu load joint matrix mmaInstrN " << mmaInstrN << "\n";
+
+  llvm::outs() << "johnlu load joint matrix warpsPerCTA: ";
+  for (auto &i : warpsPerCTA)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
+
+  llvm::outs() << "johnlu load joint matrix tensor shape: ";
+  for (auto &i : shape)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
+
+  llvm::outs() << "johnlu load joint matrix shapePerCTATile: ";
+  for (auto &i : shapePerCTATile)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
+
+  llvm::outs() << "johnlu load joint matrix operand numRep: ";
+  for (auto &i : numRep)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
+  llvm::outs().flush();
 
   std::function<void(int, int)> loadFn;
   if (isA)
     loadFn = getLoadMatrixFn(
         tensor, dotOpType, smemObj, mmaLayout, warpsPerTile /*warpsPerTile*/,
         1 /*kOrder*/, kWidth, {mmaInstrM, mmaInstrK} /*instrShape*/,
-        {matShapeM, matShapeK} /*matShape*/, warpM /*warpId*/, lane /*laneId*/,
-        vals /*vals*/, isA /*isA*/, typeConverter /* typeConverter */,
-        rewriter /*rewriter*/, loc /*loc*/);
+        warpM /*warpId*/, lane /*laneId*/, vals /*vals*/, isA /*isA*/,
+        typeConverter /* typeConverter */, rewriter /*rewriter*/, loc /*loc*/);
   else
     loadFn = getLoadMatrixFn(
         tensor, dotOpType, smemObj, mmaLayout, warpsPerTile /*warpsPerTile*/,
         0 /*kOrder*/, kWidth, {mmaInstrK, mmaInstrN} /*instrShape*/,
-        {matShapeK, matShapeN} /*matShape*/, warpN /*warpId*/, lane /*laneId*/,
-        vals /*vals*/, isA /*isA*/, typeConverter /* typeConverter */,
-        rewriter /*rewriter*/, loc /*loc*/);
+        warpN /*warpId*/, lane /*laneId*/, vals /*vals*/, isA /*isA*/,
+        typeConverter /* typeConverter */, rewriter /*rewriter*/, loc /*loc*/);
 
   // Perform loading.
   int numRepOuter = isA ? numRep[0] : numRep[1];
@@ -594,9 +538,6 @@ Value convertLayout(int opIdx, ConversionPatternRewriter &rewriter,
                     const SharedMemoryObject &smemObj,
                     TritonGPUToSPIRVTypeConverter *typeConverter,
                     Value thread) {
-
-  llvm::outs() << "johnlu srcType:" << tensor.getType() << "\n";
-  llvm::outs().flush();
   if (opIdx == 0)
     return loadArg(rewriter, loc, tensor, dotOpType, smemObj, typeConverter,
                    thread, true);

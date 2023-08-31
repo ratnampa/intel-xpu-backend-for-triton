@@ -394,5 +394,19 @@ spirv::FuncOp appendOrGetFuncOp(Location loc,
   return ret;
 }
 
+Type getSharedMemPtrTy(Type argType) {
+  MLIRContext *ctx = argType.getContext();
+  if (argType.isF16())
+    return ptr_ty(type::f16Ty(ctx), spirv::StorageClass::Workgroup);
+  else if (argType.isBF16())
+    return ptr_ty(type::i16Ty(ctx), spirv::StorageClass::Workgroup);
+  else if (argType.isF32())
+    return ptr_ty(type::f32Ty(ctx), spirv::StorageClass::Workgroup);
+  else if (argType.getIntOrFloatBitWidth() == 8)
+    return ptr_ty(type::i8Ty(ctx), spirv::StorageClass::Workgroup);
+  else
+    llvm::report_fatal_error("xmx data type not supported");
+}
+
 } // namespace spirv
 } // namespace mlir
