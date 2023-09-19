@@ -45,6 +45,9 @@ static std::unique_ptr<llvm::Module> spirvToLLVM(uint32_t *binary_ptr,
   std::string Err;
   SPIRV::TranslatorOpts opts;
   opts.enableAllExtensions();
+  SPIRV::TranslatorOpts::ArgList allowIntr;
+  allowIntr.push_back("llvm.genx");
+  opts.setSPIRVAllowUnknownIntrinsics(allowIntr);
   std::string spirvIR =
       std::string((const char *)binary_ptr, binary_size * sizeof(uint32_t));
   std::istringstream is(spirvIR);
@@ -86,6 +89,9 @@ LogicalResult llvmToSPIRV(llvm::Module &module, raw_ostream &output) {
   std::string Err;
   SPIRV::TranslatorOpts opts;
   opts.enableAllExtensions();
+  SPIRV::TranslatorOpts::ArgList allowIntr;
+  allowIntr.push_back("llvm.genx");
+  opts.setSPIRVAllowUnknownIntrinsics(allowIntr);
   bool Success = false;
   std::ostringstream os;
   Success = writeSpirv(&module, opts, os, Err);

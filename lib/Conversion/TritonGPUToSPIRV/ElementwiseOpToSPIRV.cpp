@@ -457,22 +457,13 @@ public:
     auto valueTy = i32_ty;
     auto valSIMDTy = mlir::VectorType::get({(int64_t)simdLenght}, valueTy);
 
-    auto aTy = mlir::VectorType::get(simdLenght, f16_ty);
-    auto bTy = mlir::VectorType::get(simdLenght, i32_ty);
-    auto cTy = mlir::VectorType::get(simdLenght, i32_ty);
-    auto dTy = mlir::VectorType::get(simdLenght, i32_ty);
+    auto aTy = mlir::VectorType::get(2, f16_ty);
+    auto bTy = mlir::VectorType::get(2, i32_ty);
+    auto cTy = mlir::VectorType::get(2, i32_ty);
+    auto dTy = mlir::VectorType::get(2, i32_ty);
     VCIBuilder builder(threadsPerWarp, rewriter);
     auto dpas2Intrinsic = builder.create<GenXDPAS2>(dTy, cTy, bTy, aTy);
     //    Value ret = dpas2Intrinsic(cVal, bVal, aVal);
-    //    SmallVector<mlir::Type*, 4> funcTys;
-    //    funcTys.push_back(&dTy);
-    //    funcTys.push_back(&aTy);
-    //    funcTys.push_back(&bTy);
-    //    funcTys.push_back(&cTy);
-
-    //  auto xmxIntrinsic =
-    //  triton::intel::getGenXName(llvm::GenXIntrinsic::ID::genx_dpas, funcTys);
-    //  llvm::outs() << "johnlu xmxIntrinsic name:" << xmxIntrinsic << "\n";
 
     auto simdFunTy =
         mlir::FunctionType::get(rewriter.getContext(), {valSIMDTy}, {dTy});
@@ -1210,7 +1201,7 @@ void populateElementwiseOpToSPIRVPatterns(
   patterns.add<ElementwiseOpSPIRVConversion<SRC_OP, DST_OP>>(                  \
       typeConverter, context, benefit);
   POPULATE_BINARY_OP(arith::SubIOp, spirv::ISubOp) // -
-  //  POPULATE_BINARY_OP(arith::AddIOp, spirv::IAddOp) // +
+  POPULATE_BINARY_OP(arith::AddIOp, spirv::IAddOp) // +
   POPULATE_BINARY_OP(arith::MulIOp, spirv::IMulOp) // *
   POPULATE_BINARY_OP(arith::DivSIOp, spirv::SDivOp)
   POPULATE_BINARY_OP(arith::DivUIOp, spirv::UDivOp)
@@ -1235,7 +1226,7 @@ void populateElementwiseOpToSPIRVPatterns(
   POPULATE_BINARY_OP(arith::MaxUIOp, arith::MaxUIOp)       // umax
 #undef POPULATE_BINARY_OP
 
-  patterns.add<SIMDTest>(typeConverter, context, benefit);
+  //  patterns.add<SIMDTest>(typeConverter, context, benefit);
 
 #define POPULATE_UNARY_OP(SRC_OP, DST_OP)                                      \
   patterns.add<ElementwiseOpSPIRVConversion<SRC_OP, DST_OP>>(                  \
