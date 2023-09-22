@@ -450,7 +450,7 @@ getExternLibs(spirv::ModuleOp module) {
   }
 
   if (!funcs.empty()) {
-    std::vector<std::string> lib_names = {"libprint_utils.spv"/*"libsycl-fallback-imf.spv",
+    std::vector<std::string> lib_names = {/*"libprint_utils.spv", "libsycl-fallback-imf.spv",
                                           "libsycl-fallback-imf-fp64.spv"*/};
     // first search for environmental path
     std::string env_path = ::triton::tools::getenv("TRITON_LIBDEVICE_PATH");

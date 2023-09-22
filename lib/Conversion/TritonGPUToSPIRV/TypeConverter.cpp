@@ -222,7 +222,7 @@ Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
     }
     return spirv::StructType::get(types);
   }
-
+#if 0
   if (auto dotOp = layout.dyn_cast<DotOperandEncodingAttr>()) {
     auto xmxEndocing =
         dotOp.getParent().dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
@@ -273,7 +273,7 @@ Type TritonGPUToSPIRVTypeConverter::convertTritonTensorType(
     SmallVector<Type, 4> types(numElementsPerThread, eltType);
     return spirv::StructType::get(types);
   }
-
+#endif
   unsigned numElementsPerThread = getTotalElemsPerThread(type);
   SmallVector<Type, 4> types(numElementsPerThread, eltType);
   return spirv::StructType::get(types);

@@ -402,6 +402,7 @@ private:
       if (srcLayout.isa<BlockedEncodingAttr>() ||
           srcLayout.isa<SliceEncodingAttr>() ||
           srcLayout.isa<triton::gpu::intel::IntelMmaEncodingAttr>()) {
+#if 0
         if (auto xmxLayout =
                 srcLayout
                     .dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
@@ -419,6 +420,7 @@ private:
           }
           vals = temp;
         }
+#endif
           processReplica(loc, rewriter, /*stNotRd*/ true, srcTy,
                          inNumCTAsEachRep, multiDimRepId, inVec, paddedRepShape,
                          origRepShape, outOrd, vals, smemBase);
