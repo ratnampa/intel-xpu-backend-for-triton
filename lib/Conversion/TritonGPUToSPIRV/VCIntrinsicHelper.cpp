@@ -93,6 +93,9 @@ spirv::FuncOp appendOrGetGenXDeclaration(OpBuilder &builder,
                      mlirContext, genXName,
                      spirv::LinkageTypeAttr::get(builder.getContext(),
                                                  spirv::LinkageType::Import)));
+  attributes.set(spirv::SPIRVDialect::getAttributeName(
+                     spirv::Decoration::VectorComputeFunctionINTEL),
+                 UnitAttr::get(builder.getContext()));
 
   llvm::LLVMContext llvmContext;
   auto llvmAttributes = llvm::GenXIntrinsic::getAttributes(llvmContext, id);
@@ -103,7 +106,7 @@ spirv::FuncOp appendOrGetGenXDeclaration(OpBuilder &builder,
 
   auto funcOp = spirv::appendOrGetFuncOp(
       mlir::UnknownLoc::get(mlirContext), builder, genXName, funcTy,
-      spirv::FunctionControl::None, attributes);
+      spirv::FunctionControl::Inline, attributes);
 
   return funcOp;
 }

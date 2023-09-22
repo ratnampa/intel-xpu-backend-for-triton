@@ -267,24 +267,21 @@ JointMatrixMatmulLoader::computeLdsMatOffs(Value warpOff, Value lane,
 Value JointMatrixMatmulLoader::operator()(int repRow, int repCol, Value ptr,
                                           Type matTy) const {
   // The struct should have exactly the same element types.
-  auto elemTy = matTy.cast<spirv::StructType>()
-                    .getElementType(0)
-                    .cast<spirv::JointMatrixINTELType>();
+  auto structTy = matTy.cast<spirv::StructType>();
+  auto elemNum = structTy.getNumElements();
+  auto elemTy = structTy.getElementType(0);
 
   Value offsetM = mul(i32_val(repRow), i32_val(strideRrows));
   Value offsetN = mul(i32_val(repCol), i32_val(strideCols));
-  Value offsetWithinTile = add(offsetM, offsetN);
-  Value readPtr = gep(ptr, offsetWithinTile);
+  Value offset = add(offsetM, offsetN);
 
-  Value stride = i32_val(strideLoad);
-
-  Value ret = rewriter.create<spirv::INTELJointMatrixLoadOp>(
-      loc, elemTy, readPtr, stride,
-      spirv::MatrixLayoutAttr::get(ctx, elemTy.getMatrixLayout()),
-      spirv::ScopeAttr::get(ctx, elemTy.getScope()), spirv::MemoryAccessAttr{},
-      mlir::IntegerAttr{});
-  //        spirv::MemoryAccessAttr::get(ctx, spirv::MemoryAccess::Volatile),
-  //        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 64));
+  Value ret = rewriter.create<spirv::UndefOp>(loc, structTy);
+  for (int i = 0; i < elemNum; i++) {
+    Value loadStride = i32_val(strideLoad * i);
+    Value readPtr = gep(ptr, add(offset, loadStride));
+    Value val = rewriter.create<spirv::LoadOp>(loc, readPtr);
+    ret = insert_val(structTy, val, ret, rewriter.getI32ArrayAttr(i));
+  }
   return ret;
 }
 
@@ -300,7 +297,7 @@ JointMatrixMatmulLoader::JointMatrixMatmulLoader(
       instrShape(instrShape.begin(), instrShape.end()), perPhase(perPhase),
       maxPhase(maxPhase), elemBytes(elemBytes), rewriter(rewriter), loc(loc),
       ctx(rewriter.getContext()) {
-  llvm::outs() << "johnlu tileShape:";
+  llvm::outs() << "johnlu tensorShape:";
   for (auto &num : tileShape) {
     llvm::outs() << " " << num;
   }
@@ -313,12 +310,20 @@ JointMatrixMatmulLoader::JointMatrixMatmulLoader(
   }
   llvm::outs() << "\n";
   llvm::outs().flush();
-
+  llvm::outs() << "johnlu kDim:" << kDim << "\n";
+  strideRrows = tileShape[kDim];
+  strideCols = instrShape[kDim];
   llvm::outs() << "johnlu strideRows:" << strideRrows << "\n";
   llvm::outs() << "johnlu strideCols:" << strideCols << "\n";
   llvm::outs() << "johnlu strideLoad:" << strideLoad << "\n";
-  llvm::outs() << "johnlu kDim:" << kDim << "\n";
   llvm::outs() << "johnlu warpsPerTile:" << warpsPerTile << "\n";
+
+  llvm::outs() << "johnlu warpsPerCTA:";
+  for (auto &num : warpsPerCTA) {
+    llvm::outs() << " " << num;
+  }
+  llvm::outs() << "\n";
+  llvm::outs().flush();
 
 #if 0
   contiguousMatShape = matShape[order[0]];
@@ -370,7 +375,14 @@ Value composeValuesToDotOperandLayoutStruct(
   std::vector<Value> elems;
   for (int m = 0; m < n0; ++m)
     for (int k = 0; k < n1; ++k) {
-      elems.push_back(vals.at({m, k}));
+      auto matVal = vals.at({m, k});
+      auto matType = matVal.getType().cast<spirv::StructType>();
+      auto valTy = matType.getElementType(0);
+      for (int i = 0; i < matType.getNumElements(); ++i) {
+        auto val = extract_val(valTy, matVal, rewriter.getI32ArrayAttr(i));
+        ;
+        elems.push_back(val);
+      }
     }
 
   assert(!elems.empty());
@@ -417,14 +429,30 @@ getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
     llvm::outs() << "johnlu JointMatrixMatmulLoader smemBase:" << smemBase
                  << "\n";
     llvm::outs().flush();
+    llvm::outs() << "johnlu matTy eltTy:" << eltTy << "\n";
+    llvm::outs().flush();
     Type smemPtrTy = spirv::getSharedMemPtrTy(eltTy);
+    llvm::outs() << "johnlu matTy smemPtrTy:" << smemPtrTy << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu matTy offet:" << offet << "\n";
+    llvm::outs().flush();
     ptr = bitcast(gep(smemBase, offet), smemPtrTy);
 
     // actually load from shared memory
-    auto matTy = typeConverter->convertType(dstType);
+    llvm::outs() << "johnlu matTy dstType:" << dstType << "\n";
+    llvm::outs().flush();
+    auto totalElem = product<int>(instrShape);
+    auto threadsPerWarp = mmaLayout.getThreadsPerWarp();
+    auto matTy = spirv::StructType::get(
+        SmallVector<Type>(totalElem / threadsPerWarp, eltTy));
+    llvm::outs() << "johnlu matTy matTy:" << matTy << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "load a: " << a << " b:" << b << "\n";
+    llvm::outs().flush();
 
     auto matrix = loader((kOrder == 1) ? a : b /*mat0*/,
                          (kOrder == 1) ? b : a /*mat1*/, ptr, matTy);
+
     vals[{a, b}] = matrix;
   };
 
@@ -484,6 +512,7 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
 
   llvm::outs() << "johnlu load joint matrix mmaInstrM " << mmaInstrM << "\n";
   llvm::outs() << "johnlu load joint matrix mmaInstrN " << mmaInstrN << "\n";
+  llvm::outs() << "johnlu load joint matrix mmaInstrK " << mmaInstrK << "\n";
 
   llvm::outs() << "johnlu load joint matrix warpsPerCTA: ";
   for (auto &i : warpsPerCTA)
@@ -500,7 +529,7 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
     llvm::outs() << " " << i;
   llvm::outs() << "\n";
 
-  llvm::outs() << "johnlu load joint matrix operand numRep: ";
+  llvm::outs() << "johnlu load joint matrix tileShape of operands (numRep): ";
   for (auto &i : numRep)
     llvm::outs() << " " << i;
   llvm::outs() << "\n";

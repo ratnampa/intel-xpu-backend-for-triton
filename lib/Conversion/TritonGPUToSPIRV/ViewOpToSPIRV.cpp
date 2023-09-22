@@ -25,12 +25,12 @@ struct SplatOpSPIRVConversion
     auto tensorTy = resType.cast<RankedTensorType>();
     Attribute layout = tensorTy.getEncoding();
 
-    if (auto xmxOp =
-            layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
-      // TODO: add const op for mma encoding.
-      auto ty = typeConverter->convertType(tensorTy);
-      return undef(ty);
-    }
+    //    if (auto xmxOp =
+    //            layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
+    //      // TODO: add const op for mma encoding.
+    //      auto ty = typeConverter->convertType(tensorTy);
+    //      return undef(ty);
+    //    }
 
     auto srcType = typeConverter->convertType(elemType);
     auto spirvSrc = bitcast(constVal, srcType);

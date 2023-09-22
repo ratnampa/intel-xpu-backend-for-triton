@@ -245,7 +245,7 @@ struct VCIntrinsicSIMTAdaptor : public VCIntrinsicCommon {
   template <class... TYPES>
   explicit VCIntrinsicSIMTAdaptor(VCIBuilder *builder,
                                   llvm::GenXIntrinsic::ID intrinsic,
-                                  TYPES... tys)
+                                  std::string suffix, TYPES... tys)
       : VCIntrinsicCommon(builder), threadsPerWarp(builder->threadsPerWarp) {
     auto mlirContext = builder->builder.getContext();
 
@@ -261,81 +261,104 @@ struct VCIntrinsicSIMTAdaptor : public VCIntrinsicCommon {
     }
 
     // get GenX intrinsic declaration.
-    auto vcIntrinsicDecl = appendOrGetGenXDeclaration(
-        builder->builder, intrinsic, vectorizedTysPtr);
+    vcIntrinsicDecl = appendOrGetGenXDeclaration(builder->builder, intrinsic,
+                                                 vectorizedTysPtr);
 
     // get the ESIMD wrapper.
     auto genXName =
         mlir::triton::intel::getGenXName(intrinsic, vectorizedTysPtr);
-    std::string esimdWrapperName = "VCIntrinsicWrapper_" + genXName;
+    std::string esimdWrapperName =
+        "VCIntrinsicWrapper_" + genXName + "_" + suffix;
 
     esimdFunc = ESIMDToSIMTAdaptor(builder->builder, esimdWrapperName, tys...);
     spirv::FuncOp &esimdWrapper = esimdFunc.esimdWrapper;
-
-    if (esimdWrapper.empty()) {
-      auto block = esimdWrapper.addEntryBlock();
-      auto entryBlock = &esimdWrapper.getFunctionBody().front();
-
-      OpBuilder builder(entryBlock, entryBlock->begin());
-
-      auto funCall = builder.create<spirv::FunctionCallOp>(
-          mlir::UnknownLoc::get(builder.getContext()),
-          TypeRange{vcIntrinsicDecl.getResultTypes()},
-          vcIntrinsicDecl.getName(), ValueRange{entryBlock->getArguments()});
-      auto ret = funCall.getReturnValue();
-
-      builder.create<spirv::ReturnValueOp>(
-          mlir::UnknownLoc::get(builder.getContext()), TypeRange(),
-          ValueRange{ret});
-    }
   }
 
 protected:
   ESIMDToSIMTAdaptor esimdFunc;
+  spirv::FuncOp vcIntrinsicDecl;
   int threadsPerWarp;
 };
 
-class GenXDPAS2 : public VCIntrinsicSIMTAdaptor<GenXDPAS2> {
-public:
-  explicit GenXDPAS2(VCIBuilder *builder, mlir::VectorType dTy,
-                     mlir::VectorType cTy, mlir::VectorType bTy,
-                     mlir::VectorType aTy)
-      : VCIntrinsicSIMTAdaptor<GenXDPAS2>(
-            builder, llvm::GenXIntrinsic::ID::genx_dpas2, dTy, cTy, bTy, aTy,
-            UniformArgType(mlir::IntegerType::get(
-                builder->builder.getContext(),
-                32)), // int information of src1 PresisionType
-            UniformArgType(mlir::IntegerType::get(
-                builder->builder.getContext(),
-                32)), // int information of src2 PresisionType
-            UniformArgType(mlir::IntegerType::get(builder->builder.getContext(),
-                                                  32)), // int SystolicDepth
-            UniformArgType(mlir::IntegerType::get(builder->builder.getContext(),
-                                                  32)), // int RepeatCount
-            UniformArgType(mlir::IntegerType::get(
-                builder->builder.getContext(),
-                32)), // int sign dst( 0 - unsigned, 1 sign)
-            UniformArgType(mlir::IntegerType::get(
-                builder->builder.getContext(),
-                32)) // int sign dst( 0 - unsigned, 1 sign)
-        ) {}
+// data type for D_C_A_B.
+enum class DPASEngineType : uint8_t {
+  // floating-point XMX engine instr
+  FP32_FP32_FP16_FP16 = 0, // default
+  FP32_FP32_BF16_BF16,
+  FP32_FP32_TF32_TF32,
+  FP16_FP16_FP16_FP16,
+  BP16_BP16_BP16_BP16,
+  // integer XMX engine instr
+  // TODO: add integer support
+  //
+  NOT_APPLICABLE,
+};
 
-  Value operator()(ConversionPatternRewriter &rewriter, Location loc) {
-#if 0
-      // refer to IGC/visa/Common_ISA_util.cpp#87
-      auto encodePrecision = [&](Type type) -> uint8_t {
-        if (type == rewriter.getBF16Type())
-          return 9;
-        else if (type == rewriter.getF16Type())
-          return 10;
-        else if (type == rewriter.getTF32Type())
-          return 12;
-        else {
-          assert(0 && "add more support");
-          return 0;
-        }
-      };
-#endif
+class GenXDPAS2 : public VCIntrinsicSIMTAdaptor<GenXDPAS2> {
+
+  // refer to IGC/visa/Common_ISA_util.cpp#87
+  static uint8_t encodePrecision(DPASEngineType type) {
+    if (type == DPASEngineType::FP32_FP32_BF16_BF16 ||
+        type == DPASEngineType::BP16_BP16_BP16_BP16)
+      return 9;
+    else if (type == DPASEngineType::FP32_FP32_FP16_FP16 ||
+             type == DPASEngineType::FP16_FP16_FP16_FP16)
+      return 10;
+    else if (type == DPASEngineType::FP32_FP32_TF32_TF32)
+      return 12;
+    else {
+      assert(0 && "add more support");
+      return 0;
+    }
+  };
+
+public:
+  explicit GenXDPAS2(VCIBuilder *builder, DPASEngineType dpasTy,
+                     uint8_t repeatCount, mlir::Type dTy, mlir::Type cTy,
+                     mlir::Type bTy, mlir::Type aTy)
+      : VCIntrinsicSIMTAdaptor<GenXDPAS2>(
+            builder, llvm::GenXIntrinsic::ID::genx_dpas2,
+            [=]() -> std::string {
+              // encoding the suffix for the unique name of SIMT interface.
+              auto srcPrec = encodePrecision(dpasTy);
+              std::string suffix = "srcPrec_" + std::to_string(srcPrec) +
+                                   "_systolicDepth_" + std::to_string(8) +
+                                   "_repeatCount_" +
+                                   std::to_string(repeatCount);
+              return suffix;
+            }(),
+            dTy, cTy, bTy, aTy) {
+    auto &esimdWrapper = esimdFunc.esimdWrapper;
+    if (esimdWrapper.empty()) {
+      auto entryBlock = esimdWrapper.addEntryBlock();
+
+      OpBuilder rewriter(entryBlock, entryBlock->begin());
+      mlir::Location loc = mlir::UnknownLoc::get(rewriter.getContext());
+
+      auto srcPrecision = encodePrecision(dpasTy);
+      auto args = entryBlock->getArguments();
+      auto funCall = rewriter.create<spirv::FunctionCallOp>(
+          mlir::UnknownLoc::get(rewriter.getContext()),
+          TypeRange{vcIntrinsicDecl.getResultTypes()},
+          vcIntrinsicDecl.getName(),
+          ValueRange{
+              args[0] /*c - src0*/, args[1] /*b - src1*/, args[2] /*a - src2*/,
+              i32_val(srcPrecision) /*int information of src1 PresisionType*/,
+              i32_val(srcPrecision) /*int information of src2 PresisionType*/,
+              i32_val(8) /*int SystolicDepth*/,
+              i32_val(repeatCount) /*int RepeatCount*/,
+              i32_val(1) /*int sign dst( 0 - unsigned, 1 sign)*/,
+              i32_val(1) /*int sign dst( 0 - unsigned, 1 sign)*/});
+      auto ret = funCall.getReturnValue();
+
+      rewriter.create<spirv::ReturnValueOp>(
+          mlir::UnknownLoc::get(rewriter.getContext()), TypeRange(),
+          ValueRange{ret});
+    }
+  }
+
+  Value operator()(ConversionPatternRewriter &rewriter, Location loc, Value C,
+                   Value B, Value A) {
     // get the interface for the SIMT.
     auto funPtrTy = spirv::FunctionPointerINTELType::get(
         esimdFunc.esimdFunTy, spirv::StorageClass::Function);
@@ -345,7 +368,7 @@ public:
 
     auto funCall = rewriter.create<spirv::FunctionCallOp>(
         loc, TypeRange{esimdFunc.simtIntfTy.getResults()},
-        esimdFunc.simtIntfName, ValueRange{funValue, i32_val(0)});
+        esimdFunc.simtIntfName, ValueRange{funValue, C, B, A});
     auto ret = funCall.getReturnValue();
     return ret;
   }

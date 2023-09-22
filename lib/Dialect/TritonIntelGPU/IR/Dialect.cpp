@@ -99,7 +99,7 @@ SmallVector<unsigned> IntelMmaEncodingAttr::getSizePerThread() const {
   unsigned elemsNum = product<unsigned>(shapeC);
   unsigned elemsPerThread = elemsNum / threadsPerWarp;
   if (elemsPerThread == 4) {
-    return {2, 2};
+    return {4, 1};
   } else if (elemsPerThread == 2) {
     return {2, 1};
   } else {
@@ -119,9 +119,9 @@ IntelMmaEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
   assert(rank == 2 && "Unexpected rank of mma layout");
 
   SmallVector<unsigned> elemsPerThread(rank);
-  auto shapePerCTA = getShapePerCTA({1, 1}, shape);
-  unsigned tilesRow = ceil<unsigned>(shape[0], shapePerCTA[0]);
-  unsigned tilesCol = ceil<unsigned>(shape[1], shapePerCTA[1]);
+  auto shapePerCTATile = getShapePerCTATile(shape);
+  unsigned tilesRow = ceil<unsigned>(shape[0], shapePerCTATile[0]);
+  unsigned tilesCol = ceil<unsigned>(shape[1], shapePerCTATile[1]);
   auto sizePerThread = getSizePerThread();
   elemsPerThread[0] = sizePerThread[0] * tilesRow;
   elemsPerThread[1] = sizePerThread[1] * tilesCol;
@@ -166,10 +166,18 @@ unsigned IntelMmaEncodingAttr::getTotalElemsPerThreadForOperands(
   int warpsPerCTAM = getWarpsPerCTA()[0];
   int warpsPerCTAN = getWarpsPerCTA()[1];
   auto rep = getXMXRep(shapePerCTA, opIdx);
-  if (opIdx == 0)
-    return rep[0] * rep[1];
-  else // if (opIdx == 1)
-    return rep[0] * rep[1];
+  auto threadsPerWar = getThreadsPerWarp();
+  if (opIdx == 0) {
+    auto instrShapeA = getShapeA();
+    auto totalElem = product<unsigned>(instrShapeA);
+    // dpas operands scalar are evenly sharded to each work item.
+    return (totalElem / threadsPerWar) * rep[0] * rep[1];
+  } else { // if (opIdx == 1)
+    auto instrShapeB = getShapeB();
+    auto totalElem = product<unsigned>(instrShapeB);
+    // dpas operands scalar are evenly sharded to each work item.
+    return (totalElem / threadsPerWar) * rep[0] * rep[1];
+  }
 }
 Attribute IntelMmaEncodingAttr::getCTALayout() const {
   return CTALayoutAttr::get(getContext(), getCTAsPerCGA(), getCTASplitNum(),

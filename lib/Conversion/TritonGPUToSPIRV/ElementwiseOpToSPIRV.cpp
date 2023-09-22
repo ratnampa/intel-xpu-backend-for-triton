@@ -438,10 +438,10 @@ public:
     Type elemTy = this->getTypeConverter()->convertType(resultElementTy);
     SmallVector<Value> resultVals;
 
-    //        auto aTy = mlir::VectorType::get(128, f16_ty);
-    //        auto bTy = mlir::VectorType::get(128, i32_ty);
-    //        auto cTy = mlir::VectorType::get(128, i32_ty);
-    //        auto dTy = mlir::VectorType::get(128, i32_ty);
+    auto aTy = mlir::VectorType::get(128, f16_ty);
+    auto bTy = mlir::VectorType::get(128, i32_ty);
+    auto cTy = mlir::VectorType::get(128, i32_ty);
+    auto dTy = mlir::VectorType::get(128, i32_ty);
     //        SmallVector<mlir::Type*, 4> funcTys;
     //        funcTys.push_back(&dTy);
     //        funcTys.push_back(&aTy);
@@ -457,12 +457,12 @@ public:
     auto valueTy = i32_ty;
     auto valSIMDTy = mlir::VectorType::get({(int64_t)simdLenght}, valueTy);
 
-    auto aTy = mlir::VectorType::get(2, f16_ty);
-    auto bTy = mlir::VectorType::get(2, i32_ty);
-    auto cTy = mlir::VectorType::get(2, i32_ty);
-    auto dTy = mlir::VectorType::get(2, i32_ty);
-    VCIBuilder builder(threadsPerWarp, rewriter);
-    auto dpas2Intrinsic = builder.create<GenXDPAS2>(dTy, cTy, bTy, aTy);
+    //    auto aTy = mlir::VectorType::get(2, f16_ty);
+    //    auto bTy = mlir::VectorType::get(2, i32_ty);
+    //    auto cTy = mlir::VectorType::get(2, i32_ty);
+    //    auto dTy = mlir::VectorType::get(2, i32_ty);
+    //    VCIBuilder builder(threadsPerWarp, rewriter);
+    //    auto dpas2Intrinsic = builder.create<GenXDPAS2>(dTy, cTy, bTy, aTy);
     //    Value ret = dpas2Intrinsic(cVal, bVal, aVal);
 
     auto simdFunTy =

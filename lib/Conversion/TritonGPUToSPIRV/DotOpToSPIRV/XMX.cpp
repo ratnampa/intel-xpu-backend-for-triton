@@ -6,6 +6,7 @@
 
 using namespace mlir;
 using namespace mlir::triton;
+using namespace mlir::triton::intel;
 
 using ::mlir::triton::gpu::DotOperandEncodingAttr;
 using ::mlir::triton::gpu::MmaEncodingAttr;
@@ -69,60 +70,97 @@ Value loadC(Value tensor, Value spirvTensor,
 ValueTableV2 getValuesFromDotOperandLayoutStruct(
     TritonGPUToSPIRVTypeConverter *typeConverter, Location loc,
     ConversionPatternRewriter &rewriter, Value value, int n0, int n1,
-    RankedTensorType type) {
+    RankedTensorType type, Type dotOperandType) {
 
   auto elems = typeConverter->unpackLLElements(loc, value, rewriter, type);
   int offset{};
   ValueTableV2 vals;
+  auto totalElems = elems.size();
+  auto numElemsPerOperand = totalElems / (n0 * n1);
+  auto elemTy = elems[0].getType();
+  auto matTy = vec_ty(elemTy, numElemsPerOperand);
+
   for (int i = 0; i < n0; ++i) {
-    for (int j = 0; j < n1; j++) {
-      vals[{i, j}] = elems[offset++];
+    for (int j = 0; j < n1; ++j) {
+      Value matVal = rewriter.create<spirv::UndefOp>(loc, matTy);
+      for (int k = 0; k < numElemsPerOperand; ++k) {
+        matVal = insert_element(matTy, matVal, elems[offset++], i32_val(k));
+      }
+      vals[{i, j}] = bitcast(matVal, dotOperandType);
     }
   }
   return vals;
 }
 
-enum class TensorCoreType : uint8_t {
-  // floating-point tensor core instr
-  FP32_FP16_FP16_FP32 = 0, // default
-  FP32_BF16_BF16_FP32,
-  FP32_TF32_TF32_FP32,
-  FP16_FP16_FP16_FP16,
-  // integer tensor core instr
-  INT32_INT1_INT1_INT32, // Not implemented
-  INT32_INT4_INT4_INT32, // Not implemented
-  INT32_INT8_INT8_INT32, // Not implemented
-  //
-  NOT_APPLICABLE,
-};
+static Value composeValuesToDotOperandLayoutStruct(
+    const ValueTableV2 &vals, int n0, int n1,
+    TritonGPUToSPIRVTypeConverter *typeConverter, Location loc,
+    ConversionPatternRewriter &rewriter) {
+  std::vector<Value> elems;
+  for (int m = 0; m < n0; ++m)
+    for (int k = 0; k < n1; ++k) {
+      auto matVal = vals.at({m, k});
+      auto vecType = matVal.getType().cast<mlir::VectorType>();
+      auto valTy = vecType.getElementType();
+      for (int i = 0; i < vecType.getNumElements(); ++i) {
+        auto val = extract_element(valTy, matVal, i32_val(i));
+        ;
+        elems.push_back(val);
+      }
+    }
 
-Type getMmaRetType(TensorCoreType mmaType, MLIRContext *ctx) {
+  assert(!elems.empty());
+
+  Type elemTy = elems[0].getType();
+  MLIRContext *ctx = elemTy.getContext();
+  Type structTy =
+      spirv::StructType::get(SmallVector<Type>(elems.size(), elemTy));
+  auto result = typeConverter->packLLElements(loc, elems, rewriter, structTy);
+  return result;
+}
+
+std::tuple<Type, Type, Type, Type>
+getMmaOperandsType(DPASEngineType mmaType, MLIRContext *ctx,
+                   mlir::triton::gpu::intel::IntelMmaEncodingAttr layout) {
   Type fp32Ty = type::f32Ty(ctx);
   Type fp16Ty = type::f16Ty(ctx);
+  Type bf16Ty = type::bf16Ty(ctx);
   Type i32Ty = type::i32Ty(ctx);
-  Type fp32x4Ty = spirv::StructType::get(SmallVector<Type>(4, fp32Ty));
-  Type i32x4Ty = spirv::StructType::get(SmallVector<Type>(4, i32Ty));
-  Type fp16x2Pack2Ty =
-      spirv::StructType::get(SmallVector<Type>(2, vec_ty(fp16Ty, 2)));
+
+  auto threadsPerWarp = layout.getThreadsPerWarp();
+  auto shapeC = layout.getShapeC();
+  auto elemNumC = product<unsigned>(shapeC) / threadsPerWarp;
+  auto shapeA = layout.getShapeA();
+  auto elemNumA = product<unsigned>(shapeA) / threadsPerWarp;
+  auto shapeB = layout.getShapeB();
+  auto elemNumB = product<unsigned>(shapeB) / threadsPerWarp;
+  //  Type fp16x2Pack2Ty =
+  //      spirv::StructType::get(SmallVector<Type>(2, vec_ty(fp16Ty, 2)));
   switch (mmaType) {
-  case TensorCoreType::FP32_FP16_FP16_FP32:
-    return fp32x4Ty;
-  case TensorCoreType::FP32_BF16_BF16_FP32:
-    return fp32x4Ty;
-  case TensorCoreType::FP32_TF32_TF32_FP32:
-    return fp32x4Ty;
-  case TensorCoreType::FP16_FP16_FP16_FP16:
-    return fp16x2Pack2Ty;
-  case TensorCoreType::INT32_INT8_INT8_INT32:
-    return i32x4Ty;
+  case DPASEngineType::FP32_FP32_FP16_FP16: {
+    Type cTy = vec_ty(fp32Ty, elemNumC);
+    Type aTy = vec_ty(i32Ty, elemNumA / 2); // pack fp16 to i32.
+    Type bTy = vec_ty(i32Ty, elemNumB / 2); // pack fp16 to i32.
+    return {cTy, cTy, aTy, bTy};
+  }
+    //  case XMXEngineType::FP32_FP32_BF16_BF16:
+    //    return {fp32x4Ty, fp32x4Ty, i32x4Ty, i32x4Ty};
+    //  case XMXEngineType::FP32_FP32_TF32_TF32:
+    //    return {fp32x4Ty, fp32x4Ty, i32x4Ty, i32x4Ty};
+  case DPASEngineType::FP16_FP16_FP16_FP16: {
+    Type cTy = vec_ty(fp16Ty, elemNumC);
+    Type aTy = vec_ty(i32Ty, elemNumA / 2); // pack fp16 to i32.
+    Type bTy = vec_ty(i32Ty, elemNumB / 2); // pack fp16 to i32.
+    return {cTy, cTy, aTy, bTy};
+  }
   default:
     llvm::report_fatal_error("Unsupported mma type found");
   }
 
-  return Type{};
+  return std::make_tuple<Type, Type, Type, Type>({}, {}, {}, {});
 }
 
-TensorCoreType getMmaType(triton::DotOp op) {
+DPASEngineType getMmaType(triton::DotOp op) {
   Value A = op.getA();
   Value B = op.getB();
   auto aTy = A.getType().cast<RankedTensorType>();
@@ -132,57 +170,36 @@ TensorCoreType getMmaType(triton::DotOp op) {
 
   if (dTy.getElementType().isF32()) {
     if (aTy.getElementType().isF16() && bTy.getElementType().isF16())
-      return TensorCoreType::FP32_FP16_FP16_FP32;
+      return DPASEngineType::FP32_FP32_FP16_FP16;
     if (aTy.getElementType().isBF16() && bTy.getElementType().isBF16())
-      return TensorCoreType::FP32_BF16_BF16_FP32;
+      return DPASEngineType::FP32_FP32_BF16_BF16;
     if (aTy.getElementType().isF32() && bTy.getElementType().isF32() &&
         op.getAllowTF32())
-      return TensorCoreType::FP32_TF32_TF32_FP32;
+      return DPASEngineType::FP32_FP32_TF32_TF32;
   } else if (dTy.getElementType().isInteger(32)) {
-    if (aTy.getElementType().isInteger(8) && bTy.getElementType().isInteger(8))
-      return TensorCoreType::INT32_INT8_INT8_INT32;
+    // TODO:
   } else if (dTy.getElementType().isF16()) {
     if (aTy.getElementType().isF16() && bTy.getElementType().isF16())
-      return TensorCoreType::FP16_FP16_FP16_FP16;
+      return DPASEngineType::FP16_FP16_FP16_FP16;
   }
 
-  return TensorCoreType::NOT_APPLICABLE;
+  return DPASEngineType::NOT_APPLICABLE;
 }
-
-inline static const std::map<TensorCoreType, std::string> mmaInstrPtx = {
-    {TensorCoreType::FP32_FP16_FP16_FP32,
-     "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"},
-    {TensorCoreType::FP32_BF16_BF16_FP32,
-     "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32"},
-    {TensorCoreType::FP32_TF32_TF32_FP32,
-     "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32"},
-
-    {TensorCoreType::INT32_INT1_INT1_INT32,
-     "mma.sync.aligned.m16n8k256.row.col.s32.b1.b1.s32.xor.popc"},
-    {TensorCoreType::INT32_INT4_INT4_INT32,
-     "mma.sync.aligned.m16n8k64.row.col.satfinite.s32.s4.s4.s32"},
-    {TensorCoreType::INT32_INT8_INT8_INT32,
-     "mma.sync.aligned.m16n8k32.row.col.satfinite.s32.s8.s8.s32"},
-
-    {TensorCoreType::FP16_FP16_FP16_FP16,
-     "mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16"},
-};
 
 LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
                          ConversionPatternRewriter &rewriter, Location loc,
                          Value a, Value b, Value c, Value d, Value loadedA,
                          Value loadedB, Value loadedC, DotOp op,
                          DotOpAdaptor adaptor) {
-  MLIRContext *ctx = c.getContext();
   auto aTensorTy = a.getType().cast<RankedTensorType>();
   auto bTensorTy = b.getType().cast<RankedTensorType>();
+  auto cTensorTy = c.getType().cast<RankedTensorType>();
   auto dTensorTy = d.getType().cast<RankedTensorType>();
 
   auto aShapePerCTA = triton::gpu::getShapePerCTA(aTensorTy);
   auto bShapePerCTA = triton::gpu::getShapePerCTA(bTensorTy);
   auto dShapePerCTA = triton::gpu::getShapePerCTA(dTensorTy);
 
-  int bitwidth = aTensorTy.getElementType().getIntOrFloatBitWidth();
   auto dotOpA = aTensorTy.getEncoding().cast<DotOperandEncodingAttr>();
   auto repA = dotOpA.getParent()
                   .cast<triton::gpu::intel::IntelMmaEncodingAttr>()
@@ -195,149 +212,82 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   assert(repA[1] == repB[0]);
   int repM = repA[0], repN = repB[1], repK = repA[1];
 
+  llvm::outs() << "johnlu repM: " << repM << "\n";
+  llvm::outs().flush();
+  llvm::outs() << "johnlu repN: " << repN << "\n";
+  llvm::outs().flush();
+  llvm::outs() << "johnlu repK: " << repK << "\n";
+  llvm::outs().flush();
+
+  llvm::outs() << "johnlu aTensorTy: " << aTensorTy << "\n";
+  llvm::outs().flush();
   llvm::outs() << "johnlu loadedA: " << loadedA << "\n";
+  llvm::outs().flush();
+  llvm::outs() << "johnlu bTensorTy: " << bTensorTy << "\n";
   llvm::outs().flush();
   llvm::outs() << "johnlu loadedB: " << loadedB << "\n";
   llvm::outs().flush();
   llvm::outs() << "johnlu loadedC: " << loadedC << "\n";
   llvm::outs().flush();
+  auto mmaType = getMmaType(op);
+  auto srcXMXLayout =
+      dTensorTy.getEncoding()
+          .cast<mlir::triton::gpu::intel::IntelMmaEncodingAttr>();
+  Type aTy, bTy, cTy, dTy;
+  std::tie(dTy, cTy, aTy, bTy) =
+      getMmaOperandsType(mmaType, op.getContext(), srcXMXLayout);
+
   // shape / shape_per_cta
-  auto ha = getValuesFromDotOperandLayoutStruct(typeConverter, loc, rewriter,
-                                                loadedA, repM, repK, aTensorTy);
-  auto hb = getValuesFromDotOperandLayoutStruct(typeConverter, loc, rewriter,
-                                                loadedB, repN, repK, bTensorTy);
-  auto fc = typeConverter->unpackLLElements(loc, loadedC, rewriter, dTensorTy);
+  auto ha = getValuesFromDotOperandLayoutStruct(
+      typeConverter, loc, rewriter, loadedA, repM, repK, aTensorTy, aTy);
+  auto hb = getValuesFromDotOperandLayoutStruct(
+      typeConverter, loc, rewriter, loadedB, repN, repK, bTensorTy, bTy);
+  auto fc = getValuesFromDotOperandLayoutStruct(
+      typeConverter, loc, rewriter, loadedC, repM, repN, cTensorTy, cTy);
 
-  //  auto mmaType = getMmaType(op);
-  auto mmaType = typeConverter->convertType(dTensorTy);
+  auto shapePerCTA = mlir::triton::gpu::getShapePerCTA(dTensorTy.getEncoding(),
+                                                       dTensorTy.getShape());
+  auto shapePerCTATile = mlir::triton::gpu::getShapePerCTATile(
+      dTensorTy.getEncoding(), dTensorTy.getShape());
 
+  llvm::outs() << "johnlu shapePerCTA: ";
+  for (auto &i : shapePerCTA)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
+  llvm::outs() << "johnlu shapePerCTATile: ";
+  for (auto &i : shapePerCTATile)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
   llvm::outs() << "johnlu ha.size(): " << ha.size() << "\n";
   llvm::outs().flush();
   llvm::outs() << "johnlu hb.size(): " << hb.size() << "\n";
   llvm::outs().flush();
   llvm::outs() << "johnlu fc.size(): " << fc.size() << "\n";
   llvm::outs().flush();
-  llvm::outs() << "johnlu mmaType: " << mmaType << "\n";
+  llvm::outs() << "johnlu dTensorTy: " << dTensorTy << "\n";
   llvm::outs().flush();
 
-  //  std::string libName = "libdevice";
-  //  std::string curPrint = "print_cur_float";
-  //  std::string accPrint = "print_acc_float";
-  //  std::string outPrint = "print_output_float";
-  //  std::string writeIndexPrint = "print_write_index";
-  //  appendOrGetFuncOp(rewriter, op, libName, writeIndexPrint,
-  //                    mlir::FunctionType::get(rewriter.getContext(), {i32_ty,
-  //                    i32_ty, i32_ty}, TypeRange()));
+  auto mod = op->getParentOfType<ModuleOp>();
+  unsigned threadsPerWarp =
+      triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
 
-  //  spirv::FuncOp func = spirv::appendOrGetFuncOp(loc, rewriter, "libdevice",
-  //  "llvm.genx.dpas",
-  //   mlir::FunctionType::get(rewriter.getContext(), {i32_ty, i32_ty, i32_ty},
-  //   TypeRange()),
-  //                                                  spirv::FunctionControl::Inline,attributes);
+  VCIBuilder builder(threadsPerWarp, rewriter);
+  auto dpas2Intrinsic =
+      builder.create<GenXDPAS2>(mmaType, 8, dTy, cTy, bTy, aTy);
 
-  std::string simdFunc = "SIMDwrapper";
-#if 1
-  auto valueTy = i32_ty;
-  auto valSIMDTy = mlir::VectorType::get({(int64_t)32}, valueTy);
-
-  auto aTy = mlir::VectorType::get(128, f16_ty);
-  auto bTy = mlir::VectorType::get(128, i32_ty);
-  auto cTy = mlir::VectorType::get(128, i32_ty);
-  auto dTy = mlir::VectorType::get(128, i32_ty);
-  SmallVector<mlir::Type *, 4> funcTys;
-  funcTys.push_back(&dTy);
-  funcTys.push_back(&aTy);
-  funcTys.push_back(&bTy);
-  funcTys.push_back(&cTy);
-
-  //  auto xmxIntrinsic =
-  //  triton::intel::getGenXName(llvm::GenXIntrinsic::ID::genx_dpas, funcTys);
-  //  llvm::outs() << "johnlu xmxIntrinsic name:" << xmxIntrinsic << "\n";
-
-  auto simdFunTy =
-      mlir::FunctionType::get(rewriter.getContext(), {valSIMDTy}, {dTy});
-  spirv::FuncOp wrapper;
-  {
-    // SIMD function
-    NamedAttrList attributes;
-    wrapper = mlir::triton::intel::appendOrGetESIMDFunc(rewriter, simdFunc,
-                                                        simdFunTy, loc);
-    if (wrapper.empty()) {
-      auto block = wrapper.addEntryBlock();
-      auto entryBlock = &wrapper.getFunctionBody().front();
-
-      OpBuilder rewriter(entryBlock, entryBlock->begin());
-
-      Value retVal = rewriter.create<spirv::UndefOp>(loc, bTy);
-
-      rewriter.create<spirv::ReturnValueOp>(loc, TypeRange(),
-                                            ValueRange{retVal});
-    }
-  }
-  auto funPtrTy = spirv::FunctionPointerINTELType::get(
-      simdFunTy, spirv::StorageClass::Function);
-  spirv::INTELConstantFunctionPointerOp funValue =
-      rewriter.create<spirv::INTELConstantFunctionPointerOp>(loc, funPtrTy,
-                                                             simdFunc);
-
-  //  std::cout << "johnlu address of" << std::endl;
-  //  (*this)->print(llvm::outs());
-  //  llvm::outs().flush();
-  //  std::cout << std::endl;
-#if 0
-  auto symbolOp = SymbolTable::lookupNearestSymbolFrom(funValue->getParentOp(),
-                                     funValue.getVariableAttr());
-    if(symbolOp) {
-      std::cout << "start symbolTableOp" << std::endl;
-      symbolOp->print(llvm::outs());
-      llvm::outs().flush();
-      std::cout << std::endl;
-      std::cout << "end symbolTableOp" << std::endl;
-      auto funcOp = dyn_cast_or_null<spirv::FuncOp>(symbolOp);
-      std::cout << "start symbolOp type" << std::endl;
-      funcOp.getFunctionType().print(llvm::outs());
-      llvm::outs().flush();
-      std::cout << std::endl;
-      std::cout << "end symbolOp type" << std::endl;
-      std::cout << "start pointer type" << std::endl;
-      funValue->getResult(0).print(llvm::outs());
-//      funValue.getPointer().print(llvm::outs());
-      llvm::outs().flush();
-      std::cout << std::endl;
-      std::cout << "end pointer type" << std::endl;
-    }
-#endif
-
-  auto simtDTy = mlir::VectorType::get(128 / 32, i32_ty);
-  std::string intfSIMDFunc = "_Z33__regcall3____builtin_invoke_simd" + simdFunc;
-  auto simtToSIMDFunTy = mlir::FunctionType::get(
-      rewriter.getContext(), {funPtrTy, valueTy}, {simtDTy});
-  {
-    // SIMT -> SIMD calling abi
-    auto simtWrapper =
-        spirv::appendOrGetFuncOp(loc, rewriter, intfSIMDFunc, simtToSIMDFunTy,
-                                 spirv::FunctionControl::Inline);
-
-    simtWrapper->setAttr(
-        spirv::SPIRVDialect::getAttributeName(
-            spirv::Decoration::LinkageAttributes),
-        spirv::LinkageAttributesAttr::get(
-            rewriter.getContext(), intfSIMDFunc,
-            spirv::LinkageTypeAttr::get(rewriter.getContext(),
-                                        spirv::LinkageType::Import)));
-  }
-#endif
   auto callMma = [&](unsigned m, unsigned n, unsigned k) {
-    //    Type elemTy = getMmaRetType(mmaType, op.getContext())
-    //                      .cast<spirv::StructType>()
-    //                      .getElementType(0);
-    rewriter.create<spirv::FunctionCallOp>(loc, TypeRange{simtDTy},
-                                           intfSIMDFunc,
-                                           ValueRange{funValue, i32_val(0)});
+    auto valA = ha.at({m, k});
+    auto valB = hb.at({n, k});
+    auto valc = fc.at({m, n});
+    auto ret = (*dpas2Intrinsic)(rewriter, loc, valc, valB, valA);
+    auto mmaType = typeConverter->convertType(dTensorTy);
     Type elemTy = mmaType.cast<spirv::StructType>().getElementType(0);
-    llvm::outs() << "johnlu elemTy: " << elemTy << "\n";
+    llvm::outs() << "johnlu XMX.cpp m: " << m << " n:" << n << " k:" << k
+                 << "\n";
+    llvm::outs() << "johnlu XMX.cpp mmaType: " << mmaType << "\n";
+    llvm::outs() << "johnlu XMX.cpp elemTy: " << elemTy << "\n";
     llvm::outs().flush();
-    fc[m * repN + n] = rewriter.create<spirv::UndefOp>(loc, elemTy);
+    fc.at({m, n}) = ret; // rewriter.create<spirv::UndefOp>(loc, elemTy);
   };
 
   for (int k = 0; k < repK; ++k)
@@ -349,11 +299,10 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
 
   llvm::outs() << "johnlu resElemTy: " << resElemTy << "\n";
   llvm::outs().flush();
-  SmallVector<Value> results(fc.size());
-  for (int i = 0; i < fc.size(); ++i) {
-    results[i] = fc[i];
-  }
-  Value res = typeConverter->packLLElements(loc, results, rewriter, resElemTy);
+
+  // Format the values to LLVM::Struct to passing to mma codegen.
+  Value res = composeValuesToDotOperandLayoutStruct(
+      fc, repM, repN, typeConverter, loc, rewriter);
 
   rewriter.replaceOp(op, res);
 
@@ -364,12 +313,6 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
 LogicalResult convertXMXDot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
                             TritonGPUToSPIRVTypeConverter *typeConverter,
                             ConversionPatternRewriter &rewriter) {
-  auto loc = op.getLoc();
-  auto mmaLayout = op.getResult()
-                       .getType()
-                       .cast<RankedTensorType>()
-                       .getEncoding()
-                       .cast<triton::gpu::intel::IntelMmaEncodingAttr>();
 
   Value A = op.getA();
   Value B = op.getB();
