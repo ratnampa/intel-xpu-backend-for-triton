@@ -40,6 +40,7 @@ add_mlir_conversion_library(TritonGPUToSPIRV
     TritonIR
     TritonGPUIR
     TritonGPUTransforms
+    MLIRLLVMDialect
     LLVMGenXIntrinsics
     MLIRTargetLLVMIRImport
 )
