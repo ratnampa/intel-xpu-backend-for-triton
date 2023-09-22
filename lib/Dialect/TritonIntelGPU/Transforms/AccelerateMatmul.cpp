@@ -115,7 +115,8 @@ public:
     a = rewriter.create<triton::gpu::ConvertLayoutOp>(a.getLoc(), newAType, a);
     b = rewriter.create<triton::gpu::ConvertLayoutOp>(b.getLoc(), newBType, b);
     auto newDot = rewriter.create<triton::DotOp>(
-        dotOp.getLoc(), newRetType, a, b, newAcc, dotOp.getAllowTF32());
+        dotOp.getLoc(), newRetType, a, b, newAcc, dotOp.getAllowTF32(),
+        dotOp.getMaxNumImpreciseAcc());
 
     rewriter.replaceOpWithNewOp<triton::gpu::ConvertLayoutOp>(
         op, oldRetType, newDot.getResult());

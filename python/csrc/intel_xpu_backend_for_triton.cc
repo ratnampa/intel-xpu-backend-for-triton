@@ -34,6 +34,7 @@
 #include <llvm/Support/SourceMgr.h>
 #include <mlir/Bytecode/BytecodeWriter.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/IR/Verifier.h>
 #include <mlir/Transforms/Passes.h>
 
@@ -172,12 +173,12 @@ void init_triton_translation(py::module &m) {
         // initialize registry
         // note: we initialize llvm for undef
         mlir::DialectRegistry registry;
-        registry.insert<mlir::triton::TritonDialect,
-                        mlir::triton::gpu::TritonGPUDialect,
-                        mlir::triton::gpu::intel::TritonIntelGPUDialect,
-                        mlir::math::MathDialect, mlir::arith::ArithDialect,
-                        mlir::index::IndexDialect, mlir::scf::SCFDialect,
-                        mlir::cf::ControlFlowDialect>();
+        registry.insert<
+            mlir::triton::TritonDialect, mlir::triton::gpu::TritonGPUDialect,
+            mlir::triton::gpu::intel::TritonIntelGPUDialect,
+            mlir::math::MathDialect, mlir::arith::ArithDialect,
+            mlir::index::IndexDialect, mlir::scf::SCFDialect,
+            mlir::LLVM::LLVMDialect, mlir::cf::ControlFlowDialect>();
         context.appendDialectRegistry(registry);
         context.loadAllAvailableDialects();
 
