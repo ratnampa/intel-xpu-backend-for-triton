@@ -17,22 +17,23 @@ using ::mlir::triton::gpu::getTotalElemsPerThread;
 using ::mlir::triton::gpu::isaDistributedLayout;
 using ::mlir::triton::gpu::SharedEncodingAttr;
 
-// Data loader for mma.16816 instruction.
+// Data loader for XMX instruction.
 class JointMatrixMatmulLoader {
 public:
-  JointMatrixMatmulLoader(int warpsPerTile, ArrayRef<uint32_t> order,
-                          ArrayRef<uint32_t> warpsPerCTA, uint32_t kOrder,
-                          int kWidth, ArrayRef<Value> smemStrides,
-                          ArrayRef<int64_t> tileShape, ArrayRef<int> instrShape,
-                          int perPhase, int maxPhase, int elemBytes,
+  JointMatrixMatmulLoader(ArrayRef<uint32_t> order, int warpsPerTile,
+                          uint32_t kDim, int repeatCount, int systolicDepth,
+                          int exeCutionSize, int opsPerChan, int threadsPerWarp,
+                          ArrayRef<Value> smemStrides, ArrayRef<int> instrShape,
+                          int perPhase, int maxPhase, int vec, int elemBytes,
                           ConversionPatternRewriter &rewriter,
                           TritonGPUToSPIRVTypeConverter *typeConverter,
                           const Location &loc);
 
   // lane = thread % 32
-  // warpOff = (thread/32) % warpsPerTile(0)
-  Value computeOffsets(Value warpOff, Value lane) {
-    return mul(warpOff, i32_val(tileShape[kDim]));
+  // warp = (thread/32)
+  SmallVector<Value> computeOffsets(Value warp, Value lane,
+                                    Value cSwizzleOffset) {
+    return computeLdsMatOffs(warp, lane, cSwizzleOffset);
   }
 
 #if 0
@@ -40,58 +41,47 @@ public:
   // mapped to.
   SmallVector<Value> computeLdmatrixMatOffs(Value warpId, Value lane,
                                             Value cSwizzleOffset);
-  // compute 8-bit matrix offset.
+#endif
+  // compute matrix loads offset.
   SmallVector<Value> computeLdsMatOffs(Value warpOff, Value lane,
                                        Value cSwizzleOffset);
-#endif
 
   // Load the matrix value.
-  Value operator()(int mat0, int mat1, Value ptr, Type matTy) const;
+  Value operator()(int mat0, int mat1, ArrayRef<Value> ptrs,
+                   ArrayRef<Value> offs, Value subGroupID, Value lane,
+                   Type matTy, Value cSwizzleOffset) const;
+
+  int getNumPtrs() const { return numPtrs; }
 
 private:
+  // XMX instruction meta.
+  int repeatCount;
+  int systolicDepth;
+  int exeCutionSize;
+  int opsPerChan;
+  int threadsPerWarp;
+
+  // Share local memory meta.
   SmallVector<uint32_t> order;
-  SmallVector<uint32_t> warpsPerCTA;
-  int kOrder;
-  int kWidth;
-  SmallVector<int64_t> tileShape;
   SmallVector<int> instrShape;
-  SmallVector<int> matShape;
+  SmallVector<Value> smemStrides;
+  int vec;
   int perPhase;
   int maxPhase;
   int elemBytes;
 
+  int kDim;
+  bool needTrans;
+  Value repNonKDimStride;
+  Value repKDimStride;
+  // Stride in number of matrices to increment on non-k dim across warps
+  Value warpMatStride;
+  int numPtrs;
+
+  // code gen struct.
   ConversionPatternRewriter &rewriter;
   const Location &loc;
   MLIRContext *ctx{};
-
-  int kDim;
-  int strideRrows;
-  int strideCols;
-  int strideLoad;
-#if 0
-  // ldmatrix loads a matrix of size stridedMatShape x contiguousMatShape
-  int contiguousMatShape;
-  int stridedMatShape;
-
-  // Offset in shared memory to increment on the strided axis
-  // This would be different than the tile shape in the case of a sliced tensor
-  Value stridedSmemOffset;
-
-  bool needTrans;
-  bool canUseLdmatrix;
-
-  //  int numPtrs;
-
-  // Load operations offset in number of Matrices on contiguous and strided axes
-  int contiguousLoadMatOffset;
-  int stridedLoadMatOffset;
-
-  // Offset in number of matrices to increment on non-k dim within a warp's 2x2
-  // matrices
-  int inWarpMatOffset;
-  // Offset in number of matrices to increment on non-k dim across warps
-  int warpMatOffset;
-#endif
 };
 
 #if 0
@@ -173,199 +163,211 @@ JointMatrixMatmulLoader::computeLdmatrixMatOffs(Value warpId, Value lane,
 }
 #endif
 // clang-format off
-// Each `ldmatrix.x4` loads data as follows when `needTrans == False`:
+// Value layout example for warp size 32.
+// For A operand:
+//                                   systolic depth = 8
+// <------------------------------------------------------------------------------------------------->
+// opsPerChan
+// <--------->
+// t0  ...  t0   t1  ... t1   t2  ... t2  t3  ... t3  t4  ... t4   t5  ... t5  t6  ... t6  t7  ... t7    ^
+// t8  ...  t8   t9  ... t9   t10 ... t10 t11 ... t11 t12 ... t12  t13 ... t13 t14 ... t14 t15 ... t15   |
+// t16 ...  t16  t17 ... t17  t18 ... t18 t19 ... t19 t20 ... t20  t21 ... t21 t22 ... t22 t23 ... t23   |
+// t24 ...  t24  t25 ... t25  t26 ... t26 t27 ... t27 t28 ... t28  t29 ... t29 t30 ... t30 t31 ... t31   | repeat count <= 8
+// t0  ...  t0   t1  ... t1   t2  ... t2  t3  ... t3  t4  ... t4   t5  ... t5  t6  ... t6  t7  ... t7    |
+// t8  ...  t8   t9  ... t9   t10 ... t10 t11 ... t11 t12 ... t12  t13 ... t13 t14 ... t14 t15 ... t15   |
+// t16 ...  t16  t17 ... t17  t18 ... t18 t19 ... t19 t20 ... t20  t21 ... t21 t22 ... t22 t23 ... t23   |
+// t24 ...  t24  t25 ... t25  t26 ... t26 t27 ... t27 t28 ... t28  t29 ... t29 t30 ... t30 t31 ... t31   v
 //
-//               quad width
-// <----------------------------------------->
-// vecWidth
-// <------->
-//  t0 ... t0  t1 ... t1  t2 ... t2  t3 ... t3   ||  t0 ... t0  t1 ... t1  t2 ... t2  t3 ... t3  /|\
-//  t4 ... t4  t5 ... t5  t6 ... t6  t7 ... t7   ||  t4 ... t4  t5 ... t5  t6 ... t6  t7 ... t7   |
-//  t8 ... t8  t9 ... t9 t10 .. t10 t11 .. t11   ||  t8 ... t8  t9 ... t9 t10 .. t10 t11 .. t11   | quad height
-// ...                                                                                            |
-// t28 .. t28 t29 .. t29 t30 .. t30 t31 .. t31   || t28 .. t28 t29 .. t29 t30 .. t30 t31 .. t31  \|/
-// --------------------------------------------- || --------------------------------------------
-//  t0 ... t0  t1 ... t1  t2 ... t2  t3 ... t3   ||  t0 ... t0  t1 ... t1  t2 ... t2  t3 ... t3
-//  t4 ... t4  t5 ... t5  t6 ... t6  t7 ... t7   ||  t4 ... t4  t5 ... t5  t6 ... t6  t7 ... t7
-//  t8 ... t8  t9 ... t9 t10 .. t10 t11 .. t11   ||  t8 ... t8  t9 ... t9 t10 .. t10 t11 .. t11
-// ...
-// t28 .. t28 t29 .. t29 t30 .. t30 t31 .. t31   || t28 .. t28 t29 .. t29 t30 .. t30 t31 .. t31
+// For B operand:
+//               execution size = 16
+// <------------------------------------------------------------->
+// t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15     ^             ^
+// .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .       | opsPerChan  |
+// t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15     v             |
+// t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   |
+// .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                     |
+// t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   |  systolic depth = 8
+// t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15                   |
+// .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                     |
+// t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15                   |
+// t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   |
+// .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                     |
+// t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   v
 //
-// we assume that the phase is < 8 so we don't need to maintain a separate pointer for the two
-// lower quadrants. This pattern repeats every warpsPerTile[0] (resp. warpsPerTile[1]) blocks
+// This pattern repeats every warpsPerTile[0] (resp. warpsPerTile[1]) blocks
 // along the row (resp. col) dimension.
 // clang-format on
-#if 0
 SmallVector<Value>
-JointMatrixMatmulLoader::computeLdsMatOffs(Value warpOff, Value lane,
+JointMatrixMatmulLoader::computeLdsMatOffs(Value warp, Value lane,
                                            Value cSwizzleOffset) {
-  int cTileShape = tileShape[order[0]];
-  int sTileShape = tileShape[order[1]];
-  if (!needTrans) {
-    std::swap(cTileShape, sTileShape);
+  SmallVector<Value> offs(numPtrs);
+
+  int repRowsPerInst;
+  int rowsPerWarp;
+  Value laneRowIndex;
+  Value laneColIndex;
+  if (kDim == 1) /*A*/ {
+    rowsPerWarp = threadsPerWarp / systolicDepth;
+    repRowsPerInst = repeatCount / rowsPerWarp;
+    laneRowIndex = udiv(lane, i32_val(systolicDepth));
+    laneColIndex = urem(lane, i32_val(systolicDepth));
+    laneColIndex = mul(laneColIndex, i32_val(opsPerChan));
+  } else /*B*/ {
+    rowsPerWarp = threadsPerWarp / exeCutionSize;
+    repRowsPerInst = systolicDepth / rowsPerWarp;
+    rowsPerWarp = rowsPerWarp * opsPerChan;
+    laneRowIndex = udiv(lane, i32_val(exeCutionSize));
+    laneRowIndex = mul(laneRowIndex, i32_val(opsPerChan));
+    laneColIndex = urem(lane, i32_val(exeCutionSize));
   }
 
-  SmallVector<Value> offs(1 /*numPtrs*/);
+  // outer index offset
+  Value iOff = mul(warp, warpMatStride);
 
-  int vecWidth = kWidth;
-  int threadsPerQuad[2] = {8, 4};
-  int laneWidth = 4;
-  int laneHeight = 8;
-  int quadWidth = laneWidth * vecWidth;
-  int quadHeight = laneHeight;
-  int numQuadI = 2;
-
-  // outer index base
-  Value iBase = udiv(lane, i32_val(laneWidth));
-
-  for (int rep = 0; rep < 1 /*numPtrs*/ / (2 * vecWidth); ++rep)
-    for (int quadId = 0; quadId < 2; ++quadId)
-      for (int elemId = 0; elemId < vecWidth; ++elemId) {
-        int idx = rep * 2 * vecWidth + quadId * vecWidth + elemId;
-        // inner index base
-        Value jBase = mul(urem(lane, i32_val(laneWidth)), i32_val(vecWidth));
-        jBase = add(jBase, i32_val(elemId));
-        // inner index offset
-        Value jOff = i32_val(0);
-        if (!needTrans) {
-          jOff = add(jOff, i32_val(quadId));
-          jOff = add(jOff, i32_val(rep * contiguousLoadMatOffset));
-        }
-        // outer index offset
-        Value iOff = mul(warpOff, i32_val(warpMatOffset));
-        if (needTrans) {
-          int pStride = kOrder == 1 ? 1 : 2;
-          iOff = add(iOff, i32_val(quadId * inWarpMatOffset));
-          iOff = add(iOff, i32_val(rep * contiguousLoadMatOffset * pStride));
-        }
-        // swizzle
-        if (!needTrans) {
-          Value phase = urem(udiv(iBase, i32_val(perPhase)), i32_val(maxPhase));
-          jOff = add(jOff, udiv(cSwizzleOffset, i32_val(quadWidth)));
-          jOff = xor_(jOff, phase);
-        } else {
-          Value phase = urem(udiv(jBase, i32_val(perPhase)), i32_val(maxPhase));
-          iOff = add(iOff, udiv(cSwizzleOffset, i32_val(quadHeight)));
-          iOff = xor_(iOff, phase);
-        }
-        // To prevent out-of-bound access when tile is too small.
-        Value i = add(iBase, mul(iOff, i32_val(quadHeight)));
-        Value j = add(jBase, mul(jOff, i32_val(quadWidth)));
-        // wrap around the bounds
-        // i = urem(i, i32_val(cTileShape));
-        // j = urem(j, i32_val(sTileShape));
-        if (needTrans) {
-          offs[idx] = add(i, mul(j, stridedSmemOffset));
-        } else {
-          offs[idx] = add(mul(i, stridedSmemOffset), j);
-        }
+  int index = 0;
+  Value iBase;
+  Value jBase;
+  for (int rep = 0; rep < repRowsPerInst; ++rep) {
+    Value repRowIndex = mul(i32_val(rep), i32_val(rowsPerWarp));
+    for (int opsIdx = 0; opsIdx < opsPerChan; ++opsIdx) {
+      // inner index base
+      jBase = laneColIndex;
+      // outer index base
+      iBase = add(repRowIndex, laneRowIndex);
+      if (kDim == 1) /*A*/ {
+        jBase = add(jBase, i32_val(opsIdx));
+      } else /*B*/ {
+        iBase = add(iBase, i32_val(opsIdx));
       }
+#if 0
+      // swizzle
+      if (!needTrans) {
+        Value phase = urem(udiv(iBase, i32_val(perPhase)), i32_val(maxPhase));
+        jOff = add(jOff, udiv(cSwizzleOffset, i32_val(quadWidth)));
+        jOff = xor_(jOff, phase);
+      } else {
+        Value phase = urem(udiv(jBase, i32_val(perPhase)), i32_val(maxPhase));
+        iOff = add(iOff, udiv(cSwizzleOffset, i32_val(quadHeight)));
+        iOff = xor_(iOff, phase);
+      }
+      // To prevent out-of-bound access when tile is too small.
+      Value i = add(iBase, mul(iOff, i32_val(quadHeight)));
+      Value j = add(jBase, mul(jOff, i32_val(quadWidth)));
+      // wrap around the bounds
+      // i = urem(i, i32_val(cTileShape));
+      // j = urem(j, i32_val(sTileShape));
+      if (needTrans) {
+        offs[idx] = add(i, mul(j, stridedSmemOffset));
+      } else {
+        offs[idx] = add(mul(i, stridedSmemOffset), j);
+      }
+#endif
+      // inner index offset
+      Value jOff = i32_val(0);
+      // swizzle: col_swizzled = (col / vec) ^ phase * vec
+      Value phase = urem(udiv(iBase, i32_val(perPhase)), i32_val(maxPhase));
+      jOff = add(jOff, udiv(cSwizzleOffset, i32_val(vec)));
+      jOff = mul(xor_(jOff, phase), i32_val(vec));
+
+      Value i = add(mul(iBase, smemStrides[0]), iOff);
+      Value j = add(mul(jBase, smemStrides[1]), jOff);
+
+      offs[index++] = add(i, j);
+    }
+  }
 
   return offs;
 }
-#endif
-Value JointMatrixMatmulLoader::operator()(int repRow, int repCol, Value ptr,
-                                          Type matTy) const {
+
+Value JointMatrixMatmulLoader::operator()(
+    int repOutter, int repInner, ArrayRef<Value> ptrs, ArrayRef<Value> offs,
+    Value subGroupID, Value lane, Type matTy, Value cSwizzleOffset) const {
   // The struct should have exactly the same element types.
   auto structTy = matTy.cast<spirv::StructType>();
   auto elemNum = structTy.getNumElements();
   auto elemTy = structTy.getElementType(0);
 
-  Value offsetM = mul(i32_val(repRow), i32_val(strideRrows));
-  Value offsetN = mul(i32_val(repCol), i32_val(strideCols));
-  Value offset = add(offsetM, offsetN);
+  Value offsetOutter = mul(i32_val(repOutter), repNonKDimStride);
+  Value offsetInner = mul(i32_val(repInner), repKDimStride);
+  Value offset = add(offsetOutter, offsetInner);
+
+#if 0
+#if 1
+  auto printFuncTy = mlir::FunctionType::get(
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, f16_ty}, TypeRange());
+
+  NamedAttrList attributes;
+  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
+  auto linkageTypeAttr =
+      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+      "print_scalar", linkageTypeAttr);
+  attributes.set("linkage_attributes", linkageAttr);
+  spirv::appendOrGetFuncOp(loc, rewriter, "print_scalar", printFuncTy,
+                           spirv::FunctionControl::Inline, attributes);
+#else
+
+  auto printFuncTy = mlir::FunctionType::get(
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, ptr_ty(f16_ty, spirv::StorageClass::Workgroup), f16_ty}, TypeRange());
+
+  NamedAttrList attributes;
+  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
+  auto linkageTypeAttr =
+      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+      "print_scalar2", linkageTypeAttr);
+  attributes.set("linkage_attributes", linkageAttr);
+  spirv::appendOrGetFuncOp(loc, rewriter, "print_scalar2", printFuncTy,
+                           spirv::FunctionControl::Inline, attributes);
+#endif
+#endif
 
   Value ret = rewriter.create<spirv::UndefOp>(loc, structTy);
   for (int i = 0; i < elemNum; i++) {
-    Value loadStride = i32_val(strideLoad * i);
-    Value readPtr = gep(ptr, add(offset, loadStride));
+    Value readPtr = gep(ptrs[i], offset);
     Value val = rewriter.create<spirv::LoadOp>(loc, readPtr);
+#if 0
+    if (kDim == 1)
+      rewriter.create<spirv::FunctionCallOp>(
+          loc, TypeRange(), "print_scalar",
+          ValueRange{subGroupID, lane, i32_val(i), offs[i], val});
+#endif
     ret = insert_val(structTy, val, ret, rewriter.getI32ArrayAttr(i));
   }
   return ret;
 }
 
 JointMatrixMatmulLoader::JointMatrixMatmulLoader(
-    int warpsPerTile, ArrayRef<uint32_t> order, ArrayRef<uint32_t> warpsPerCTA,
-    uint32_t kOrder, int kWidth, ArrayRef<Value> smemStrides,
-    ArrayRef<int64_t> tileShape, ArrayRef<int> instrShape, int perPhase,
-    int maxPhase, int elemBytes, ConversionPatternRewriter &rewriter,
+    ArrayRef<uint32_t> order, int warpsPerTile, uint32_t kDim, int repeatCount,
+    int systolicDepth, int exeCutionSize, int opsPerChan, int threadsPerWarp,
+    ArrayRef<Value> smemStrides, ArrayRef<int> instrShape, int perPhase,
+    int maxPhase, int vec, int elemBytes, ConversionPatternRewriter &rewriter,
     TritonGPUToSPIRVTypeConverter *typeConverter, const Location &loc)
-    : order(order.begin(), order.end()),
-      warpsPerCTA(warpsPerCTA.begin(), warpsPerCTA.end()), kDim(kOrder),
-      kWidth(kWidth), tileShape(tileShape.begin(), tileShape.end()),
-      instrShape(instrShape.begin(), instrShape.end()), perPhase(perPhase),
-      maxPhase(maxPhase), elemBytes(elemBytes), rewriter(rewriter), loc(loc),
-      ctx(rewriter.getContext()) {
-  llvm::outs() << "johnlu tensorShape:";
-  for (auto &num : tileShape) {
-    llvm::outs() << " " << num;
+    : order(order.begin(), order.end()), kDim(kDim), repeatCount(repeatCount),
+      systolicDepth(systolicDepth), exeCutionSize(exeCutionSize),
+      opsPerChan(opsPerChan), threadsPerWarp(threadsPerWarp),
+      instrShape(instrShape.begin(), instrShape.end()),
+      smemStrides(smemStrides.begin(), smemStrides.end()), perPhase(perPhase),
+      maxPhase(maxPhase), vec(vec), elemBytes(elemBytes), rewriter(rewriter),
+      loc(loc), ctx(rewriter.getContext()) {
+
+  // if the k dim is contiguous, then load the value just as packed.
+  needTrans = kDim != order[0];
+
+  repKDimStride = mul(i32_val(instrShape[kDim]), smemStrides[kDim]);
+  repNonKDimStride =
+      mul(i32_val(instrShape[kDim ^ 1] * warpsPerTile), smemStrides[kDim ^ 1]);
+  warpMatStride = mul(i32_val(instrShape[kDim ^ 1]), smemStrides[kDim ^ 1]);
+
+  if (kDim == 1 /*A*/) {
+    int rowsPerWarp = threadsPerWarp / systolicDepth;
+    numPtrs = (repeatCount / rowsPerWarp) * opsPerChan;
+  } else /*B*/ {
+    int rowsPerWarp = threadsPerWarp / exeCutionSize;
+    numPtrs = (repeatCount / rowsPerWarp) * opsPerChan;
   }
-  llvm::outs() << "\n";
-  llvm::outs().flush();
-
-  llvm::outs() << "johnlu instrShape:";
-  for (auto &num : instrShape) {
-    llvm::outs() << " " << num;
-  }
-  llvm::outs() << "\n";
-  llvm::outs().flush();
-  llvm::outs() << "johnlu kDim:" << kDim << "\n";
-  strideRrows = tileShape[kDim];
-  strideCols = instrShape[kDim];
-  llvm::outs() << "johnlu strideRows:" << strideRrows << "\n";
-  llvm::outs() << "johnlu strideCols:" << strideCols << "\n";
-  llvm::outs() << "johnlu strideLoad:" << strideLoad << "\n";
-  llvm::outs() << "johnlu warpsPerTile:" << warpsPerTile << "\n";
-
-  llvm::outs() << "johnlu warpsPerCTA:";
-  for (auto &num : warpsPerCTA) {
-    llvm::outs() << " " << num;
-  }
-  llvm::outs() << "\n";
-  llvm::outs().flush();
-
-#if 0
-  contiguousMatShape = matShape[order[0]];
-  stridedMatShape = matShape[order[1]];
-
-  stridedSmemOffset = smemStrides[order[1]];
-
-  // rule: k must be the fast-changing axis.
-  needTrans = kOrder != order[0];
-  canUseLdmatrix = elemBytes == 2 || (!needTrans);
-  canUseLdmatrix = canUseLdmatrix && (kWidth == 4 / elemBytes);
-
-  if (canUseLdmatrix) {
-    // Each CTA, the warps is arranged as [1xwarpsPerTile] if not transposed,
-    // otherwise [warpsPerTilex1], and each warp will perform a mma.
-    numPtrs = tileShape[order[0]] / (needTrans ? warpsPerTile : 1) /
-              instrShape[order[0]];
-  } else {
-    numPtrs = tileShape[order[0]] / (needTrans ? warpsPerTile : 1) /
-              matShape[order[0]];
-    numPtrs *= 4 / elemBytes;
-  }
-  numPtrs = std::max<int>(numPtrs, 2);
-
-  // Special rule for i8/u8, 4 ptrs for each matrix
-  // if (!canUseLdmatrix && elemBytes == 1)
-  int loadOffsetInMat[2];
-  loadOffsetInMat[kOrder] =
-      2; // instrShape[kOrder] / matShape[kOrder], always 2
-  loadOffsetInMat[kOrder ^ 1] =
-      warpsPerTile * (instrShape[kOrder ^ 1] / matShape[kOrder ^ 1]);
-
-  contiguousLoadMatOffset = loadOffsetInMat[order[0]];
-
-  stridedLoadMatOffset =
-      loadOffsetInMat[order[1]] / (instrShape[order[1]] / matShape[order[1]]);
-
-  // The stride (in number of matrices) within warp
-  inWarpMatOffset = kOrder == 1 ? 1 : warpsPerTile;
-  // The stride (in number of matrices) of each warp
-  warpMatOffset = instrShape[kOrder ^ 1] / matShape[kOrder ^ 1];
-#endif
 }
 
 Value composeValuesToDotOperandLayoutStruct(
@@ -380,7 +382,6 @@ Value composeValuesToDotOperandLayoutStruct(
       auto valTy = matType.getElementType(0);
       for (int i = 0; i < matType.getNumElements(); ++i) {
         auto val = extract_val(valTy, matVal, rewriter.getI32ArrayAttr(i));
-        ;
         elems.push_back(val);
       }
     }
@@ -388,7 +389,6 @@ Value composeValuesToDotOperandLayoutStruct(
   assert(!elems.empty());
 
   Type elemTy = elems[0].getType();
-  MLIRContext *ctx = elemTy.getContext();
   Type structTy =
       spirv::StructType::get(SmallVector<Type>(elems.size(), elemTy));
   auto result = typeConverter->packLLElements(loc, elems, rewriter, structTy);
@@ -399,9 +399,8 @@ std::function<void(int, int)>
 getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
                 const SharedMemoryObject &smemObj,
                 triton::gpu::intel::IntelMmaEncodingAttr mmaLayout,
-                int warpsPerTile, uint32_t kOrder, int kWidth,
-                SmallVector<int> instrShape, Value subGroupID, Value lane,
-                ValueTable &vals, bool isA,
+                int warpsPerTile, uint32_t kDim, SmallVector<int> instrShape,
+                Value warp, Value subGroupID, Value lane, ValueTable &vals,
                 TritonGPUToSPIRVTypeConverter *typeConverter,
                 ConversionPatternRewriter &rewriter, Location loc) {
   auto tensorTy = tensor.getType().cast<RankedTensorType>();
@@ -411,47 +410,57 @@ getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
   auto sharedLayout = tensorTy.getEncoding().cast<SharedEncodingAttr>();
   const int perPhase = sharedLayout.getPerPhase();
   const int maxPhase = sharedLayout.getMaxPhase();
+  const int vec = sharedLayout.getVec();
   const int elemBytes = tensorTy.getElementTypeBitWidth() / 8;
   auto order = sharedLayout.getOrder();
 
   // (a, b) is the coordinate.
   auto load = [=, &rewriter, &vals](int a, int b) {
     JointMatrixMatmulLoader loader(
-        warpsPerTile, sharedLayout.getOrder(), mmaLayout.getWarpsPerCTA(),
-        kOrder, kWidth, smemObj.strides, tensorTy.getShape() /*tileShape*/,
-        instrShape, perPhase, maxPhase, elemBytes, rewriter, typeConverter,
-        loc);
+        sharedLayout.getOrder(), warpsPerTile, kDim, mmaLayout.getRepeatCount(),
+        mmaLayout.getSystolicDepth(), mmaLayout.getExecutionSize(),
+        mmaLayout.getOpsPerChan(), mmaLayout.getThreadsPerWarp(),
+        smemObj.strides, instrShape, perPhase, maxPhase, vec, elemBytes,
+        rewriter, typeConverter, loc);
 
-    Value offet = loader.computeOffsets(subGroupID, lane);
+    // Offset of a slice within the original tensor in shared memory
+    Value cSwizzleOffset = smemObj.getCSwizzleOffset(order[0]);
+    auto offs = loader.computeOffsets(subGroupID, lane, cSwizzleOffset);
     // initialize pointers
-    Value ptr;
+    const int numPtrs = loader.getNumPtrs();
+    SmallVector<Value> ptrs(numPtrs);
+
     Value smemBase = smemObj.getBaseBeforeSlice(order[0], loc, rewriter);
+    Type smemPtrTy = spirv::getSharedMemPtrTy(eltTy);
+#if 0
     llvm::outs() << "johnlu JointMatrixMatmulLoader smemBase:" << smemBase
                  << "\n";
     llvm::outs().flush();
     llvm::outs() << "johnlu matTy eltTy:" << eltTy << "\n";
     llvm::outs().flush();
-    Type smemPtrTy = spirv::getSharedMemPtrTy(eltTy);
     llvm::outs() << "johnlu matTy smemPtrTy:" << smemPtrTy << "\n";
     llvm::outs().flush();
-    llvm::outs() << "johnlu matTy offet:" << offet << "\n";
-    llvm::outs().flush();
-    ptr = bitcast(gep(smemBase, offet), smemPtrTy);
+#endif
+    for (int i = 0; i < numPtrs; ++i)
+      ptrs[i] = bitcast(gep(smemPtrTy, smemBase, offs[i]), smemPtrTy);
 
-    // actually load from shared memory
+      // actually load from shared memory
+#if 0
     llvm::outs() << "johnlu matTy dstType:" << dstType << "\n";
     llvm::outs().flush();
+#endif
     auto totalElem = product<int>(instrShape);
     auto threadsPerWarp = mmaLayout.getThreadsPerWarp();
     auto matTy = spirv::StructType::get(
         SmallVector<Type>(totalElem / threadsPerWarp, eltTy));
+#if 0
     llvm::outs() << "johnlu matTy matTy:" << matTy << "\n";
     llvm::outs().flush();
     llvm::outs() << "load a: " << a << " b:" << b << "\n";
     llvm::outs().flush();
-
-    auto matrix = loader((kOrder == 1) ? a : b /*mat0*/,
-                         (kOrder == 1) ? b : a /*mat1*/, ptr, matTy);
+#endif
+    auto matrix = loader(a /*mat0*/, b /*mat1*/, ptrs, offs, warp, lane, matTy,
+                         cSwizzleOffset);
 
     vals[{a, b}] = matrix;
   };
@@ -475,15 +484,11 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
 
   ValueTable vals;
   auto shapePerCTATile = mmaLayout.getShapePerCTATile(shape);
-  //  auto order = getOrder(mmaLayout);
-  //  unsigned tiledRows = ceil<unsigned>(shape[0], shapePerCTATile[0]);
-  //  unsigned tiledCols = ceil<unsigned>(shape[1], shapePerCTATile[1]);
   auto shapeA = mmaLayout.getShapeA();
   auto shapeB = mmaLayout.getShapeB();
   int mmaInstrM = shapeA[0], mmaInstrN = shapeB[1], mmaInstrK = shapeA[1];
 
   auto numRep = mmaLayout.getXMXRep(tensorTy.getShape(), encoding.getOpIdx());
-  int kWidth = encoding.getKWidth();
 
   auto warpsPerCTA = mmaLayout.getWarpsPerCTA();
   auto order = triton::gpu::getOrder(mmaLayout);
@@ -495,15 +500,16 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
 
   SmallVector<Value> multiDimWarpId =
       delinearize(rewriter, loc, warp, warpsPerCTA, order);
-  Value warpM = urem(multiDimWarpId[0], i32_val(shape[0] / mmaInstrM));
-  Value warpN = urem(multiDimWarpId[1], i32_val(shape[1] / mmaInstrN));
+  Value warpM = urem(multiDimWarpId[0], i32_val(ceil(shape[0] / mmaInstrM)));
+  Value warpN = urem(multiDimWarpId[1], i32_val(ceil(shape[1] / mmaInstrN)));
 
   int warpsPerTile;
   if (isA)
-    warpsPerTile = std::min<int>(warpsPerCTA[0], shape[0] / mmaInstrM);
+    warpsPerTile = std::min<int>(warpsPerCTA[0], ceil(shape[0] / mmaInstrM));
   else
-    warpsPerTile = std::min<int>(warpsPerCTA[1], shape[1] / mmaInstrN);
+    warpsPerTile = std::min<int>(warpsPerCTA[1], ceil(shape[1] / mmaInstrN));
 
+#if 0
   llvm::outs() << "johnlu load joint matrix operand " << (isA ? "A:" : "B:")
                << tensor.getType() << "\n";
   llvm::outs() << "johnlu load joint matrix operand " << dotOpType << "\n";
@@ -515,6 +521,7 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
   llvm::outs() << "johnlu load joint matrix mmaInstrK " << mmaInstrK << "\n";
 
   llvm::outs() << "johnlu load joint matrix warpsPerCTA: ";
+
   for (auto &i : warpsPerCTA)
     llvm::outs() << " " << i;
   llvm::outs() << "\n";
@@ -535,18 +542,20 @@ Value loadArg(ConversionPatternRewriter &rewriter, Location loc, Value tensor,
   llvm::outs() << "\n";
   llvm::outs().flush();
 
+#endif
+
   std::function<void(int, int)> loadFn;
   if (isA)
     loadFn = getLoadMatrixFn(
         tensor, dotOpType, smemObj, mmaLayout, warpsPerTile /*warpsPerTile*/,
-        1 /*kOrder*/, kWidth, {mmaInstrM, mmaInstrK} /*instrShape*/,
-        warpM /*warpId*/, lane /*laneId*/, vals /*vals*/, isA /*isA*/,
+        1 /*kDim*/, {mmaInstrM, mmaInstrK} /*instrShape*/, warp,
+        warpM /*warpId*/, lane /*laneId*/, vals /*vals*/,
         typeConverter /* typeConverter */, rewriter /*rewriter*/, loc /*loc*/);
   else
     loadFn = getLoadMatrixFn(
         tensor, dotOpType, smemObj, mmaLayout, warpsPerTile /*warpsPerTile*/,
-        0 /*kOrder*/, kWidth, {mmaInstrK, mmaInstrN} /*instrShape*/,
-        warpN /*warpId*/, lane /*laneId*/, vals /*vals*/, isA /*isA*/,
+        0 /*kDim*/, {mmaInstrK, mmaInstrN} /*instrShape*/, warp,
+        warpN /*warpId*/, lane /*laneId*/, vals /*vals*/,
         typeConverter /* typeConverter */, rewriter /*rewriter*/, loc /*loc*/);
 
   // Perform loading.

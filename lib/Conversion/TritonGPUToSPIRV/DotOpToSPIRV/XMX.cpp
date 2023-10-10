@@ -211,7 +211,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
 
   assert(repA[1] == repB[0]);
   int repM = repA[0], repN = repB[1], repK = repA[1];
-
+#if 0
   llvm::outs() << "johnlu repM: " << repM << "\n";
   llvm::outs().flush();
   llvm::outs() << "johnlu repN: " << repN << "\n";
@@ -229,6 +229,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   llvm::outs().flush();
   llvm::outs() << "johnlu loadedC: " << loadedC << "\n";
   llvm::outs().flush();
+#endif
   auto mmaType = getMmaType(op);
   auto srcXMXLayout =
       dTensorTy.getEncoding()
@@ -249,7 +250,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
                                                        dTensorTy.getShape());
   auto shapePerCTATile = mlir::triton::gpu::getShapePerCTATile(
       dTensorTy.getEncoding(), dTensorTy.getShape());
-
+#if 0
   llvm::outs() << "johnlu shapePerCTA: ";
   for (auto &i : shapePerCTA)
     llvm::outs() << " " << i;
@@ -266,7 +267,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   llvm::outs().flush();
   llvm::outs() << "johnlu dTensorTy: " << dTensorTy << "\n";
   llvm::outs().flush();
-
+#endif
   auto mod = op->getParentOfType<ModuleOp>();
   unsigned threadsPerWarp =
       triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
@@ -282,12 +283,15 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
     auto ret = (*dpas2Intrinsic)(rewriter, loc, valc, valB, valA);
     auto mmaType = typeConverter->convertType(dTensorTy);
     Type elemTy = mmaType.cast<spirv::StructType>().getElementType(0);
+#if 0
     llvm::outs() << "johnlu XMX.cpp m: " << m << " n:" << n << " k:" << k
                  << "\n";
     llvm::outs() << "johnlu XMX.cpp mmaType: " << mmaType << "\n";
     llvm::outs() << "johnlu XMX.cpp elemTy: " << elemTy << "\n";
     llvm::outs().flush();
-    fc.at({m, n}) = ret; // rewriter.create<spirv::UndefOp>(loc, elemTy);
+#endif
+    fc.at({m, n}) = ret;
+    //    fc.at({m, n}) = rewriter.create<spirv::UndefOp>(loc, dTy);
   };
 
   for (int k = 0; k < repK; ++k)
@@ -297,9 +301,10 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
 
   Type resElemTy = typeConverter->convertType(dTensorTy);
 
+#if 0
   llvm::outs() << "johnlu resElemTy: " << resElemTy << "\n";
   llvm::outs().flush();
-
+#endif
   // Format the values to LLVM::Struct to passing to mma codegen.
   Value res = composeValuesToDotOperandLayoutStruct(
       fc, repM, repN, typeConverter, loc, rewriter);

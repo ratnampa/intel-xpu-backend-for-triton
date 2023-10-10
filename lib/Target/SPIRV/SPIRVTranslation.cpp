@@ -80,7 +80,7 @@ LogicalResult llvmToSPIRV(llvm::Module &module, raw_ostream &output) {
   //  llvm::legacy::PassManager pm;
   //  pm.add(llvm::createVerifierPass());
   //  pm.run(module);
-  module.print(llvm::outs(), nullptr);
+  //  module.print(llvm::outs(), nullptr);
 
   // create machine
   module.setTargetTriple(triple);
@@ -365,7 +365,7 @@ static std::map<std::string, std::string> getExternLibs(mlir::ModuleOp module) {
   }
 
   if (!funcs.empty()) {
-    std::vector<std::string> lib_names = {"libprint_utils.spv"};
+    std::vector<std::string> lib_names = {/*"libprint_utils.spv"*/};
     // first search for environmental path
     std::string env_path = ::triton::tools::getenv("TRITON_LIBDEVICE_PATH");
     if (!env_path.empty()) {
@@ -450,7 +450,7 @@ getExternLibs(spirv::ModuleOp module) {
   }
 
   if (!funcs.empty()) {
-    std::vector<std::string> lib_names = {/*"libprint_utils.spv", "libsycl-fallback-imf.spv",
+    std::vector<std::string> lib_names = {/*"libprint_utils.spv",*/ /*"libsycl-fallback-imf.spv",
                                           "libsycl-fallback-imf-fp64.spv"*/};
     // first search for environmental path
     std::string env_path = ::triton::tools::getenv("TRITON_LIBDEVICE_PATH");
@@ -647,8 +647,8 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
   auto llvmModule =
       spirvToLLVM(linked_binary.data(), linked_binary.size(), context);
 
-  llvm::outs() << "johnlu llvmModule: " << *llvmModule << "\n";
-  llvm::outs().flush();
+  //  llvm::outs() << "johnlu llvmModule: " << *llvmModule << "\n";
+  //  llvm::outs().flush();
   // Link external libraries before perform optimizations.
   // This allows the optimizers to inline and perform
   // analyses on the used library functions, and eliminate any unused functions

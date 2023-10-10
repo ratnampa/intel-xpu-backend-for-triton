@@ -93,6 +93,18 @@ bool IntelMmaEncodingAttr::isVolta() const { return false; }
 
 bool IntelMmaEncodingAttr::isAmpere() const { return false; }
 
+SmallVector<unsigned> IntelMmaEncodingAttr::getShapeA() const {
+  return {getRepeatCount(), getSystolicDepth() * getOpsPerChan()};
+}
+
+SmallVector<unsigned> IntelMmaEncodingAttr::getShapeB() const {
+  return {getSystolicDepth() * getOpsPerChan(), getExecutionSize()};
+}
+
+SmallVector<unsigned> IntelMmaEncodingAttr::getShapeC() const {
+  return {getRepeatCount(), getExecutionSize()};
+}
+
 SmallVector<unsigned> IntelMmaEncodingAttr::getSizePerThread() const {
   unsigned threadsPerWarp = getThreadsPerWarp();
   auto shapeC = getShapeC();
@@ -193,40 +205,28 @@ Attribute IntelMmaEncodingAttr::parse(AsmParser &parser, Type type) {
   if (parser.parseGreater().failed())
     return {};
 
-  unsigned versionMajor = 0;
-  unsigned versionMinor = 0;
   SmallVector<unsigned, 2> warpsPerCTA;
-  SmallVector<unsigned, 2> shapeA;
-  SmallVector<unsigned, 2> shapeB;
-  SmallVector<unsigned, 2> shapeC;
-  SmallVector<unsigned, 2> packedA;
-  SmallVector<unsigned, 2> packedB;
-  SmallVector<unsigned, 2> packedC;
+  unsigned repeatCount;
+  unsigned systolicDepth;
+  unsigned executionSize;
+  unsigned opsPerChan;
   unsigned threadsPerWarp;
 
   for (const NamedAttribute &attr : dict) {
-    if (attr.getName() == "A") {
-      if (parseIntArrayAttr(parser, attr, shapeA, "shapeA").failed())
+    if (attr.getName() == "repeatCount") {
+      if (parseUInt(parser, attr, repeatCount, "repeatCount").failed())
         return {};
     }
-    if (attr.getName() == "B") {
-      if (parseIntArrayAttr(parser, attr, shapeB, "shapeB").failed())
+    if (attr.getName() == "systolicDepth") {
+      if (parseUInt(parser, attr, systolicDepth, "systolicDepth").failed())
         return {};
     }
-    if (attr.getName() == "C") {
-      if (parseIntArrayAttr(parser, attr, shapeC, "shapeC").failed())
+    if (attr.getName() == "executionSize") {
+      if (parseUInt(parser, attr, executionSize, "executionSize").failed())
         return {};
     }
-    if (attr.getName() == "packedA") {
-      if (parseIntArrayAttr(parser, attr, packedA, "packedA").failed())
-        return {};
-    }
-    if (attr.getName() == "packedB") {
-      if (parseIntArrayAttr(parser, attr, packedB, "packedB").failed())
-        return {};
-    }
-    if (attr.getName() == "packedC") {
-      if (parseIntArrayAttr(parser, attr, packedC, "packedC").failed())
+    if (attr.getName() == "opsPerChan") {
+      if (parseUInt(parser, attr, opsPerChan, "opsPerChan").failed())
         return {};
     }
     if (attr.getName() == "warpsPerCTA") {
@@ -240,26 +240,27 @@ Attribute IntelMmaEncodingAttr::parse(AsmParser &parser, Type type) {
   }
 
   return parser.getChecked<IntelMmaEncodingAttr>(
-      parser.getContext(), shapeA, shapeB, shapeC, packedA, packedB, packedC,
-      warpsPerCTA, threadsPerWarp);
+      parser.getContext(), repeatCount, systolicDepth, executionSize,
+      opsPerChan, warpsPerCTA, threadsPerWarp);
 }
 
 void IntelMmaEncodingAttr::print(AsmPrinter &printer) const {
+  auto shapeA = getShapeA();
+  llvm::ArrayRef<unsigned> rA = shapeA;
+  auto shapeB = getShapeB();
+  llvm::ArrayRef<unsigned> rB = shapeB;
+  auto shapeC = getShapeC();
+  llvm::ArrayRef<unsigned> rC = shapeC;
   printer << "<{"
-          << "A = [" << getShapeA() << "], "
-          << "B = [" << getShapeB() << "], "
-          << "C = [" << getShapeC() << "], ";
-  auto packedA = getPackedA();
-  if (!packedA.empty())
-    printer << "packedA = [" << packedA << "], ";
-  auto packedB = getPackedB();
-  if (!packedB.empty())
-    printer << "packedB = [" << packedB << "], ";
-  auto packedC = getPackedC();
-  if (!packedC.empty())
-    printer << "packedC = [" << packedC << "], ";
-  printer << "threadsPerWarp = " << getThreadsPerWarp() << ", "
-          << "warpsPerCTA = [" << getWarpsPerCTA() << "]"
+          << "repeatCount = " << getRepeatCount() << ", "
+          << "systolicDepth = " << getSystolicDepth() << ", "
+          << "executionSize = " << getExecutionSize() << ", "
+          << "opsPerChan = " << getOpsPerChan() << ", "
+          << "threadsPerWarp = " << getThreadsPerWarp() << ", "
+          << "warpsPerCTA = [" << getWarpsPerCTA() << "], "
+          << "A = [" << rA << "], "
+          << "B = [" << rB << "], "
+          << "C = [" << rC << "]"
           << "}>";
 }
 

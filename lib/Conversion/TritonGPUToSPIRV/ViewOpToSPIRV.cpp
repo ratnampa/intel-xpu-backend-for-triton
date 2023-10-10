@@ -74,8 +74,8 @@ struct ArithConstantSplatOpSPIRVConversion
     if (!value.dyn_cast<SplatElementsAttr>())
       return failure();
 
-    llvm::outs() << "johnlu value: " << value << "\n";
-    llvm::outs().flush();
+    //    llvm::outs() << "johnlu value: " << value << "\n";
+    //    llvm::outs().flush();
 
     auto loc = op->getLoc();
 

@@ -10,23 +10,54 @@ include "triton/Dialect/TritonGPU/IR/TritonGPUInterfaces.td"
 //===----------------------------------------------------------------------===//
 // Intel MMA Layout Encoding
 //===----------------------------------------------------------------------===//
-// TODO: MMAv1 and MMAv2 should be two instances of the same class
 
 def IntelMmaEncodingAttr : DistributedEncoding<"IntelMmaEncoding", [TritonGPUMMAAttrInterface], TritonIntelGPU_Dialect> {
   let mnemonic = "xmx";
 
   let description = [{
+The encoding to represent the Tensor is partitioned across the threads of the same warp.
+The layout of Intel XMX instruction is defined with systolic depth, repeat count, execution size and operands per chan.
+Example: The layout example repeat_count=8, systolic_depth=8, execution_size=16 and operands_per_chan=2 for warp size 32.
+For A operand:
+                                   systolic depth = 8
+<------------------------------------------------------------------------------------------------->
+opsPerChan=2
+<--------->
+t0  ...  t0   t1  ... t1   t2  ... t2  t3  ... t3  t4  ... t4   t5  ... t5  t6  ... t6  t7  ... t7    ^
+t8  ...  t8   t9  ... t9   t10 ... t10 t11 ... t11 t12 ... t12  t13 ... t13 t14 ... t14 t15 ... t15   |
+t16 ...  t16  t17 ... t17  t18 ... t18 t19 ... t19 t20 ... t20  t21 ... t21 t22 ... t22 t23 ... t23   |
+t24 ...  t24  t25 ... t25  t26 ... t26 t27 ... t27 t28 ... t28  t29 ... t29 t30 ... t30 t31 ... t31   | repeat count <= 8
+t0  ...  t0   t1  ... t1   t2  ... t2  t3  ... t3  t4  ... t4   t5  ... t5  t6  ... t6  t7  ... t7    |
+t8  ...  t8   t9  ... t9   t10 ... t10 t11 ... t11 t12 ... t12  t13 ... t13 t14 ... t14 t15 ... t15   |
+t16 ...  t16  t17 ... t17  t18 ... t18 t19 ... t19 t20 ... t20  t21 ... t21 t22 ... t22 t23 ... t23   |
+t24 ...  t24  t25 ... t25  t26 ... t26 t27 ... t27 t28 ... t28  t29 ... t29 t30 ... t30 t31 ... t31   v
 
+For B operand:
+               execution size = 16
+<------------------------------------------------------------->
+t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15     ^             ^
+.   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .       | opsPerChan=2|
+t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15     v             |
+t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   |
+.   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                     |
+t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   |  systolic depth = 8
+t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15                   |
+.   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                     |
+t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15                   |
+t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   |
+.   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                     |
+t16 t17 t18 t19 t20 t21 t22 t23 t24 t25 t26 t27 t28 t29 t30 t31                   v
+
+This pattern repeats every warpsPerTile[0] (resp. warpsPerTile[1]) blocks
+along the row (resp. col) dimension.
 }];
 
   let parameters = (
     ins
-    ArrayRefParameter<"unsigned">:$shapeA,
-    ArrayRefParameter<"unsigned">:$shapeB,
-    ArrayRefParameter<"unsigned">:$shapeC,
-    ArrayRefParameter<"unsigned">:$packedA,
-    ArrayRefParameter<"unsigned">:$packedB,
-    ArrayRefParameter<"unsigned">:$packedC,
+    "unsigned":$repeatCount,
+    "unsigned":$systolicDepth,
+    "unsigned":$executionSize,
+    "unsigned":$opsPerChan,
     ArrayRefParameter<"unsigned">:$warpsPerCTA,
     "unsigned":$threadsPerWarp
   );
@@ -55,6 +86,9 @@ def IntelMmaEncodingAttr : DistributedEncoding<"IntelMmaEncoding", [TritonGPUMMA
     SmallVector<int64_t> getXMXRep(ArrayRef<int64_t> shape, int opIdx) const;
 
     Attribute getCTALayout() const;
+    SmallVector<unsigned> getShapeA() const;
+    SmallVector<unsigned> getShapeB() const;
+    SmallVector<unsigned> getShapeC() const;
   }];
 
   let hasCustomAssemblyFormat = 1;
