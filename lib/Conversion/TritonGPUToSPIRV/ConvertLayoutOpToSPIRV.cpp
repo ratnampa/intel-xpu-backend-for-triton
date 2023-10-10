@@ -421,9 +421,9 @@ private:
           vals = temp;
         }
 #endif
-          processReplica(loc, rewriter, /*stNotRd*/ true, srcTy,
-                         inNumCTAsEachRep, multiDimRepId, inVec, paddedRepShape,
-                         origRepShape, outOrd, vals, smemBase);
+        processReplica(loc, rewriter, /*stNotRd*/ true, srcTy, inNumCTAsEachRep,
+                       multiDimRepId, inVec, paddedRepShape, origRepShape,
+                       outOrd, vals, smemBase);
       } else {
         assert(0 && "ConvertLayout with input layout not implemented");
         return failure();
@@ -433,15 +433,16 @@ private:
       if (dstLayout.isa<BlockedEncodingAttr>() ||
           dstLayout.isa<SliceEncodingAttr>() ||
           dstLayout.isa<MmaEncodingAttr>()) {
-//        if (isDstMmaV1)
-//          processReplicaForMMAV1(loc, rewriter, /*stNotRd*/ false, dstTy,
-//                                 multiDimRepId, outVec, paddedRepShape, outOrd,
-//                                 outVals, smemBase, shape, /*isDestMma=*/true);
-//        else
-          processReplica(loc, rewriter, /*stNotRd*/ false, dstTy,
-                         outNumCTAsEachRep, multiDimRepId, outVec,
-                         paddedRepShape, origRepShape, outOrd, outVals,
-                         smemBase);
+        //        if (isDstMmaV1)
+        //          processReplicaForMMAV1(loc, rewriter, /*stNotRd*/ false,
+        //          dstTy,
+        //                                 multiDimRepId, outVec,
+        //                                 paddedRepShape, outOrd, outVals,
+        //                                 smemBase, shape, /*isDestMma=*/true);
+        //        else
+        processReplica(loc, rewriter, /*stNotRd*/ false, dstTy,
+                       outNumCTAsEachRep, multiDimRepId, outVec, paddedRepShape,
+                       origRepShape, outOrd, outVals, smemBase);
       } else {
         assert(0 && "ConvertLayout with output layout not implemented");
         return failure();
@@ -614,7 +615,7 @@ private:
         dotOpType.getEncoding().dyn_cast<DotOperandEncodingAttr>();
     res = SharedToDotOperandXMX::convertLayout(
         dotOperandLayout.getOpIdx(), rewriter, loc, src, dotOpType, smemObj,
-        getTypeConverter(), getSubgroupId(rewriter, loc));
+        getTypeConverter(), tid_val());
 
     return res;
   }

@@ -88,9 +88,11 @@ public:
       auto iter = computeCapability.find("threads_per_warp");
       threadsPerWarp = iter->second;
     }
+    //    mmaEnc = triton::gpu::intel::IntelMmaEncodingAttr::get(
+    //        oldRetType.getContext(), {8, 16}, {16, 8}, {8, 8}, {}, {2, 1}, {},
+    //        warpsPerTile, threadsPerWarp);
     mmaEnc = triton::gpu::intel::IntelMmaEncodingAttr::get(
-        oldRetType.getContext(), {8, 16}, {16, 8}, {8, 8}, {}, {2, 1}, {},
-        warpsPerTile, threadsPerWarp);
+        oldRetType.getContext(), 8, 8, 8, 2, warpsPerTile, threadsPerWarp);
 
     auto newRetType =
         RankedTensorType::get(retShape, oldRetType.getElementType(), mmaEnc);

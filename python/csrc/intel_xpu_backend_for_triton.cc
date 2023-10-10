@@ -149,6 +149,7 @@ void init_triton_translation(py::module &m) {
         mlir::DialectRegistry registry;
         registry.insert<mlir::triton::TritonDialect,
                         mlir::triton::gpu::TritonGPUDialect,
+                        mlir::triton::gpu::intel::TritonIntelGPUDialect,
                         mlir::math::MathDialect, mlir::arith::ArithDialect,
                         mlir::index::IndexDialect, mlir::scf::SCFDialect,
                         mlir::cf::ControlFlowDialect>();
