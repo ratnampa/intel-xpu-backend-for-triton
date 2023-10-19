@@ -18,6 +18,8 @@ from triton.runtime.driver import DriverBase  # noqa:E402
 
 from .extensions import SYCLBuildExtension, SYCLExtension, use_profile  # noqa:E402
 
+THREADS_PER_WARP = 8
+
 
 @functools.lru_cache()
 def version_key():
@@ -63,13 +65,13 @@ def _add_external_libs(mod, libs):
     _triton.add_external_libs(mod, list(libs.keys()), list(libs.values()))
 
 
-def ttir_to_ttgir(mod, num_warps):
+def ttir_to_ttgir(mod, num_warps, threads_per_warp, num_ctas, arch):
     context = _triton.context()
     mod = _triton.parse_mlir_module(str(mod), context)
     mod.context = context
     pm = _triton.pass_manager(mod.context)
     pm.enable_debug()
-    pm.add_convert_triton_to_tritongpu_pass(num_warps)
+    pm.add_convert_triton_to_tritongpu_pass(num_warps, threads_per_warp, num_ctas, arch)
     pm.run(mod)
     return mod
 
@@ -445,7 +447,7 @@ class XPUBackend(BaseBackend):
         context = _triton.context()
 
         stages["intel_ttgir"] = (lambda path: _triton.parse_mlir_module(Path(path).read_text(), context),
-                                 lambda src: optimize_ttgir(ttir_to_ttgir(src, arch["num_warps"]), arch["num_stages"], arch))
+                                 lambda src: optimize_ttgir(ttir_to_ttgir(src, arch["num_warps"], arch["threads_per_warp"], arch["num_ctas"], arch), arch["num_stages"], arch))
         stages["spirv"] = (lambda path: Path(path).read_text(),
                            lambda src: ttgir_to_spirv(src, extern_libs, arch))
         stages["spvbin"] = (lambda path: Path(path).read_bytes(),
@@ -456,6 +458,7 @@ class XPUBackend(BaseBackend):
             metadata["name"] = spirv_get_kernel_name(next_module)
             if "shared" not in metadata:
                 metadata["shared"] = module.share_memory_size
+            metadata["threads_per_warp"] = THREADS_PER_WARP
 
         if ir == "spvbin":
             asm[ir] = next_module
@@ -496,10 +499,10 @@ class XPUBackend(BaseBackend):
         max_num_sub_groups = arch['max_num_sub_groups']
         sub_group_sizes = arch['sub_group_sizes']
         # TODO: chose a reasonable subgroup size
-        threads_per_warp = 32
+        threads_per_warp = THREADS_PER_WARP  # 8
         assert threads_per_warp in sub_group_sizes, "Current platform does not support threads_per_warp to be 32"  # noqa: E501
         num_warps = max_work_group_size // threads_per_warp
-        assert num_warps < max_num_sub_groups, \
+        assert num_warps <= max_num_sub_groups, \
             "invalid setting. max_work_group_size {}, max_num_subgroup {}, subgroup_sizes {}".format(  # noqa: E501
                 max_work_group_size,
                 max_num_sub_groups,

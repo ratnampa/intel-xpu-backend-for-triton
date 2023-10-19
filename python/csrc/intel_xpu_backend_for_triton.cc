@@ -302,11 +302,13 @@ void init_triton_translation(py::module &m) {
            })
       .def(
           "add_convert_triton_to_tritongpu_pass",
-          [](mlir::PassManager &self, int numWarps, int threadsPerWarp) {
+          [](mlir::PassManager &self, int numWarps, int threadsPerWarp,
+             int numCTAs, py::dict computeCapability) {
             self.addPass(mlir::triton::createConvertTritonToTritonGPUPass(
                 numWarps, threadsPerWarp));
           },
-          py::arg("numWarps") = 4, py::arg("threadsPerWarp") = 32)
+          py::arg("numWarps") = 4, py::arg("threadsPerWarp") = 32,
+          py::arg("numCTAs") = 1, py::arg("computeCapability") = py::dict{})
       .def("add_tritongpu_pipeline_pass",
            [](mlir::PassManager &self, int numStages) {
              self.addPass(mlir::createTritonGPUPipelinePass(numStages));

@@ -110,13 +110,8 @@ SmallVector<unsigned> IntelMmaEncodingAttr::getSizePerThread() const {
   auto shapeC = getShapeC();
   unsigned elemsNum = product<unsigned>(shapeC);
   unsigned elemsPerThread = elemsNum / threadsPerWarp;
-  if (elemsPerThread == 4) {
-    return {4, 1};
-  } else if (elemsPerThread == 2) {
-    return {2, 1};
-  } else {
-    llvm_unreachable("Unexpected mma version");
-  }
+  // The Value is shard per col to threads.
+  return {elemsPerThread, 1};
 };
 
 SmallVector<unsigned>

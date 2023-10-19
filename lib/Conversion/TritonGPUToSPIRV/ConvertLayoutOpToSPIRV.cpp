@@ -136,40 +136,56 @@ private:
     }
     if (auto mmaLayout =
             layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
-      SmallVector<Value> mmaColIdx(4);
-      SmallVector<Value> mmaRowIdx(2);
+#if 0
+      llvm::outs() << "johnlu getMultiDimOffset elemId: " << elemId << "\n";
+      llvm::outs() << "johnlu getMultiDimOffset multiDimCTAInRepId: ";
+      for (auto &i : multiDimCTAInRepId) {
+        llvm::outs() << " " << i;
+      }
+      llvm::outs() << "\n";
+      llvm::outs().flush();
+      llvm::outs() << "johnlu getMultiDimOffset shapePerCTATile: ";
+      for (auto &i : shapePerCTATile) {
+        llvm::outs() << " " << i;
+      }
+      llvm::outs() << "\n";
+      llvm::outs().flush();
+#endif
       Value threadId = getThreadId(rewriter, loc);
-      Value warpSize = i32_val(32);
-      Value laneId = urem(threadId, warpSize);
-      Value warpId = udiv(threadId, warpSize);
-      // TODO: fix the bug in MMAEncodingAttr document
+      unsigned threadsPerWarp = mmaLayout.getThreadsPerWarp();
+      Value laneId = urem(threadId, i32_val(threadsPerWarp));
+      Value warpId = udiv(threadId, i32_val(threadsPerWarp));
       auto warpsPerCTA = mmaLayout.getWarpsPerCTA();
       auto order = triton::gpu::getOrder(mmaLayout);
       SmallVector<Value> multiDimWarpId =
           delinearize(rewriter, loc, warpId, warpsPerCTA, order);
-      Value _1 = i32_val(1);
-      Value _2 = i32_val(2);
-      Value _4 = i32_val(4);
-      Value _8 = i32_val(8);
-      Value _16 = i32_val(16);
-      multiDimWarpId[0] = urem(multiDimWarpId[0], i32_val(shape[0] / 16));
-      multiDimWarpId[1] = urem(multiDimWarpId[1], i32_val(shape[1] / 8));
-      Value mmaGrpId = udiv(laneId, _4);
-      Value mmaGrpIdP8 = add(mmaGrpId, _8);
-      Value mmaThreadIdInGrp = urem(laneId, _4);
-      Value mmaThreadIdInGrpM2 = mul(mmaThreadIdInGrp, _2);
-      Value mmaThreadIdInGrpM2P1 = add(mmaThreadIdInGrpM2, _1);
-      Value rowWarpOffset = mul(multiDimWarpId[0], _16);
-      mmaRowIdx[0] = add(mmaGrpId, rowWarpOffset);
-      mmaRowIdx[1] = add(mmaGrpIdP8, rowWarpOffset);
-      Value colWarpOffset = mul(multiDimWarpId[1], _8);
-      mmaColIdx[0] = add(mmaThreadIdInGrpM2, colWarpOffset);
-      mmaColIdx[1] = add(mmaThreadIdInGrpM2P1, colWarpOffset);
+      auto shapeC = mmaLayout.getShapeC();
+      Value warpM =
+          urem(multiDimWarpId[0], i32_val(ceil(shape[0] / shapeC[0])));
+      Value warpN =
+          urem(multiDimWarpId[1], i32_val(ceil(shape[1] / shapeC[1])));
+      Value rowWarpIndex = mul(warpM, i32_val(shapeC[0]));
+      Value colWarpIndex = mul(warpN, i32_val(shapeC[1]));
 
+      // For C operand sub-group size 16:
+      //               execution size = 16
+      // <------------------------------------------------------------->
+      // t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15 ^ t0 t1
+      // t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15 |repeat count =
+      // 8 t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15 | .
+      // .   .   .   .   .   .   .   .   .   .   .   .   .   .   . | t0  t1  t2
+      // t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15                  |
+      Value laneRowIndex = udiv(laneId, i32_val(mmaLayout.getExecutionSize()));
+      Value laneColIndex = urem(laneId, i32_val(mmaLayout.getExecutionSize()));
+      auto sizePerThreads = getSizePerThread(mmaLayout);
       assert(rank == 2);
+      int rowsPerWarp;
+      rowsPerWarp = threadsPerWarp / mmaLayout.getExecutionSize();
+      Value elemRowIndex = i32_val((elemId / sizePerThreads[1]) * rowsPerWarp);
+      Value elemColIndex = i32_val(elemId % sizePerThreads[1]);
       SmallVector<Value> multiDimOffset(rank);
-      multiDimOffset[0] = elemId < 2 ? mmaRowIdx[0] : mmaRowIdx[1];
-      multiDimOffset[1] = elemId % 2 == 0 ? mmaColIdx[0] : mmaColIdx[1];
+      multiDimOffset[0] = add(add(rowWarpIndex, laneRowIndex), elemRowIndex);
+      multiDimOffset[1] = add(add(colWarpIndex, laneColIndex), elemColIndex);
       multiDimOffset[0] = add(multiDimOffset[0], i32_val(multiDimCTAInRepId[0] *
                                                          shapePerCTATile[0]));
       multiDimOffset[1] = add(multiDimOffset[1], i32_val(multiDimCTAInRepId[1] *
@@ -206,31 +222,19 @@ private:
                       ArrayRef<unsigned> outOrd, SmallVector<Value> &vals,
                       Value smemBase) const {
 
-    llvm::outs() << "johnlu total extracted value size: " << vals.size()
-                 << "\n";
-
-    llvm::outs() << "johnlu numCTAsEachRep: ";
-    for (auto &i : numCTAsEachRep) {
-      llvm::outs() << " " << i;
-    }
-    llvm::outs() << "\n";
-    llvm::outs() << "johnlu multiDimRepId: ";
-    for (auto &i : multiDimRepId) {
-      llvm::outs() << " " << i;
-    }
-    llvm::outs() << "\n";
-    llvm::outs().flush();
-    llvm::outs() << "johnlu paddedRepShape: ";
-    for (auto &i : paddedRepShape) {
-      llvm::outs() << " " << i;
-    }
-    llvm::outs() << "\n";
-    llvm::outs().flush();
-
     auto accumNumCTAsEachRep = product<unsigned>(numCTAsEachRep);
     auto layout = type.getEncoding();
     auto rank = type.getRank();
     auto sizePerThread = getSizePerThread(layout);
+#if 0
+    llvm::outs() << "johnlu processReplica layout: " << layout << "\n";
+    llvm::outs() << "johnlu sizePerThread: ";
+    for (auto &i : sizePerThread) {
+      llvm::outs() << " " << i;
+    }
+    llvm::outs() << "\n";
+    llvm::outs().flush();
+#endif
     auto accumSizePerThread = product<unsigned>(sizePerThread);
     SmallVector<unsigned> numCTATiles(rank);
     auto shapePerCTATile = getShapePerCTATile(layout);
@@ -250,6 +254,29 @@ private:
 
     auto llvmElemTy = getTypeConverter()->convertType(elemTy);
 
+#if 0
+    llvm::outs() << "johnlu processReplica stNotRd: " << stNotRd << "\n";
+    llvm::outs() << "johnlu processReplica accumNumCTAsEachRep: " << accumNumCTAsEachRep << "\n";
+    llvm::outs() << "johnlu processReplica accumSizePerThread: " << accumSizePerThread << "\n";
+    llvm::outs() << "johnlu numCTAsEachRep: ";
+    for (auto &i : numCTAsEachRep) {
+      llvm::outs() << " " << i;
+    }
+    llvm::outs() << "\n";
+    llvm::outs().flush();
+    //    llvm::outs() << "johnlu multiDimRepId: ";
+    //    for (auto &i : multiDimRepId) {
+    //      llvm::outs() << " " << i;
+    //    }
+    //    llvm::outs() << "\n";
+    //    llvm::outs().flush();
+    //    llvm::outs() << "johnlu paddedRepShape: ";
+    //    for (auto &i : paddedRepShape) {
+    //      llvm::outs() << " " << i;
+    //    }
+    //    llvm::outs() << "\n";
+    //    llvm::outs().flush();
+#endif
     for (unsigned ctaId = 0; ctaId < accumNumCTAsEachRep; ++ctaId) {
       auto multiDimCTAInRepId =
           getMultiDimIndex<unsigned>(ctaId, numCTAsEachRep, order);
@@ -258,9 +285,25 @@ private:
         auto d = it.index();
         multiDimCTAId[d] = multiDimRepId[d] * numCTAsEachRep[d] + it.value();
       }
+#if 0
+      llvm::outs() << "johnlu multiDimCTAInRepId: ";
+      for (auto &i : multiDimCTAInRepId) {
+        llvm::outs() << " " << i;
+      }
+      llvm::outs() << "\n";
+      llvm::outs().flush();
+
+      llvm::outs() << "johnlu multiDimCTAId: ";
+      for (auto &i : multiDimCTAId) {
+        llvm::outs() << " " << i;
+      }
+      llvm::outs() << "\n";
+      llvm::outs().flush();
+#endif
 
       auto linearCTAId =
           getLinearIndex<unsigned>(multiDimCTAId, numCTATiles, order);
+      // llvm::outs() << "johnlu linearCTAId: " << linearCTAId << "\n";
       // TODO: This is actually redundant index calculation, we should
       //       consider of caching the index calculation result in case
       //       of performance issue observed.
@@ -356,18 +399,6 @@ private:
     auto dstShapePerCTATile = getShapePerCTATile(dstLayout, shape);
     auto shapePerCTA = getShapePerCTA(srcLayout, shape);
 
-    if (auto sliceLayout = srcLayout.dyn_cast<SliceEncodingAttr>()) {
-      //      isSrcMmaV1 = sliceLayout.getParent().isa<MmaEncodingAttr>() &&
-      //                   sliceLayout.getParent().cast<MmaEncodingAttr>().isVolta();
-    }
-    if (auto mmaLayout = dstLayout.dyn_cast<MmaEncodingAttr>()) {
-      //      isDstMmaV1 = mmaLayout.isVolta();
-    }
-    if (auto sliceLayout = dstLayout.dyn_cast<SliceEncodingAttr>()) {
-      //      isDstMmaV1 = sliceLayout.getParent().isa<MmaEncodingAttr>() &&
-      //                   sliceLayout.getParent().cast<MmaEncodingAttr>().isVolta();
-    }
-
     for (unsigned d = 0; d < rank; ++d) {
       unsigned inPerCTA =
           std::min<unsigned>(shapePerCTA[d], srcShapePerCTATile[d]);
@@ -393,7 +424,27 @@ private:
     unsigned outElems = getTotalElemsPerThread(dstTy);
     auto outOrd = getOrder(dstLayout);
     SmallVector<Value> outVals(outElems);
+#if 0
+    auto printFuncTy = mlir::FunctionType::get(
+        rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, f16_ty}, TypeRange());
+    NamedAttrList attributes;
+    attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+    attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
+    auto linkageTypeAttr =
+        rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+    auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+        "print_scalar", linkageTypeAttr);
+    attributes.set("linkage_attributes", linkageAttr);
+    spirv::appendOrGetFuncOp(loc, rewriter, "print_scalar", printFuncTy,
+                             spirv::FunctionControl::Inline, attributes);
+    Value tid = tid_val();
 
+    auto mod = op->getParentOfType<ModuleOp>();
+    unsigned threadsPerWarp =
+        triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
+    Value warp = udiv(tid, i32_val(threadsPerWarp));
+    Value lane = urem(tid, i32_val(threadsPerWarp));
+#endif
     for (unsigned repId = 0; repId < accumNumReplicates; ++repId) {
       auto multiDimRepId =
           getMultiDimIndex<unsigned>(repId, numReplicates, outOrd);
@@ -410,15 +461,72 @@ private:
           llvm::outs() << "johnlu source operands: " << adaptor.getSrc()
                        << "\n";
           llvm::outs().flush();
-          SmallVector<Value> temp;
-          for (auto &val : vals) {
-            for (int i = 0; i < 2; i++) {
-              auto scalar = rewriter.create<spirv::VectorExtractDynamicOp>(
-                  loc, llvmElemTy, val, i32_val(i));
-              temp.push_back(scalar);
-            }
+
+          llvm::outs() << "johnlu total extracted value size: " << vals.size()
+                       << "\n";
+
+          llvm::outs() << "johnlu accumNumReplicates: " << accumNumReplicates
+                       << "\n";
+
+          llvm::outs() << "johnlu shapePerCTA: ";
+          for (auto &i : shapePerCTA) {
+            llvm::outs() << " " << i;
           }
-          vals = temp;
+          llvm::outs() << "\n";
+          llvm::outs() << "johnlu srcShapePerCTATile: ";
+          for (auto &i : srcShapePerCTATile) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+          llvm::outs() << "johnlu dstShapePerCTATile: ";
+          for (auto &i : dstShapePerCTATile) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+
+          llvm::outs() << "johnlu numReplicates: ";
+          for (auto &i : numReplicates) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+
+          llvm::outs() << "johnlu inNumCTAsEachRep: ";
+          for (auto &i : inNumCTAsEachRep) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+
+          llvm::outs() << "johnlu outNumCTAsEachRep: ";
+          for (auto &i : outNumCTAsEachRep) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+
+          llvm::outs() << "johnlu multiDimRepId: ";
+          for (auto &i : multiDimRepId) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+          llvm::outs().flush();
+          llvm::outs() << "johnlu origRepShape: ";
+          for (auto &i : origRepShape) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+          llvm::outs().flush();
+          llvm::outs() << "johnlu paddedRepShape: ";
+          for (auto &i : paddedRepShape) {
+            llvm::outs() << " " << i;
+          }
+          llvm::outs() << "\n";
+          llvm::outs().flush();
+        }
+
+        for (int i = 0; i < vals.size(); i++) {
+              rewriter.create<spirv::FunctionCallOp>(
+                  loc, TypeRange(), "print_scalar",
+                  ValueRange{warp, lane, i32_val(99), i32_val(i), vals[i]});
+
         }
 #endif
         processReplica(loc, rewriter, /*stNotRd*/ true, srcTy, inNumCTAsEachRep,
@@ -432,14 +540,7 @@ private:
       barrier();
       if (dstLayout.isa<BlockedEncodingAttr>() ||
           dstLayout.isa<SliceEncodingAttr>() ||
-          dstLayout.isa<MmaEncodingAttr>()) {
-        //        if (isDstMmaV1)
-        //          processReplicaForMMAV1(loc, rewriter, /*stNotRd*/ false,
-        //          dstTy,
-        //                                 multiDimRepId, outVec,
-        //                                 paddedRepShape, outOrd, outVals,
-        //                                 smemBase, shape, /*isDestMma=*/true);
-        //        else
+          dstLayout.isa<triton::gpu::intel::IntelMmaEncodingAttr>()) {
         processReplica(loc, rewriter, /*stNotRd*/ false, dstTy,
                        outNumCTAsEachRep, multiDimRepId, outVec, paddedRepShape,
                        origRepShape, outOrd, outVals, smemBase);
@@ -448,7 +549,14 @@ private:
         return failure();
       }
     }
+#if 0
+    for (int i = 0; i < outVals.size(); i++) {
+      rewriter.create<spirv::FunctionCallOp>(
+          loc, TypeRange(), "print_scalar",
+          ValueRange{warp, lane, i32_val(98), i32_val(i), outVals[i]});
 
+    }
+#endif
     Value result =
         getTypeConverter()->packLLElements(loc, outVals, rewriter, dstTy);
     rewriter.replaceOp(op, result);

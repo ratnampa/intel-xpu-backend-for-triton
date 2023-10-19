@@ -95,8 +95,29 @@ ValueTableV2 getValuesFromDotOperandLayoutStruct(
 static Value composeValuesToDotOperandLayoutStruct(
     const ValueTableV2 &vals, int n0, int n1,
     TritonGPUToSPIRVTypeConverter *typeConverter, Location loc,
-    ConversionPatternRewriter &rewriter) {
+    ConversionPatternRewriter &rewriter
+#if 0
+ ,
+    Value warp,
+    Value lane
+#endif
+) {
   std::vector<Value> elems;
+#if 0
+  auto printFuncTy = mlir::FunctionType::get(
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f32_ty}, TypeRange());
+
+  NamedAttrList attributes;
+  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
+  auto linkageTypeAttr =
+      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+      "print_mm", linkageTypeAttr);
+  attributes.set("linkage_attributes", linkageAttr);
+  spirv::appendOrGetFuncOp(loc, rewriter, "print_mm", printFuncTy,
+                           spirv::FunctionControl::Inline, attributes);
+#endif
   for (int m = 0; m < n0; ++m)
     for (int k = 0; k < n1; ++k) {
       auto matVal = vals.at({m, k});
@@ -104,7 +125,11 @@ static Value composeValuesToDotOperandLayoutStruct(
       auto valTy = vecType.getElementType();
       for (int i = 0; i < vecType.getNumElements(); ++i) {
         auto val = extract_element(valTy, matVal, i32_val(i));
-        ;
+#if 0
+        rewriter.create<spirv::FunctionCallOp>(
+            loc, TypeRange(), "print_mm",
+            ValueRange{warp, lane, i32_val(m), i32_val(k), i32_val(i), val});
+#endif
         elems.push_back(val);
       }
     }
@@ -272,15 +297,54 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   unsigned threadsPerWarp =
       triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
 
-  VCIBuilder builder(threadsPerWarp, rewriter);
-  auto dpas2Intrinsic =
-      builder.create<GenXDPAS2>(mmaType, 8, dTy, cTy, bTy, aTy);
+  //  VCIBuilder builder(threadsPerWarp, rewriter);
+  //  auto dpas2Intrinsic =
+  //      builder.create<GenXDPAS2>(mmaType, 8, dTy, cTy, bTy, aTy);
+
+  //  return type. d, c, a, b
+  // param c, a, b
+  //  1st int, perceci
+  //
+  //  call <8 x float>
+  //  @llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32(<8 x float> %0,
+  //  <8 x i32> [[A]], <8 x i32> [[B]], i32 8, i32 8, i32 8, i32 8, i1 false)
+  auto dpasFuncTy = mlir::FunctionType::get(
+      rewriter.getContext(),
+      {cTy, aTy, bTy, i32_ty, i32_ty, i32_ty, i32_ty, i1_ty}, {dTy});
+
+  //  llvm::outs() << "johnlu aTy: " << aTy << "\n";
+  //  llvm::outs().flush();
+  //  llvm::outs() << "johnlu bTy: " << bTy << "\n";
+  //  llvm::outs().flush();
+  //  llvm::outs() << "johnlu cTy: " << cTy << "\n";
+  //  llvm::outs().flush();
+  //  llvm::outs() << "johnlu dTy: " << dTy << "\n";
+  //  llvm::outs().flush();
+
+  NamedAttrList dpasAttributes;
+  //  attributes.set("libname", StringAttr::get(rewriter.getContext(),
+  //  "libdevice")); attributes.set("libpath",
+  //  StringAttr::get(rewriter.getContext(), ""));
+  auto dpasLinkageTypeAttr = rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(
+      spirv::LinkageType::Import);
+  auto dpasLinkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+      "llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32",
+      dpasLinkageTypeAttr);
+  dpasAttributes.set("linkage_attributes", dpasLinkageAttr);
+  spirv::appendOrGetFuncOp(
+      loc, rewriter, "llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32",
+      dpasFuncTy, spirv::FunctionControl::Inline, dpasAttributes);
 
   auto callMma = [&](unsigned m, unsigned n, unsigned k) {
     auto valA = ha.at({m, k});
     auto valB = hb.at({n, k});
     auto valc = fc.at({m, n});
-    auto ret = (*dpas2Intrinsic)(rewriter, loc, valc, valB, valA);
+    //    auto ret = (*dpas2Intrinsic)(rewriter, loc, valc, valB, valA);
+    auto ret = rewriter.create<spirv::FunctionCallOp>(
+        loc, TypeRange{dTy},
+        "llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32",
+        ValueRange{valc, valA, valB, i32_val(10), i32_val(10), i32_val(8),
+                   i32_val(8), int_val(1, 0)});
     auto mmaType = typeConverter->convertType(dTensorTy);
     Type elemTy = mmaType.cast<spirv::StructType>().getElementType(0);
 #if 0
@@ -290,7 +354,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
     llvm::outs() << "johnlu XMX.cpp elemTy: " << elemTy << "\n";
     llvm::outs().flush();
 #endif
-    fc.at({m, n}) = ret;
+    fc.at({m, n}) = ret.getReturnValue();
     //    fc.at({m, n}) = rewriter.create<spirv::UndefOp>(loc, dTy);
   };
 
