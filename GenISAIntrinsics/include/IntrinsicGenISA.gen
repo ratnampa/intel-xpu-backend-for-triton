@@ -1,0 +1,2029 @@
+// VisualStudio defines setjmp as _setjmp
+#if defined(_MSC_VER) && defined(setjmp) && \
+                         !defined(setjmp_undefined_for_msvc)
+#  pragma push_macro("setjmp")
+#  undef setjmp
+#  define setjmp_undefined_for_msvc
+#endif
+
+// Enum values for Intrinsics.h
+#ifdef GET_INTRINSIC_ENUM_VALUES
+  GenISA_2fto2bf,                          // llvm.genx.GenISA.2fto2bf
+  GenISA_AcceptHitAndEndSearchHL,          // llvm.genx.GenISA.AcceptHitAndEndSearchHL
+  GenISA_AllocaNumber,                     // llvm.genx.GenISA.AllocaNumber
+  GenISA_AllocateRayQuery,                 // llvm.genx.GenISA.AllocateRayQuery
+  GenISA_AsyncStackID,                     // llvm.genx.GenISA.AsyncStackID
+  GenISA_AsyncStackPtr,                    // llvm.genx.GenISA.AsyncStackPtr
+  GenISA_BindlessThreadDispatch,           // llvm.genx.GenISA.BindlessThreadDispatch
+  GenISA_CallShaderHL,                     // llvm.genx.GenISA.CallShaderHL
+  GenISA_CatchAllDebugLine,                // llvm.genx.GenISA.CatchAllDebugLine
+  GenISA_ContinuationSignpost,             // llvm.genx.GenISA.ContinuationSignpost
+  GenISA_DCL_DSCntrlPtInputVec,            // llvm.genx.GenISA.DCL.DSCntrlPtInputVec
+  GenISA_DCL_DSInputTessFactor,            // llvm.genx.GenISA.DCL.DSInputTessFactor
+  GenISA_DCL_DSPatchConstInputVec,         // llvm.genx.GenISA.DCL.DSPatchConstInputVec
+  GenISA_DCL_GSinputVec,                   // llvm.genx.GenISA.DCL.GSinputVec
+  GenISA_DCL_GSsystemValue,                // llvm.genx.GenISA.DCL.GSsystemValue
+  GenISA_DCL_HSControlPointID,             // llvm.genx.GenISA.DCL.HSControlPointID
+  GenISA_DCL_HSOutputCntrlPtInputVec,      // llvm.genx.GenISA.DCL.HSOutputCntrlPtInputVec
+  GenISA_DCL_HSPatchConstInputVec,         // llvm.genx.GenISA.DCL.HSPatchConstInputVec
+  GenISA_DCL_HSinputVec,                   // llvm.genx.GenISA.DCL.HSinputVec
+  GenISA_DCL_ShaderInputVec,               // llvm.genx.GenISA.DCL.ShaderInputVec
+  GenISA_DCL_SystemValue,                  // llvm.genx.GenISA.DCL.SystemValue
+  GenISA_DCL_input,                        // llvm.genx.GenISA.DCL.input
+  GenISA_DCL_inputVec,                     // llvm.genx.GenISA.DCL.inputVec
+  GenISA_DispatchDimensions,               // llvm.genx.GenISA.DispatchDimensions
+  GenISA_DispatchRayIndex,                 // llvm.genx.GenISA.DispatchRayIndex
+  GenISA_EmitHitAttributes,                // llvm.genx.GenISA.EmitHitAttributes
+  GenISA_EndPrimitive,                     // llvm.genx.GenISA.EndPrimitive
+  GenISA_FPBinaryOperator,                 // llvm.genx.GenISA.FPBinaryOperator
+  GenISA_FillValue,                        // llvm.genx.GenISA.FillValue
+  GenISA_GetBufferPtr,                     // llvm.genx.GenISA.GetBufferPtr
+  GenISA_GetImplicitBufferPtr,             // llvm.genx.GenISA.GetImplicitBufferPtr
+  GenISA_GetLocalIdBufferPtr,              // llvm.genx.GenISA.GetLocalIdBufferPtr
+  GenISA_GetPixelMask,                     // llvm.genx.GenISA.GetPixelMask
+  GenISA_GetShaderRecordPtr,               // llvm.genx.GenISA.GetShaderRecordPtr
+  GenISA_GlobalBufferPointer,              // llvm.genx.GenISA.GlobalBufferPointer
+  GenISA_GlobalRootSignatureValue,         // llvm.genx.GenISA.GlobalRootSignatureValue
+  GenISA_GradientX,                        // llvm.genx.GenISA.GradientX
+  GenISA_GradientXfine,                    // llvm.genx.GenISA.GradientXfine
+  GenISA_GradientY,                        // llvm.genx.GenISA.GradientY
+  GenISA_GradientYfine,                    // llvm.genx.GenISA.GradientYfine
+  GenISA_GsCutControlHeader,               // llvm.genx.GenISA.GsCutControlHeader
+  GenISA_GsStreamHeader,                   // llvm.genx.GenISA.GsStreamHeader
+  GenISA_HDCCCSFastClear,                  // llvm.genx.GenISA.HDCCCSFastClear
+  GenISA_HDCuncompressedwrite,             // llvm.genx.GenISA.HDCuncompressedwrite
+  GenISA_HSURBPatchHeaderRead,             // llvm.genx.GenISA.HSURBPatchHeaderRead
+  GenISA_HitKind,                          // llvm.genx.GenISA.HitKind
+  GenISA_IEEE_Divide,                      // llvm.genx.GenISA.IEEE.Divide
+  GenISA_IEEE_Sqrt,                        // llvm.genx.GenISA.IEEE.Sqrt
+  GenISA_IgnoreHitHL,                      // llvm.genx.GenISA.IgnoreHitHL
+  GenISA_InitDiscardMask,                  // llvm.genx.GenISA.InitDiscardMask
+  GenISA_InlinedData,                      // llvm.genx.GenISA.InlinedData
+  GenISA_InnerScalarTessFactors,           // llvm.genx.GenISA.InnerScalarTessFactors
+  GenISA_Interpolant,                      // llvm.genx.GenISA.Interpolant
+  GenISA_Interpolate,                      // llvm.genx.GenISA.Interpolate
+  GenISA_Interpolate2,                     // llvm.genx.GenISA.Interpolate2
+  GenISA_IsHelperInvocation,               // llvm.genx.GenISA.IsHelperInvocation
+  GenISA_LSC2DBlockRead,                   // llvm.genx.GenISA.LSC2DBlockRead
+  GenISA_LSC2DBlockWrite,                  // llvm.genx.GenISA.LSC2DBlockWrite
+  GenISA_LSCAtomicFP32,                    // llvm.genx.GenISA.LSCAtomicFP32
+  GenISA_LSCAtomicFP64,                    // llvm.genx.GenISA.LSCAtomicFP64
+  GenISA_LSCAtomicInts,                    // llvm.genx.GenISA.LSCAtomicInts
+  GenISA_LSCFence,                         // llvm.genx.GenISA.LSCFence
+  GenISA_LSCLoad,                          // llvm.genx.GenISA.LSCLoad
+  GenISA_LSCLoadBlock,                     // llvm.genx.GenISA.LSCLoadBlock
+  GenISA_LSCLoadStatus,                    // llvm.genx.GenISA.LSCLoadStatus
+  GenISA_LSCPrefetch,                      // llvm.genx.GenISA.LSCPrefetch
+  GenISA_LSCStore,                         // llvm.genx.GenISA.LSCStore
+  GenISA_LSCStoreBlock,                    // llvm.genx.GenISA.LSCStoreBlock
+  GenISA_LocalBufferPointer,               // llvm.genx.GenISA.LocalBufferPointer
+  GenISA_LocalRootSignatureValue,          // llvm.genx.GenISA.LocalRootSignatureValue
+  GenISA_MediaBlockRead,                   // llvm.genx.GenISA.MediaBlockRead
+  GenISA_MediaBlockRectangleRead,          // llvm.genx.GenISA.MediaBlockRectangleRead
+  GenISA_MediaBlockWrite,                  // llvm.genx.GenISA.MediaBlockWrite
+  GenISA_OUTPUT,                           // llvm.genx.GenISA.OUTPUT
+  GenISA_OUTPUTGS,                         // llvm.genx.GenISA.OUTPUTGS
+  GenISA_OUTPUTGS2,                        // llvm.genx.GenISA.OUTPUTGS2
+  GenISA_OuterScalarTessFactors,           // llvm.genx.GenISA.OuterScalarTessFactors
+  GenISA_OutputMeshPrimitiveData,          // llvm.genx.GenISA.OutputMeshPrimitiveData
+  GenISA_OutputMeshPrimitiveDataInput,     // llvm.genx.GenISA.OutputMeshPrimitiveDataInput
+  GenISA_OutputMeshSivDataInput,           // llvm.genx.GenISA.OutputMeshSivDataInput
+  GenISA_OutputMeshVertexData,             // llvm.genx.GenISA.OutputMeshVertexData
+  GenISA_OutputMeshVertexDataInput,        // llvm.genx.GenISA.OutputMeshVertexDataInput
+  GenISA_OutputTaskData,                   // llvm.genx.GenISA.OutputTaskData
+  GenISA_OutputTaskDataInput,              // llvm.genx.GenISA.OutputTaskDataInput
+  GenISA_OutputTessControlPoint,           // llvm.genx.GenISA.OutputTessControlPoint
+  GenISA_OutputTessFactors,                // llvm.genx.GenISA.OutputTessFactors
+  GenISA_PHASE_INPUT,                      // llvm.genx.GenISA.PHASE.INPUT
+  GenISA_PHASE_INPUTVEC,                   // llvm.genx.GenISA.PHASE.INPUTVEC
+  GenISA_PHASE_OUTPUT,                     // llvm.genx.GenISA.PHASE.OUTPUT
+  GenISA_PHASE_OUTPUTVEC,                  // llvm.genx.GenISA.PHASE.OUTPUTVEC
+  GenISA_PatchConstantOutput,              // llvm.genx.GenISA.PatchConstantOutput
+  GenISA_PayloadPtr,                       // llvm.genx.GenISA.PayloadPtr
+  GenISA_PixelPositionX,                   // llvm.genx.GenISA.PixelPositionX
+  GenISA_PixelPositionY,                   // llvm.genx.GenISA.PixelPositionY
+  GenISA_PullCentroidBarys,                // llvm.genx.GenISA.PullCentroidBarys
+  GenISA_PullSampleIndexBarys,             // llvm.genx.GenISA.PullSampleIndexBarys
+  GenISA_PullSnappedBarys,                 // llvm.genx.GenISA.PullSnappedBarys
+  GenISA_QuadPrefix,                       // llvm.genx.GenISA.QuadPrefix
+  GenISA_ROUNDNE,                          // llvm.genx.GenISA.ROUNDNE
+  GenISA_RTDualBlendSource,                // llvm.genx.GenISA.RTDualBlendSource
+  GenISA_RTStatefulBTIAndOffset,           // llvm.genx.GenISA.RTStatefulBTIAndOffset
+  GenISA_RTWrite,                          // llvm.genx.GenISA.RTWrite
+  GenISA_RayInfo,                          // llvm.genx.GenISA.RayInfo
+  GenISA_RayTCurrent,                      // llvm.genx.GenISA.RayTCurrent
+  GenISA_ReadTraceRaySync,                 // llvm.genx.GenISA.ReadTraceRaySync
+  GenISA_RenderTargetRead,                 // llvm.genx.GenISA.RenderTargetRead
+  GenISA_RenderTargetReadSampleFreq,       // llvm.genx.GenISA.RenderTargetReadSampleFreq
+  GenISA_ReportHitHL,                      // llvm.genx.GenISA.ReportHitHL
+  GenISA_RuntimeValue,                     // llvm.genx.GenISA.RuntimeValue
+  GenISA_SWHotZonePtr,                     // llvm.genx.GenISA.SWHotZonePtr
+  GenISA_SWStackPtr,                       // llvm.genx.GenISA.SWStackPtr
+  GenISA_SampleOffsetX,                    // llvm.genx.GenISA.SampleOffsetX
+  GenISA_SampleOffsetY,                    // llvm.genx.GenISA.SampleOffsetY
+  GenISA_SetDebugReg,                      // llvm.genx.GenISA.SetDebugReg
+  GenISA_SetImplicitBufferPtr,             // llvm.genx.GenISA.SetImplicitBufferPtr
+  GenISA_SetLocalIdBufferPtr,              // llvm.genx.GenISA.SetLocalIdBufferPtr
+  GenISA_SetStream,                        // llvm.genx.GenISA.SetStream
+  GenISA_ShadowMemoryToSyncStack,          // llvm.genx.GenISA.ShadowMemoryToSyncStack
+  GenISA_SpillValue,                       // llvm.genx.GenISA.SpillValue
+  GenISA_StackAlloca,                      // llvm.genx.GenISA.StackAlloca
+  GenISA_StackIDRelease,                   // llvm.genx.GenISA.StackIDRelease
+  GenISA_StackSize,                        // llvm.genx.GenISA.StackSize
+  GenISA_SyncStackID,                      // llvm.genx.GenISA.SyncStackID
+  GenISA_SyncStackPtr,                     // llvm.genx.GenISA.SyncStackPtr
+  GenISA_SyncStackToShadowMemory,          // llvm.genx.GenISA.SyncStackToShadowMemory
+  GenISA_TileXOffset,                      // llvm.genx.GenISA.TileXOffset
+  GenISA_TileYOffset,                      // llvm.genx.GenISA.TileYOffset
+  GenISA_TraceRayAsync,                    // llvm.genx.GenISA.TraceRayAsync
+  GenISA_TraceRayAsyncHL,                  // llvm.genx.GenISA.TraceRayAsyncHL
+  GenISA_TraceRayInlineAbort,              // llvm.genx.GenISA.TraceRayInlineAbort
+  GenISA_TraceRayInlineCandidateType,      // llvm.genx.GenISA.TraceRayInlineCandidateType
+  GenISA_TraceRayInlineCommitNonOpaqueTriangleHit,// llvm.genx.GenISA.TraceRayInlineCommitNonOpaqueTriangleHit
+  GenISA_TraceRayInlineCommitProceduralPrimitiveHit,// llvm.genx.GenISA.TraceRayInlineCommitProceduralPrimitiveHit
+  GenISA_TraceRayInlineCommittedStatus,    // llvm.genx.GenISA.TraceRayInlineCommittedStatus
+  GenISA_TraceRayInlineHL,                 // llvm.genx.GenISA.TraceRayInlineHL
+  GenISA_TraceRayInlineRayInfo,            // llvm.genx.GenISA.TraceRayInlineRayInfo
+  GenISA_TraceRaySync,                     // llvm.genx.GenISA.TraceRaySync
+  GenISA_TraceRaySyncProceed,              // llvm.genx.GenISA.TraceRaySyncProceed
+  GenISA_TraceRaySyncProceedHL,            // llvm.genx.GenISA.TraceRaySyncProceedHL
+  GenISA_URBRead,                          // llvm.genx.GenISA.URBRead
+  GenISA_URBReadOutput,                    // llvm.genx.GenISA.URBReadOutput
+  GenISA_URBWrite,                         // llvm.genx.GenISA.URBWrite
+  GenISA_UnmaskedRegionBegin,              // llvm.genx.GenISA.UnmaskedRegionBegin
+  GenISA_UnmaskedRegionEnd,                // llvm.genx.GenISA.UnmaskedRegionEnd
+  GenISA_UpdateDiscardMask,                // llvm.genx.GenISA.UpdateDiscardMask
+  GenISA_VLAStackAlloca,                   // llvm.genx.GenISA.VLAStackAlloca
+  GenISA_WaveAll,                          // llvm.genx.GenISA.WaveAll
+  GenISA_WaveBallot,                       // llvm.genx.GenISA.WaveBallot
+  GenISA_WaveClustered,                    // llvm.genx.GenISA.WaveClustered
+  GenISA_WaveInverseBallot,                // llvm.genx.GenISA.WaveInverseBallot
+  GenISA_WavePrefix,                       // llvm.genx.GenISA.WavePrefix
+  GenISA_WaveShuffleIndex,                 // llvm.genx.GenISA.WaveShuffleIndex
+  GenISA_WorkGroupAny,                     // llvm.genx.GenISA.WorkGroupAny
+  GenISA_add_pair,                         // llvm.genx.GenISA.add.pair
+  GenISA_add_rtz,                          // llvm.genx.GenISA.add.rtz
+  GenISA_assume_uniform,                   // llvm.genx.GenISA.assume.uniform
+  GenISA_atomiccounterinc,                 // llvm.genx.GenISA.atomiccounterinc
+  GenISA_atomiccounterpredec,              // llvm.genx.GenISA.atomiccounterpredec
+  GenISA_bf8tohf,                          // llvm.genx.GenISA.bf8tohf
+  GenISA_bfi,                              // llvm.genx.GenISA.bfi
+  GenISA_bfrev,                            // llvm.genx.GenISA.bfrev
+  GenISA_bftof,                            // llvm.genx.GenISA.bftof
+  GenISA_broadcastMessagePhase,            // llvm.genx.GenISA.broadcastMessagePhase
+  GenISA_broadcastMessagePhaseV,           // llvm.genx.GenISA.broadcastMessagePhaseV
+  GenISA_cmpSADs,                          // llvm.genx.GenISA.cmpSADs
+  GenISA_cmpxchgatomicstructured,          // llvm.genx.GenISA.cmpxchgatomicstructured
+  GenISA_createMessagePhases,              // llvm.genx.GenISA.createMessagePhases
+  GenISA_createMessagePhasesNoInit,        // llvm.genx.GenISA.createMessagePhasesNoInit
+  GenISA_createMessagePhasesNoInitV,       // llvm.genx.GenISA.createMessagePhasesNoInitV
+  GenISA_createMessagePhasesV,             // llvm.genx.GenISA.createMessagePhasesV
+  GenISA_cycleCounter,                     // llvm.genx.GenISA.cycleCounter
+  GenISA_discard,                          // llvm.genx.GenISA.discard
+  GenISA_dp4a_ss,                          // llvm.genx.GenISA.dp4a.ss
+  GenISA_dp4a_su,                          // llvm.genx.GenISA.dp4a.su
+  GenISA_dp4a_us,                          // llvm.genx.GenISA.dp4a.us
+  GenISA_dp4a_uu,                          // llvm.genx.GenISA.dp4a.uu
+  GenISA_dpas,                             // llvm.genx.GenISA.dpas
+  GenISA_dual_subslice_id,                 // llvm.genx.GenISA.dual.subslice.id
+  GenISA_dummyInst,                        // llvm.genx.GenISA.dummyInst
+  GenISA_dummyInstID,                      // llvm.genx.GenISA.dummyInstID
+  GenISA_dwordatomicstructured,            // llvm.genx.GenISA.dwordatomicstructured
+  GenISA_eu_id,                            // llvm.genx.GenISA.eu.id
+  GenISA_eu_thread_id,                     // llvm.genx.GenISA.eu.thread.id
+  GenISA_eu_thread_pause,                  // llvm.genx.GenISA.eu.thread.pause
+  GenISA_evaluateSampler,                  // llvm.genx.GenISA.evaluateSampler
+  GenISA_extractMVAndSAD,                  // llvm.genx.GenISA.extractMVAndSAD
+  GenISA_f32tof16_rtz,                     // llvm.genx.GenISA.f32tof16.rtz
+  GenISA_fcmpxchgatomicraw,                // llvm.genx.GenISA.fcmpxchgatomicraw
+  GenISA_fcmpxchgatomicrawA64,             // llvm.genx.GenISA.fcmpxchgatomicrawA64
+  GenISA_fcmpxchgatomicstructured,         // llvm.genx.GenISA.fcmpxchgatomicstructured
+  GenISA_firstbitHi,                       // llvm.genx.GenISA.firstbitHi
+  GenISA_firstbitLo,                       // llvm.genx.GenISA.firstbitLo
+  GenISA_firstbitShi,                      // llvm.genx.GenISA.firstbitShi
+  GenISA_floatatomicraw,                   // llvm.genx.GenISA.floatatomicraw
+  GenISA_floatatomicrawA64,                // llvm.genx.GenISA.floatatomicrawA64
+  GenISA_floatatomicstructured,            // llvm.genx.GenISA.floatatomicstructured
+  GenISA_flushsampler,                     // llvm.genx.GenISA.flushsampler
+  GenISA_fma_rtn,                          // llvm.genx.GenISA.fma.rtn
+  GenISA_fma_rtp,                          // llvm.genx.GenISA.fma.rtp
+  GenISA_fma_rtz,                          // llvm.genx.GenISA.fma.rtz
+  GenISA_frc,                              // llvm.genx.GenISA.frc
+  GenISA_fsat,                             // llvm.genx.GenISA.fsat
+  GenISA_ftobf,                            // llvm.genx.GenISA.ftobf
+  GenISA_ftof_rte,                         // llvm.genx.GenISA.ftof.rte
+  GenISA_ftof_rtn,                         // llvm.genx.GenISA.ftof.rtn
+  GenISA_ftof_rtp,                         // llvm.genx.GenISA.ftof.rtp
+  GenISA_ftof_rtz,                         // llvm.genx.GenISA.ftof.rtz
+  GenISA_ftoi_rte,                         // llvm.genx.GenISA.ftoi.rte
+  GenISA_ftoi_rtn,                         // llvm.genx.GenISA.ftoi.rtn
+  GenISA_ftoi_rtp,                         // llvm.genx.GenISA.ftoi.rtp
+  GenISA_ftotf32,                          // llvm.genx.GenISA.ftotf32
+  GenISA_ftoui_rte,                        // llvm.genx.GenISA.ftoui.rte
+  GenISA_ftoui_rtn,                        // llvm.genx.GenISA.ftoui.rtn
+  GenISA_ftoui_rtp,                        // llvm.genx.GenISA.ftoui.rtp
+  GenISA_gather4Cptr,                      // llvm.genx.GenISA.gather4Cptr
+  GenISA_gather4POCptr,                    // llvm.genx.GenISA.gather4POCptr
+  GenISA_gather4POptr,                     // llvm.genx.GenISA.gather4POptr
+  GenISA_gather4ptr,                       // llvm.genx.GenISA.gather4ptr
+  GenISA_getEnqueuedLocalSize,             // llvm.genx.GenISA.getEnqueuedLocalSize
+  GenISA_getGlobalSize,                    // llvm.genx.GenISA.getGlobalSize
+  GenISA_getLocalID_X,                     // llvm.genx.GenISA.getLocalID.X
+  GenISA_getLocalID_Y,                     // llvm.genx.GenISA.getLocalID.Y
+  GenISA_getLocalID_Z,                     // llvm.genx.GenISA.getLocalID.Z
+  GenISA_getLocalSize,                     // llvm.genx.GenISA.getLocalSize
+  GenISA_getMessagePhase,                  // llvm.genx.GenISA.getMessagePhase
+  GenISA_getMessagePhaseV,                 // llvm.genx.GenISA.getMessagePhaseV
+  GenISA_getMessagePhaseX,                 // llvm.genx.GenISA.getMessagePhaseX
+  GenISA_getMessagePhaseXV,                // llvm.genx.GenISA.getMessagePhaseXV
+  GenISA_getNumWorkGroups,                 // llvm.genx.GenISA.getNumWorkGroups
+  GenISA_getPayloadHeader,                 // llvm.genx.GenISA.getPayloadHeader
+  GenISA_getPrintfBuffer,                  // llvm.genx.GenISA.getPrintfBuffer
+  GenISA_getPrivateBase,                   // llvm.genx.GenISA.getPrivateBase
+  GenISA_getR0,                            // llvm.genx.GenISA.getR0
+  GenISA_getRtGlobalBufferPtr,             // llvm.genx.GenISA.getRtGlobalBufferPtr
+  GenISA_getSR0,                           // llvm.genx.GenISA.getSR0
+  GenISA_getSR0_0,                         // llvm.genx.GenISA.getSR0.0
+  GenISA_getStageInGridOrigin,             // llvm.genx.GenISA.getStageInGridOrigin
+  GenISA_getStageInGridSize,               // llvm.genx.GenISA.getStageInGridSize
+  GenISA_getSyncBuffer,                    // llvm.genx.GenISA.getSyncBuffer
+  GenISA_getWorkDim,                       // llvm.genx.GenISA.getWorkDim
+  GenISA_globalSync,                       // llvm.genx.GenISA.globalSync
+  GenISA_hftobf8,                          // llvm.genx.GenISA.hftobf8
+  GenISA_hw_thread_id,                     // llvm.genx.GenISA.hw.thread.id
+  GenISA_hw_thread_id_alloca,              // llvm.genx.GenISA.hw.thread.id.alloca
+  GenISA_ibfe,                             // llvm.genx.GenISA.ibfe
+  GenISA_icmpxchgatomicraw,                // llvm.genx.GenISA.icmpxchgatomicraw
+  GenISA_icmpxchgatomicrawA64,             // llvm.genx.GenISA.icmpxchgatomicrawA64
+  GenISA_icmpxchgatomictyped,              // llvm.genx.GenISA.icmpxchgatomictyped
+  GenISA_imulH,                            // llvm.genx.GenISA.imulH
+  GenISA_intatomicraw,                     // llvm.genx.GenISA.intatomicraw
+  GenISA_intatomicrawA64,                  // llvm.genx.GenISA.intatomicrawA64
+  GenISA_intatomictyped,                   // llvm.genx.GenISA.intatomictyped
+  GenISA_is_uniform,                       // llvm.genx.GenISA.is.uniform
+  GenISA_isat,                             // llvm.genx.GenISA.isat
+  GenISA_itof_rtn,                         // llvm.genx.GenISA.itof.rtn
+  GenISA_itof_rtp,                         // llvm.genx.GenISA.itof.rtp
+  GenISA_itof_rtz,                         // llvm.genx.GenISA.itof.rtz
+  GenISA_launder,                          // llvm.genx.GenISA.launder
+  GenISA_ldmcsptr,                         // llvm.genx.GenISA.ldmcsptr
+  GenISA_ldmsptr,                          // llvm.genx.GenISA.ldmsptr
+  GenISA_ldmsptr16bit,                     // llvm.genx.GenISA.ldmsptr16bit
+  GenISA_ldptr,                            // llvm.genx.GenISA.ldptr
+  GenISA_ldraw_indexed,                    // llvm.genx.GenISA.ldraw.indexed
+  GenISA_ldrawvector_indexed,              // llvm.genx.GenISA.ldrawvector.indexed
+  GenISA_ldstructured,                     // llvm.genx.GenISA.ldstructured
+  GenISA_lodptr,                           // llvm.genx.GenISA.lodptr
+  GenISA_memoryfence,                      // llvm.genx.GenISA.memoryfence
+  GenISA_mov_identity,                     // llvm.genx.GenISA.mov.identity
+  GenISA_movcr,                            // llvm.genx.GenISA.movcr
+  GenISA_movflag,                          // llvm.genx.GenISA.movflag
+  GenISA_mul_pair,                         // llvm.genx.GenISA.mul.pair
+  GenISA_mul_rtz,                          // llvm.genx.GenISA.mul.rtz
+  GenISA_pair_to_ptr,                      // llvm.genx.GenISA.pair.to.ptr
+  GenISA_patchInstanceId,                  // llvm.genx.GenISA.patchInstanceId
+  GenISA_ptr_to_pair,                      // llvm.genx.GenISA.ptr.to.pair
+  GenISA_readsurfaceinfoptr,               // llvm.genx.GenISA.readsurfaceinfoptr
+  GenISA_resetRoundingMode,                // llvm.genx.GenISA.resetRoundingMode
+  GenISA_resinfoptr,                       // llvm.genx.GenISA.resinfoptr
+  GenISA_rsq,                              // llvm.genx.GenISA.rsq
+  GenISA_rt_spill_anchor,                  // llvm.genx.GenISA.rt.spill.anchor
+  GenISA_rt_swstack_offset,                // llvm.genx.GenISA.rt.swstack.offset
+  GenISA_sampleBCptr,                      // llvm.genx.GenISA.sampleBCptr
+  GenISA_sampleBptr,                       // llvm.genx.GenISA.sampleBptr
+  GenISA_sampleCptr,                       // llvm.genx.GenISA.sampleCptr
+  GenISA_sampleDCptr,                      // llvm.genx.GenISA.sampleDCptr
+  GenISA_sampleDptr,                       // llvm.genx.GenISA.sampleDptr
+  GenISA_sampleKillPix,                    // llvm.genx.GenISA.sampleKillPix
+  GenISA_sampleLCptr,                      // llvm.genx.GenISA.sampleLCptr
+  GenISA_sampleLptr,                       // llvm.genx.GenISA.sampleLptr
+  GenISA_sampleinfoptr,                    // llvm.genx.GenISA.sampleinfoptr
+  GenISA_sampleptr,                        // llvm.genx.GenISA.sampleptr
+  GenISA_setMessagePhase,                  // llvm.genx.GenISA.setMessagePhase
+  GenISA_setMessagePhaseV,                 // llvm.genx.GenISA.setMessagePhaseV
+  GenISA_setMessagePhaseX,                 // llvm.genx.GenISA.setMessagePhaseX
+  GenISA_setMessagePhaseXV,                // llvm.genx.GenISA.setMessagePhaseXV
+  GenISA_setMessagePhaseX_legacy,          // llvm.genx.GenISA.setMessagePhaseX.legacy
+  GenISA_setMessagePhase_legacy,           // llvm.genx.GenISA.setMessagePhase.legacy
+  GenISA_setRoundingModeFP,                // llvm.genx.GenISA.setRoundingModeFP
+  GenISA_simdBlockRead,                    // llvm.genx.GenISA.simdBlockRead
+  GenISA_simdBlockReadBindless,            // llvm.genx.GenISA.simdBlockReadBindless
+  GenISA_simdBlockWrite,                   // llvm.genx.GenISA.simdBlockWrite
+  GenISA_simdBlockWriteBindless,           // llvm.genx.GenISA.simdBlockWriteBindless
+  GenISA_simdGetMessagePhase,              // llvm.genx.GenISA.simdGetMessagePhase
+  GenISA_simdGetMessagePhaseV,             // llvm.genx.GenISA.simdGetMessagePhaseV
+  GenISA_simdLaneId,                       // llvm.genx.GenISA.simdLaneId
+  GenISA_simdMediaBlockRead,               // llvm.genx.GenISA.simdMediaBlockRead
+  GenISA_simdMediaBlockWrite,              // llvm.genx.GenISA.simdMediaBlockWrite
+  GenISA_simdMediaRegionCopy,              // llvm.genx.GenISA.simdMediaRegionCopy
+  GenISA_simdSetMessagePhase,              // llvm.genx.GenISA.simdSetMessagePhase
+  GenISA_simdSetMessagePhaseV,             // llvm.genx.GenISA.simdSetMessagePhaseV
+  GenISA_simdShuffleDown,                  // llvm.genx.GenISA.simdShuffleDown
+  GenISA_simdShuffleXor,                   // llvm.genx.GenISA.simdShuffleXor
+  GenISA_simdSize,                         // llvm.genx.GenISA.simdSize
+  GenISA_slice_id,                         // llvm.genx.GenISA.slice.id
+  GenISA_source_value,                     // llvm.genx.GenISA.source.value
+  GenISA_srnd_ftohf,                       // llvm.genx.GenISA.srnd.ftohf
+  GenISA_srnd_hftobf8,                     // llvm.genx.GenISA.srnd.hftobf8
+  GenISA_staticConstantPatchValue,         // llvm.genx.GenISA.staticConstantPatchValue
+  GenISA_storeraw_indexed,                 // llvm.genx.GenISA.storeraw.indexed
+  GenISA_storerawvector_indexed,           // llvm.genx.GenISA.storerawvector.indexed
+  GenISA_storestructured1,                 // llvm.genx.GenISA.storestructured1
+  GenISA_storestructured2,                 // llvm.genx.GenISA.storestructured2
+  GenISA_storestructured3,                 // llvm.genx.GenISA.storestructured3
+  GenISA_storestructured4,                 // llvm.genx.GenISA.storestructured4
+  GenISA_sub_group_dpas,                   // llvm.genx.GenISA.sub.group.dpas
+  GenISA_sub_pair,                         // llvm.genx.GenISA.sub.pair
+  GenISA_subslice_id,                      // llvm.genx.GenISA.subslice.id
+  GenISA_systemmemoryfence,                // llvm.genx.GenISA.systemmemoryfence
+  GenISA_tf32tof,                          // llvm.genx.GenISA.tf32tof
+  GenISA_threadgroupbarrier,               // llvm.genx.GenISA.threadgroupbarrier
+  GenISA_threadgroupbarrier_signal,        // llvm.genx.GenISA.threadgroupbarrier.signal
+  GenISA_threadgroupbarrier_wait,          // llvm.genx.GenISA.threadgroupbarrier.wait
+  GenISA_threadgroupnamedbarriers_signal,  // llvm.genx.GenISA.threadgroupnamedbarriers.signal
+  GenISA_threadgroupnamedbarriers_wait,    // llvm.genx.GenISA.threadgroupnamedbarriers.wait
+  GenISA_typedmemoryfence,                 // llvm.genx.GenISA.typedmemoryfence
+  GenISA_typedread,                        // llvm.genx.GenISA.typedread
+  GenISA_typedwrite,                       // llvm.genx.GenISA.typedwrite
+  GenISA_uaddc,                            // llvm.genx.GenISA.uaddc
+  GenISA_uavSerializeAll,                  // llvm.genx.GenISA.uavSerializeAll
+  GenISA_uavSerializeOnResID,              // llvm.genx.GenISA.uavSerializeOnResID
+  GenISA_ubfe,                             // llvm.genx.GenISA.ubfe
+  GenISA_uitof_rtn,                        // llvm.genx.GenISA.uitof.rtn
+  GenISA_uitof_rtp,                        // llvm.genx.GenISA.uitof.rtp
+  GenISA_uitof_rtz,                        // llvm.genx.GenISA.uitof.rtz
+  GenISA_umulH,                            // llvm.genx.GenISA.umulH
+  GenISA_urbfence,                         // llvm.genx.GenISA.urbfence
+  GenISA_usat,                             // llvm.genx.GenISA.usat
+  GenISA_usubb,                            // llvm.genx.GenISA.usubb
+  GenISA_vaBoolCentroid,                   // llvm.genx.GenISA.vaBoolCentroid
+  GenISA_vaBoolSum,                        // llvm.genx.GenISA.vaBoolSum
+  GenISA_vaCentroid,                       // llvm.genx.GenISA.vaCentroid
+  GenISA_vaConvolve,                       // llvm.genx.GenISA.vaConvolve
+  GenISA_vaConvolveGRF_16x1,               // llvm.genx.GenISA.vaConvolveGRF.16x1
+  GenISA_vaConvolveGRF_16x4,               // llvm.genx.GenISA.vaConvolveGRF.16x4
+  GenISA_vaDilate,                         // llvm.genx.GenISA.vaDilate
+  GenISA_vaErode,                          // llvm.genx.GenISA.vaErode
+  GenISA_vaMinMax,                         // llvm.genx.GenISA.vaMinMax
+  GenISA_vaMinMaxFilter,                   // llvm.genx.GenISA.vaMinMaxFilter
+  GenISA_vectorUniform,                    // llvm.genx.GenISA.vectorUniform
+  GenISA_vmeSendFBR,                       // llvm.genx.GenISA.vmeSendFBR
+  GenISA_vmeSendFBR2,                      // llvm.genx.GenISA.vmeSendFBR2
+  GenISA_vmeSendIME,                       // llvm.genx.GenISA.vmeSendIME
+  GenISA_vmeSendIME2,                      // llvm.genx.GenISA.vmeSendIME2
+  GenISA_vmeSendSIC,                       // llvm.genx.GenISA.vmeSendSIC
+  GenISA_vmeSendSIC2,                      // llvm.genx.GenISA.vmeSendSIC2
+  GenISA_wavebarrier,                      // llvm.genx.GenISA.wavebarrier
+#endif
+
+// Intrinsic ID to name table
+#ifdef GET_INTRINSIC_NAME_TABLE
+  "llvm.genx.GenISA.2fto2bf",
+  "llvm.genx.GenISA.AcceptHitAndEndSearchHL",
+  "llvm.genx.GenISA.AllocaNumber",
+  "llvm.genx.GenISA.AllocateRayQuery",
+  "llvm.genx.GenISA.AsyncStackID",
+  "llvm.genx.GenISA.AsyncStackPtr",
+  "llvm.genx.GenISA.BindlessThreadDispatch",
+  "llvm.genx.GenISA.CallShaderHL",
+  "llvm.genx.GenISA.CatchAllDebugLine",
+  "llvm.genx.GenISA.ContinuationSignpost",
+  "llvm.genx.GenISA.DCL.DSCntrlPtInputVec",
+  "llvm.genx.GenISA.DCL.DSInputTessFactor",
+  "llvm.genx.GenISA.DCL.DSPatchConstInputVec",
+  "llvm.genx.GenISA.DCL.GSinputVec",
+  "llvm.genx.GenISA.DCL.GSsystemValue",
+  "llvm.genx.GenISA.DCL.HSControlPointID",
+  "llvm.genx.GenISA.DCL.HSOutputCntrlPtInputVec",
+  "llvm.genx.GenISA.DCL.HSPatchConstInputVec",
+  "llvm.genx.GenISA.DCL.HSinputVec",
+  "llvm.genx.GenISA.DCL.ShaderInputVec",
+  "llvm.genx.GenISA.DCL.SystemValue",
+  "llvm.genx.GenISA.DCL.input",
+  "llvm.genx.GenISA.DCL.inputVec",
+  "llvm.genx.GenISA.DispatchDimensions",
+  "llvm.genx.GenISA.DispatchRayIndex",
+  "llvm.genx.GenISA.EmitHitAttributes",
+  "llvm.genx.GenISA.EndPrimitive",
+  "llvm.genx.GenISA.FPBinaryOperator",
+  "llvm.genx.GenISA.FillValue",
+  "llvm.genx.GenISA.GetBufferPtr",
+  "llvm.genx.GenISA.GetImplicitBufferPtr",
+  "llvm.genx.GenISA.GetLocalIdBufferPtr",
+  "llvm.genx.GenISA.GetPixelMask",
+  "llvm.genx.GenISA.GetShaderRecordPtr",
+  "llvm.genx.GenISA.GlobalBufferPointer",
+  "llvm.genx.GenISA.GlobalRootSignatureValue",
+  "llvm.genx.GenISA.GradientX",
+  "llvm.genx.GenISA.GradientXfine",
+  "llvm.genx.GenISA.GradientY",
+  "llvm.genx.GenISA.GradientYfine",
+  "llvm.genx.GenISA.GsCutControlHeader",
+  "llvm.genx.GenISA.GsStreamHeader",
+  "llvm.genx.GenISA.HDCCCSFastClear",
+  "llvm.genx.GenISA.HDCuncompressedwrite",
+  "llvm.genx.GenISA.HSURBPatchHeaderRead",
+  "llvm.genx.GenISA.HitKind",
+  "llvm.genx.GenISA.IEEE.Divide",
+  "llvm.genx.GenISA.IEEE.Sqrt",
+  "llvm.genx.GenISA.IgnoreHitHL",
+  "llvm.genx.GenISA.InitDiscardMask",
+  "llvm.genx.GenISA.InlinedData",
+  "llvm.genx.GenISA.InnerScalarTessFactors",
+  "llvm.genx.GenISA.Interpolant",
+  "llvm.genx.GenISA.Interpolate",
+  "llvm.genx.GenISA.Interpolate2",
+  "llvm.genx.GenISA.IsHelperInvocation",
+  "llvm.genx.GenISA.LSC2DBlockRead",
+  "llvm.genx.GenISA.LSC2DBlockWrite",
+  "llvm.genx.GenISA.LSCAtomicFP32",
+  "llvm.genx.GenISA.LSCAtomicFP64",
+  "llvm.genx.GenISA.LSCAtomicInts",
+  "llvm.genx.GenISA.LSCFence",
+  "llvm.genx.GenISA.LSCLoad",
+  "llvm.genx.GenISA.LSCLoadBlock",
+  "llvm.genx.GenISA.LSCLoadStatus",
+  "llvm.genx.GenISA.LSCPrefetch",
+  "llvm.genx.GenISA.LSCStore",
+  "llvm.genx.GenISA.LSCStoreBlock",
+  "llvm.genx.GenISA.LocalBufferPointer",
+  "llvm.genx.GenISA.LocalRootSignatureValue",
+  "llvm.genx.GenISA.MediaBlockRead",
+  "llvm.genx.GenISA.MediaBlockRectangleRead",
+  "llvm.genx.GenISA.MediaBlockWrite",
+  "llvm.genx.GenISA.OUTPUT",
+  "llvm.genx.GenISA.OUTPUTGS",
+  "llvm.genx.GenISA.OUTPUTGS2",
+  "llvm.genx.GenISA.OuterScalarTessFactors",
+  "llvm.genx.GenISA.OutputMeshPrimitiveData",
+  "llvm.genx.GenISA.OutputMeshPrimitiveDataInput",
+  "llvm.genx.GenISA.OutputMeshSivDataInput",
+  "llvm.genx.GenISA.OutputMeshVertexData",
+  "llvm.genx.GenISA.OutputMeshVertexDataInput",
+  "llvm.genx.GenISA.OutputTaskData",
+  "llvm.genx.GenISA.OutputTaskDataInput",
+  "llvm.genx.GenISA.OutputTessControlPoint",
+  "llvm.genx.GenISA.OutputTessFactors",
+  "llvm.genx.GenISA.PHASE.INPUT",
+  "llvm.genx.GenISA.PHASE.INPUTVEC",
+  "llvm.genx.GenISA.PHASE.OUTPUT",
+  "llvm.genx.GenISA.PHASE.OUTPUTVEC",
+  "llvm.genx.GenISA.PatchConstantOutput",
+  "llvm.genx.GenISA.PayloadPtr",
+  "llvm.genx.GenISA.PixelPositionX",
+  "llvm.genx.GenISA.PixelPositionY",
+  "llvm.genx.GenISA.PullCentroidBarys",
+  "llvm.genx.GenISA.PullSampleIndexBarys",
+  "llvm.genx.GenISA.PullSnappedBarys",
+  "llvm.genx.GenISA.QuadPrefix",
+  "llvm.genx.GenISA.ROUNDNE",
+  "llvm.genx.GenISA.RTDualBlendSource",
+  "llvm.genx.GenISA.RTStatefulBTIAndOffset",
+  "llvm.genx.GenISA.RTWrite",
+  "llvm.genx.GenISA.RayInfo",
+  "llvm.genx.GenISA.RayTCurrent",
+  "llvm.genx.GenISA.ReadTraceRaySync",
+  "llvm.genx.GenISA.RenderTargetRead",
+  "llvm.genx.GenISA.RenderTargetReadSampleFreq",
+  "llvm.genx.GenISA.ReportHitHL",
+  "llvm.genx.GenISA.RuntimeValue",
+  "llvm.genx.GenISA.SWHotZonePtr",
+  "llvm.genx.GenISA.SWStackPtr",
+  "llvm.genx.GenISA.SampleOffsetX",
+  "llvm.genx.GenISA.SampleOffsetY",
+  "llvm.genx.GenISA.SetDebugReg",
+  "llvm.genx.GenISA.SetImplicitBufferPtr",
+  "llvm.genx.GenISA.SetLocalIdBufferPtr",
+  "llvm.genx.GenISA.SetStream",
+  "llvm.genx.GenISA.ShadowMemoryToSyncStack",
+  "llvm.genx.GenISA.SpillValue",
+  "llvm.genx.GenISA.StackAlloca",
+  "llvm.genx.GenISA.StackIDRelease",
+  "llvm.genx.GenISA.StackSize",
+  "llvm.genx.GenISA.SyncStackID",
+  "llvm.genx.GenISA.SyncStackPtr",
+  "llvm.genx.GenISA.SyncStackToShadowMemory",
+  "llvm.genx.GenISA.TileXOffset",
+  "llvm.genx.GenISA.TileYOffset",
+  "llvm.genx.GenISA.TraceRayAsync",
+  "llvm.genx.GenISA.TraceRayAsyncHL",
+  "llvm.genx.GenISA.TraceRayInlineAbort",
+  "llvm.genx.GenISA.TraceRayInlineCandidateType",
+  "llvm.genx.GenISA.TraceRayInlineCommitNonOpaqueTriangleHit",
+  "llvm.genx.GenISA.TraceRayInlineCommitProceduralPrimitiveHit",
+  "llvm.genx.GenISA.TraceRayInlineCommittedStatus",
+  "llvm.genx.GenISA.TraceRayInlineHL",
+  "llvm.genx.GenISA.TraceRayInlineRayInfo",
+  "llvm.genx.GenISA.TraceRaySync",
+  "llvm.genx.GenISA.TraceRaySyncProceed",
+  "llvm.genx.GenISA.TraceRaySyncProceedHL",
+  "llvm.genx.GenISA.URBRead",
+  "llvm.genx.GenISA.URBReadOutput",
+  "llvm.genx.GenISA.URBWrite",
+  "llvm.genx.GenISA.UnmaskedRegionBegin",
+  "llvm.genx.GenISA.UnmaskedRegionEnd",
+  "llvm.genx.GenISA.UpdateDiscardMask",
+  "llvm.genx.GenISA.VLAStackAlloca",
+  "llvm.genx.GenISA.WaveAll",
+  "llvm.genx.GenISA.WaveBallot",
+  "llvm.genx.GenISA.WaveClustered",
+  "llvm.genx.GenISA.WaveInverseBallot",
+  "llvm.genx.GenISA.WavePrefix",
+  "llvm.genx.GenISA.WaveShuffleIndex",
+  "llvm.genx.GenISA.WorkGroupAny",
+  "llvm.genx.GenISA.add.pair",
+  "llvm.genx.GenISA.add.rtz",
+  "llvm.genx.GenISA.assume.uniform",
+  "llvm.genx.GenISA.atomiccounterinc",
+  "llvm.genx.GenISA.atomiccounterpredec",
+  "llvm.genx.GenISA.bf8tohf",
+  "llvm.genx.GenISA.bfi",
+  "llvm.genx.GenISA.bfrev",
+  "llvm.genx.GenISA.bftof",
+  "llvm.genx.GenISA.broadcastMessagePhase",
+  "llvm.genx.GenISA.broadcastMessagePhaseV",
+  "llvm.genx.GenISA.cmpSADs",
+  "llvm.genx.GenISA.cmpxchgatomicstructured",
+  "llvm.genx.GenISA.createMessagePhases",
+  "llvm.genx.GenISA.createMessagePhasesNoInit",
+  "llvm.genx.GenISA.createMessagePhasesNoInitV",
+  "llvm.genx.GenISA.createMessagePhasesV",
+  "llvm.genx.GenISA.cycleCounter",
+  "llvm.genx.GenISA.discard",
+  "llvm.genx.GenISA.dp4a.ss",
+  "llvm.genx.GenISA.dp4a.su",
+  "llvm.genx.GenISA.dp4a.us",
+  "llvm.genx.GenISA.dp4a.uu",
+  "llvm.genx.GenISA.dpas",
+  "llvm.genx.GenISA.dual.subslice.id",
+  "llvm.genx.GenISA.dummyInst",
+  "llvm.genx.GenISA.dummyInstID",
+  "llvm.genx.GenISA.dwordatomicstructured",
+  "llvm.genx.GenISA.eu.id",
+  "llvm.genx.GenISA.eu.thread.id",
+  "llvm.genx.GenISA.eu.thread.pause",
+  "llvm.genx.GenISA.evaluateSampler",
+  "llvm.genx.GenISA.extractMVAndSAD",
+  "llvm.genx.GenISA.f32tof16.rtz",
+  "llvm.genx.GenISA.fcmpxchgatomicraw",
+  "llvm.genx.GenISA.fcmpxchgatomicrawA64",
+  "llvm.genx.GenISA.fcmpxchgatomicstructured",
+  "llvm.genx.GenISA.firstbitHi",
+  "llvm.genx.GenISA.firstbitLo",
+  "llvm.genx.GenISA.firstbitShi",
+  "llvm.genx.GenISA.floatatomicraw",
+  "llvm.genx.GenISA.floatatomicrawA64",
+  "llvm.genx.GenISA.floatatomicstructured",
+  "llvm.genx.GenISA.flushsampler",
+  "llvm.genx.GenISA.fma.rtn",
+  "llvm.genx.GenISA.fma.rtp",
+  "llvm.genx.GenISA.fma.rtz",
+  "llvm.genx.GenISA.frc",
+  "llvm.genx.GenISA.fsat",
+  "llvm.genx.GenISA.ftobf",
+  "llvm.genx.GenISA.ftof.rte",
+  "llvm.genx.GenISA.ftof.rtn",
+  "llvm.genx.GenISA.ftof.rtp",
+  "llvm.genx.GenISA.ftof.rtz",
+  "llvm.genx.GenISA.ftoi.rte",
+  "llvm.genx.GenISA.ftoi.rtn",
+  "llvm.genx.GenISA.ftoi.rtp",
+  "llvm.genx.GenISA.ftotf32",
+  "llvm.genx.GenISA.ftoui.rte",
+  "llvm.genx.GenISA.ftoui.rtn",
+  "llvm.genx.GenISA.ftoui.rtp",
+  "llvm.genx.GenISA.gather4Cptr",
+  "llvm.genx.GenISA.gather4POCptr",
+  "llvm.genx.GenISA.gather4POptr",
+  "llvm.genx.GenISA.gather4ptr",
+  "llvm.genx.GenISA.getEnqueuedLocalSize",
+  "llvm.genx.GenISA.getGlobalSize",
+  "llvm.genx.GenISA.getLocalID.X",
+  "llvm.genx.GenISA.getLocalID.Y",
+  "llvm.genx.GenISA.getLocalID.Z",
+  "llvm.genx.GenISA.getLocalSize",
+  "llvm.genx.GenISA.getMessagePhase",
+  "llvm.genx.GenISA.getMessagePhaseV",
+  "llvm.genx.GenISA.getMessagePhaseX",
+  "llvm.genx.GenISA.getMessagePhaseXV",
+  "llvm.genx.GenISA.getNumWorkGroups",
+  "llvm.genx.GenISA.getPayloadHeader",
+  "llvm.genx.GenISA.getPrintfBuffer",
+  "llvm.genx.GenISA.getPrivateBase",
+  "llvm.genx.GenISA.getR0",
+  "llvm.genx.GenISA.getRtGlobalBufferPtr",
+  "llvm.genx.GenISA.getSR0",
+  "llvm.genx.GenISA.getSR0.0",
+  "llvm.genx.GenISA.getStageInGridOrigin",
+  "llvm.genx.GenISA.getStageInGridSize",
+  "llvm.genx.GenISA.getSyncBuffer",
+  "llvm.genx.GenISA.getWorkDim",
+  "llvm.genx.GenISA.globalSync",
+  "llvm.genx.GenISA.hftobf8",
+  "llvm.genx.GenISA.hw.thread.id",
+  "llvm.genx.GenISA.hw.thread.id.alloca",
+  "llvm.genx.GenISA.ibfe",
+  "llvm.genx.GenISA.icmpxchgatomicraw",
+  "llvm.genx.GenISA.icmpxchgatomicrawA64",
+  "llvm.genx.GenISA.icmpxchgatomictyped",
+  "llvm.genx.GenISA.imulH",
+  "llvm.genx.GenISA.intatomicraw",
+  "llvm.genx.GenISA.intatomicrawA64",
+  "llvm.genx.GenISA.intatomictyped",
+  "llvm.genx.GenISA.is.uniform",
+  "llvm.genx.GenISA.isat",
+  "llvm.genx.GenISA.itof.rtn",
+  "llvm.genx.GenISA.itof.rtp",
+  "llvm.genx.GenISA.itof.rtz",
+  "llvm.genx.GenISA.launder",
+  "llvm.genx.GenISA.ldmcsptr",
+  "llvm.genx.GenISA.ldmsptr",
+  "llvm.genx.GenISA.ldmsptr16bit",
+  "llvm.genx.GenISA.ldptr",
+  "llvm.genx.GenISA.ldraw.indexed",
+  "llvm.genx.GenISA.ldrawvector.indexed",
+  "llvm.genx.GenISA.ldstructured",
+  "llvm.genx.GenISA.lodptr",
+  "llvm.genx.GenISA.memoryfence",
+  "llvm.genx.GenISA.mov.identity",
+  "llvm.genx.GenISA.movcr",
+  "llvm.genx.GenISA.movflag",
+  "llvm.genx.GenISA.mul.pair",
+  "llvm.genx.GenISA.mul.rtz",
+  "llvm.genx.GenISA.pair.to.ptr",
+  "llvm.genx.GenISA.patchInstanceId",
+  "llvm.genx.GenISA.ptr.to.pair",
+  "llvm.genx.GenISA.readsurfaceinfoptr",
+  "llvm.genx.GenISA.resetRoundingMode",
+  "llvm.genx.GenISA.resinfoptr",
+  "llvm.genx.GenISA.rsq",
+  "llvm.genx.GenISA.rt.spill.anchor",
+  "llvm.genx.GenISA.rt.swstack.offset",
+  "llvm.genx.GenISA.sampleBCptr",
+  "llvm.genx.GenISA.sampleBptr",
+  "llvm.genx.GenISA.sampleCptr",
+  "llvm.genx.GenISA.sampleDCptr",
+  "llvm.genx.GenISA.sampleDptr",
+  "llvm.genx.GenISA.sampleKillPix",
+  "llvm.genx.GenISA.sampleLCptr",
+  "llvm.genx.GenISA.sampleLptr",
+  "llvm.genx.GenISA.sampleinfoptr",
+  "llvm.genx.GenISA.sampleptr",
+  "llvm.genx.GenISA.setMessagePhase",
+  "llvm.genx.GenISA.setMessagePhaseV",
+  "llvm.genx.GenISA.setMessagePhaseX",
+  "llvm.genx.GenISA.setMessagePhaseXV",
+  "llvm.genx.GenISA.setMessagePhaseX.legacy",
+  "llvm.genx.GenISA.setMessagePhase.legacy",
+  "llvm.genx.GenISA.setRoundingModeFP",
+  "llvm.genx.GenISA.simdBlockRead",
+  "llvm.genx.GenISA.simdBlockReadBindless",
+  "llvm.genx.GenISA.simdBlockWrite",
+  "llvm.genx.GenISA.simdBlockWriteBindless",
+  "llvm.genx.GenISA.simdGetMessagePhase",
+  "llvm.genx.GenISA.simdGetMessagePhaseV",
+  "llvm.genx.GenISA.simdLaneId",
+  "llvm.genx.GenISA.simdMediaBlockRead",
+  "llvm.genx.GenISA.simdMediaBlockWrite",
+  "llvm.genx.GenISA.simdMediaRegionCopy",
+  "llvm.genx.GenISA.simdSetMessagePhase",
+  "llvm.genx.GenISA.simdSetMessagePhaseV",
+  "llvm.genx.GenISA.simdShuffleDown",
+  "llvm.genx.GenISA.simdShuffleXor",
+  "llvm.genx.GenISA.simdSize",
+  "llvm.genx.GenISA.slice.id",
+  "llvm.genx.GenISA.source.value",
+  "llvm.genx.GenISA.srnd.ftohf",
+  "llvm.genx.GenISA.srnd.hftobf8",
+  "llvm.genx.GenISA.staticConstantPatchValue",
+  "llvm.genx.GenISA.storeraw.indexed",
+  "llvm.genx.GenISA.storerawvector.indexed",
+  "llvm.genx.GenISA.storestructured1",
+  "llvm.genx.GenISA.storestructured2",
+  "llvm.genx.GenISA.storestructured3",
+  "llvm.genx.GenISA.storestructured4",
+  "llvm.genx.GenISA.sub.group.dpas",
+  "llvm.genx.GenISA.sub.pair",
+  "llvm.genx.GenISA.subslice.id",
+  "llvm.genx.GenISA.systemmemoryfence",
+  "llvm.genx.GenISA.tf32tof",
+  "llvm.genx.GenISA.threadgroupbarrier",
+  "llvm.genx.GenISA.threadgroupbarrier.signal",
+  "llvm.genx.GenISA.threadgroupbarrier.wait",
+  "llvm.genx.GenISA.threadgroupnamedbarriers.signal",
+  "llvm.genx.GenISA.threadgroupnamedbarriers.wait",
+  "llvm.genx.GenISA.typedmemoryfence",
+  "llvm.genx.GenISA.typedread",
+  "llvm.genx.GenISA.typedwrite",
+  "llvm.genx.GenISA.uaddc",
+  "llvm.genx.GenISA.uavSerializeAll",
+  "llvm.genx.GenISA.uavSerializeOnResID",
+  "llvm.genx.GenISA.ubfe",
+  "llvm.genx.GenISA.uitof.rtn",
+  "llvm.genx.GenISA.uitof.rtp",
+  "llvm.genx.GenISA.uitof.rtz",
+  "llvm.genx.GenISA.umulH",
+  "llvm.genx.GenISA.urbfence",
+  "llvm.genx.GenISA.usat",
+  "llvm.genx.GenISA.usubb",
+  "llvm.genx.GenISA.vaBoolCentroid",
+  "llvm.genx.GenISA.vaBoolSum",
+  "llvm.genx.GenISA.vaCentroid",
+  "llvm.genx.GenISA.vaConvolve",
+  "llvm.genx.GenISA.vaConvolveGRF.16x1",
+  "llvm.genx.GenISA.vaConvolveGRF.16x4",
+  "llvm.genx.GenISA.vaDilate",
+  "llvm.genx.GenISA.vaErode",
+  "llvm.genx.GenISA.vaMinMax",
+  "llvm.genx.GenISA.vaMinMaxFilter",
+  "llvm.genx.GenISA.vectorUniform",
+  "llvm.genx.GenISA.vmeSendFBR",
+  "llvm.genx.GenISA.vmeSendFBR2",
+  "llvm.genx.GenISA.vmeSendIME",
+  "llvm.genx.GenISA.vmeSendIME2",
+  "llvm.genx.GenISA.vmeSendSIC",
+  "llvm.genx.GenISA.vmeSendSIC2",
+  "llvm.genx.GenISA.wavebarrier",
+#endif
+
+// Intrinsic ID to overload bitset
+#ifdef GET_INTRINSIC_OVERLOAD_TABLE
+static const uint8_t OTable[] = {
+  0 | (1U<<1) | (1U<<3) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<2),
+  0 | (1U<<4) | (1U<<5) | (1U<<7),
+  0 | (1U<<2) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<3) | (1U<<4) | (1U<<7),
+  0 | (1U<<3),
+  0 | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<1) | (1U<<2),
+  0 | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4),
+  0 | (1U<<2) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<3) | (1U<<4) | (1U<<7),
+  0 | (1U<<4),
+  0 | (1U<<0) | (1U<<1) | (1U<<7),
+  0 | (1U<<0) | (1U<<1),
+  0 | (1U<<3) | (1U<<5) | (1U<<7),
+  0 | (1U<<0) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<6),
+  0 | (1U<<1) | (1U<<2),
+  0 | (1U<<1) | (1U<<4) | (1U<<5),
+  0 | (1U<<1) | (1U<<4) | (1U<<5) | (1U<<6),
+  0 | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4),
+  0 | (1U<<0) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<2) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2),
+  0 | (1U<<0) | (1U<<1) | (1U<<3) | (1U<<4) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<3) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<2) | (1U<<3) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<4) | (1U<<5) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<3) | (1U<<4) | (1U<<5),
+  0 | (1U<<1),
+  0 | (1U<<0) | (1U<<1) | (1U<<2) | (1U<<6) | (1U<<7),
+  0 | (1U<<0) | (1U<<1) | (1U<<3) | (1U<<4),
+  0 | (1U<<7),
+  0 | (1U<<3)
+};
+
+return (OTable[id/8] & (1 << (id%8))) != 0;
+#endif
+
+// Sorted by length table
+#ifdef GET_FUNCTION_RECOGNIZER
+
+struct IntrinsicEntry
+{
+   unsigned num;
+   GenISAIntrinsic::ID id;
+   const char* str;
+};
+
+static const std::array<IntrinsicEntry,366> LengthTable = {{
+{ 0, GenISAIntrinsic::GenISA_2fto2bf, "2fto2bf@"},
+{ 1, GenISAIntrinsic::GenISA_AcceptHitAndEndSearchHL, "AcceptHitAndEndSearchHL@"}, { 6, GenISAIntrinsic::GenISA_AllocaNumber, "AllocaNumber@"},
+{ 6, GenISAIntrinsic::GenISA_AllocateRayQuery, "AllocateRayQuery@"}, { 10, GenISAIntrinsic::GenISA_AsyncStackID, "AsyncStackID@"},
+{ 10, GenISAIntrinsic::GenISA_AsyncStackPtr, "AsyncStackPtr@"}, { 0, GenISAIntrinsic::GenISA_BindlessThreadDispatch, "BindlessThreadDispatch@"},
+{ 2, GenISAIntrinsic::GenISA_CallShaderHL, "CallShaderHL@"}, { 2, GenISAIntrinsic::GenISA_CatchAllDebugLine, "CatchAllDebugLine@"},
+{ 1, GenISAIntrinsic::GenISA_ContinuationSignpost, "ContinuationSignpost@"}, { 6, GenISAIntrinsic::GenISA_DCL_DSCntrlPtInputVec, "DCL_DSCntrlPtInputVec@"},
+{ 6, GenISAIntrinsic::GenISA_DCL_DSInputTessFactor, "DCL_DSInputTessFactor@"}, { 6, GenISAIntrinsic::GenISA_DCL_DSPatchConstInputVec, "DCL_DSPatchConstInputVec@"},
+{ 6, GenISAIntrinsic::GenISA_DCL_GSinputVec, "DCL_GSinputVec@"}, { 6, GenISAIntrinsic::GenISA_DCL_GSsystemValue, "DCL_GSsystemValue@"},
+{ 6, GenISAIntrinsic::GenISA_DCL_HSControlPointID, "DCL_HSControlPointID@"}, { 6, GenISAIntrinsic::GenISA_DCL_HSOutputCntrlPtInputVec, "DCL_HSOutputCntrlPtInputVec@"},
+{ 6, GenISAIntrinsic::GenISA_DCL_HSPatchConstInputVec, "DCL_HSPatchConstInputVec@"}, { 6, GenISAIntrinsic::GenISA_DCL_HSinputVec, "DCL_HSinputVec@"},
+{ 5, GenISAIntrinsic::GenISA_DCL_ShaderInputVec, "DCL_ShaderInputVec@"}, { 5, GenISAIntrinsic::GenISA_DCL_SystemValue, "DCL_SystemValue@"},
+{ 9, GenISAIntrinsic::GenISA_DCL_input, "DCL_input@"}, { 9, GenISAIntrinsic::GenISA_DCL_inputVec, "DCL_inputVec@"},
+{ 8, GenISAIntrinsic::GenISA_DispatchDimensions, "DispatchDimensions@"}, { 8, GenISAIntrinsic::GenISA_DispatchRayIndex, "DispatchRayIndex@"},
+{ 1, GenISAIntrinsic::GenISA_EmitHitAttributes, "EmitHitAttributes@"}, { 1, GenISAIntrinsic::GenISA_EndPrimitive, "EndPrimitive@"},
+{ 1, GenISAIntrinsic::GenISA_FPBinaryOperator, "FPBinaryOperator@"}, { 1, GenISAIntrinsic::GenISA_FillValue, "FillValue@"},
+{ 3, GenISAIntrinsic::GenISA_GetBufferPtr, "GetBufferPtr@"}, { 3, GenISAIntrinsic::GenISA_GetImplicitBufferPtr, "GetImplicitBufferPtr@"},
+{ 3, GenISAIntrinsic::GenISA_GetLocalIdBufferPtr, "GetLocalIdBufferPtr@"}, { 3, GenISAIntrinsic::GenISA_GetPixelMask, "GetPixelMask@"},
+{ 3, GenISAIntrinsic::GenISA_GetShaderRecordPtr, "GetShaderRecordPtr@"}, { 6, GenISAIntrinsic::GenISA_GlobalBufferPointer, "GlobalBufferPointer@"},
+{ 6, GenISAIntrinsic::GenISA_GlobalRootSignatureValue, "GlobalRootSignatureValue@"}, { 9, GenISAIntrinsic::GenISA_GradientX, "GradientX@"},
+{ 9, GenISAIntrinsic::GenISA_GradientXfine, "GradientXfine@"}, { 9, GenISAIntrinsic::GenISA_GradientY, "GradientY@"},
+{ 9, GenISAIntrinsic::GenISA_GradientYfine, "GradientYfine@"}, { 2, GenISAIntrinsic::GenISA_GsCutControlHeader, "GsCutControlHeader@"},
+{ 2, GenISAIntrinsic::GenISA_GsStreamHeader, "GsStreamHeader@"}, { 3, GenISAIntrinsic::GenISA_HDCCCSFastClear, "HDCCCSFastClear@"},
+{ 3, GenISAIntrinsic::GenISA_HDCuncompressedwrite, "HDCuncompressedwrite@"}, { 1, GenISAIntrinsic::GenISA_HSURBPatchHeaderRead, "HSURBPatchHeaderRead@"},
+{ 1, GenISAIntrinsic::GenISA_HitKind, "HitKind@"}, { 5, GenISAIntrinsic::GenISA_IEEE_Divide, "IEEE_Divide@"},
+{ 5, GenISAIntrinsic::GenISA_IEEE_Sqrt, "IEEE_Sqrt@"}, { 1, GenISAIntrinsic::GenISA_IgnoreHitHL, "IgnoreHitHL@"},
+{ 2, GenISAIntrinsic::GenISA_InitDiscardMask, "InitDiscardMask@"}, { 2, GenISAIntrinsic::GenISA_InlinedData, "InlinedData@"},
+{ 2, GenISAIntrinsic::GenISA_InnerScalarTessFactors, "InnerScalarTessFactors@"}, { 9, GenISAIntrinsic::GenISA_Interpolant, "Interpolant@"},
+{ 11, GenISAIntrinsic::GenISA_Interpolate, "Interpolate@"}, { 11, GenISAIntrinsic::GenISA_Interpolate2, "Interpolate2@"},
+{ 1, GenISAIntrinsic::GenISA_IsHelperInvocation, "IsHelperInvocation@"}, { 10, GenISAIntrinsic::GenISA_LSC2DBlockRead, "LSC2DBlockRead@"},
+{ 10, GenISAIntrinsic::GenISA_LSC2DBlockWrite, "LSC2DBlockWrite@"}, { 11, GenISAIntrinsic::GenISA_LSCAtomicFP32, "LSCAtomicFP32@"},
+{ 11, GenISAIntrinsic::GenISA_LSCAtomicFP64, "LSCAtomicFP64@"}, { 9, GenISAIntrinsic::GenISA_LSCAtomicInts, "LSCAtomicInts@"},
+{ 3, GenISAIntrinsic::GenISA_LSCFence, "LSCFence@"}, { 7, GenISAIntrinsic::GenISA_LSCLoad, "LSCLoad@"},
+{ 7, GenISAIntrinsic::GenISA_LSCLoadBlock, "LSCLoadBlock@"}, { 7, GenISAIntrinsic::GenISA_LSCLoadStatus, "LSCLoadStatus@"},
+{ 3, GenISAIntrinsic::GenISA_LSCPrefetch, "LSCPrefetch@"}, { 8, GenISAIntrinsic::GenISA_LSCStore, "LSCStore@"},
+{ 8, GenISAIntrinsic::GenISA_LSCStoreBlock, "LSCStoreBlock@"}, { 5, GenISAIntrinsic::GenISA_LocalBufferPointer, "LocalBufferPointer@"},
+{ 5, GenISAIntrinsic::GenISA_LocalRootSignatureValue, "LocalRootSignatureValue@"}, { 12, GenISAIntrinsic::GenISA_MediaBlockRead, "MediaBlockRead@"},
+{ 12, GenISAIntrinsic::GenISA_MediaBlockRectangleRead, "MediaBlockRectangleRead@"}, { 10, GenISAIntrinsic::GenISA_MediaBlockWrite, "MediaBlockWrite@"},
+{ 6, GenISAIntrinsic::GenISA_OUTPUT, "OUTPUT@"}, { 8, GenISAIntrinsic::GenISA_OUTPUTGS, "OUTPUTGS@"},
+{ 8, GenISAIntrinsic::GenISA_OUTPUTGS2, "OUTPUTGS2@"}, { 3, GenISAIntrinsic::GenISA_OuterScalarTessFactors, "OuterScalarTessFactors@"},
+{ 23, GenISAIntrinsic::GenISA_OutputMeshPrimitiveData, "OutputMeshPrimitiveData@"}, { 23, GenISAIntrinsic::GenISA_OutputMeshPrimitiveDataInput, "OutputMeshPrimitiveDataInput@"},
+{ 10, GenISAIntrinsic::GenISA_OutputMeshSivDataInput, "OutputMeshSivDataInput@"}, { 20, GenISAIntrinsic::GenISA_OutputMeshVertexData, "OutputMeshVertexData@"},
+{ 20, GenISAIntrinsic::GenISA_OutputMeshVertexDataInput, "OutputMeshVertexDataInput@"}, { 14, GenISAIntrinsic::GenISA_OutputTaskData, "OutputTaskData@"},
+{ 14, GenISAIntrinsic::GenISA_OutputTaskDataInput, "OutputTaskDataInput@"}, { 10, GenISAIntrinsic::GenISA_OutputTessControlPoint, "OutputTessControlPoint@"},
+{ 10, GenISAIntrinsic::GenISA_OutputTessFactors, "OutputTessFactors@"}, { 11, GenISAIntrinsic::GenISA_PHASE_INPUT, "PHASE_INPUT@"},
+{ 11, GenISAIntrinsic::GenISA_PHASE_INPUTVEC, "PHASE_INPUTVEC@"}, { 12, GenISAIntrinsic::GenISA_PHASE_OUTPUT, "PHASE_OUTPUT@"},
+{ 12, GenISAIntrinsic::GenISA_PHASE_OUTPUTVEC, "PHASE_OUTPUTVEC@"}, { 2, GenISAIntrinsic::GenISA_PatchConstantOutput, "PatchConstantOutput@"},
+{ 2, GenISAIntrinsic::GenISA_PayloadPtr, "PayloadPtr@"}, { 13, GenISAIntrinsic::GenISA_PixelPositionX, "PixelPositionX@"},
+{ 13, GenISAIntrinsic::GenISA_PixelPositionY, "PixelPositionY@"}, { 4, GenISAIntrinsic::GenISA_PullCentroidBarys, "PullCentroidBarys@"},
+{ 5, GenISAIntrinsic::GenISA_PullSampleIndexBarys, "PullSampleIndexBarys@"}, { 5, GenISAIntrinsic::GenISA_PullSnappedBarys, "PullSnappedBarys@"},
+{ 0, GenISAIntrinsic::GenISA_QuadPrefix, "QuadPrefix@"}, { 1, GenISAIntrinsic::GenISA_ROUNDNE, "ROUNDNE@"},
+{ 2, GenISAIntrinsic::GenISA_RTDualBlendSource, "RTDualBlendSource@"}, { 2, GenISAIntrinsic::GenISA_RTStatefulBTIAndOffset, "RTStatefulBTIAndOffset@"},
+{ 2, GenISAIntrinsic::GenISA_RTWrite, "RTWrite@"}, { 3, GenISAIntrinsic::GenISA_RayInfo, "RayInfo@"},
+{ 3, GenISAIntrinsic::GenISA_RayTCurrent, "RayTCurrent@"}, { 2, GenISAIntrinsic::GenISA_ReadTraceRaySync, "ReadTraceRaySync@"},
+{ 16, GenISAIntrinsic::GenISA_RenderTargetRead, "RenderTargetRead@"}, { 16, GenISAIntrinsic::GenISA_RenderTargetReadSampleFreq, "RenderTargetReadSampleFreq@"},
+{ 2, GenISAIntrinsic::GenISA_ReportHitHL, "ReportHitHL@"}, { 1, GenISAIntrinsic::GenISA_RuntimeValue, "RuntimeValue@"},
+{ 2, GenISAIntrinsic::GenISA_SWHotZonePtr, "SWHotZonePtr@"}, { 2, GenISAIntrinsic::GenISA_SWStackPtr, "SWStackPtr@"},
+{ 12, GenISAIntrinsic::GenISA_SampleOffsetX, "SampleOffsetX@"}, { 12, GenISAIntrinsic::GenISA_SampleOffsetY, "SampleOffsetY@"},
+{ 3, GenISAIntrinsic::GenISA_SetDebugReg, "SetDebugReg@"}, { 3, GenISAIntrinsic::GenISA_SetImplicitBufferPtr, "SetImplicitBufferPtr@"},
+{ 3, GenISAIntrinsic::GenISA_SetLocalIdBufferPtr, "SetLocalIdBufferPtr@"}, { 3, GenISAIntrinsic::GenISA_SetStream, "SetStream@"},
+{ 1, GenISAIntrinsic::GenISA_ShadowMemoryToSyncStack, "ShadowMemoryToSyncStack@"}, { 1, GenISAIntrinsic::GenISA_SpillValue, "SpillValue@"},
+{ 5, GenISAIntrinsic::GenISA_StackAlloca, "StackAlloca@"}, { 5, GenISAIntrinsic::GenISA_StackIDRelease, "StackIDRelease@"},
+{ 5, GenISAIntrinsic::GenISA_StackSize, "StackSize@"}, { 9, GenISAIntrinsic::GenISA_SyncStackID, "SyncStackID@"},
+{ 9, GenISAIntrinsic::GenISA_SyncStackPtr, "SyncStackPtr@"}, { 9, GenISAIntrinsic::GenISA_SyncStackToShadowMemory, "SyncStackToShadowMemory@"},
+{ 4, GenISAIntrinsic::GenISA_TileXOffset, "TileXOffset@"}, { 4, GenISAIntrinsic::GenISA_TileYOffset, "TileYOffset@"},
+{ 13, GenISAIntrinsic::GenISA_TraceRayAsync, "TraceRayAsync@"}, { 13, GenISAIntrinsic::GenISA_TraceRayAsyncHL, "TraceRayAsyncHL@"},
+{ 14, GenISAIntrinsic::GenISA_TraceRayInlineAbort, "TraceRayInlineAbort@"}, { 15, GenISAIntrinsic::GenISA_TraceRayInlineCandidateType, "TraceRayInlineCandidateType@"},
+{ 20, GenISAIntrinsic::GenISA_TraceRayInlineCommitNonOpaqueTriangleHit, "TraceRayInlineCommitNonOpaqueTriangleHit@"}, { 20, GenISAIntrinsic::GenISA_TraceRayInlineCommitProceduralPrimitiveHit, "TraceRayInlineCommitProceduralPrimitiveHit@"},
+{ 20, GenISAIntrinsic::GenISA_TraceRayInlineCommittedStatus, "TraceRayInlineCommittedStatus@"}, { 14, GenISAIntrinsic::GenISA_TraceRayInlineHL, "TraceRayInlineHL@"},
+{ 14, GenISAIntrinsic::GenISA_TraceRayInlineRayInfo, "TraceRayInlineRayInfo@"}, { 12, GenISAIntrinsic::GenISA_TraceRaySync, "TraceRaySync@"},
+{ 19, GenISAIntrinsic::GenISA_TraceRaySyncProceed, "TraceRaySyncProceed@"}, { 19, GenISAIntrinsic::GenISA_TraceRaySyncProceedHL, "TraceRaySyncProceedHL@"},
+{ 7, GenISAIntrinsic::GenISA_URBRead, "URBRead@"}, { 7, GenISAIntrinsic::GenISA_URBReadOutput, "URBReadOutput@"},
+{ 3, GenISAIntrinsic::GenISA_URBWrite, "URBWrite@"}, { 14, GenISAIntrinsic::GenISA_UnmaskedRegionBegin, "UnmaskedRegionBegin@"},
+{ 14, GenISAIntrinsic::GenISA_UnmaskedRegionEnd, "UnmaskedRegionEnd@"}, { 1, GenISAIntrinsic::GenISA_UpdateDiscardMask, "UpdateDiscardMask@"},
+{ 0, GenISAIntrinsic::GenISA_VLAStackAlloca, "VLAStackAlloca@"}, { 4, GenISAIntrinsic::GenISA_WaveAll, "WaveAll@"},
+{ 4, GenISAIntrinsic::GenISA_WaveBallot, "WaveBallot@"}, { 4, GenISAIntrinsic::GenISA_WaveClustered, "WaveClustered@"},
+{ 4, GenISAIntrinsic::GenISA_WaveInverseBallot, "WaveInverseBallot@"}, { 4, GenISAIntrinsic::GenISA_WavePrefix, "WavePrefix@"},
+{ 4, GenISAIntrinsic::GenISA_WaveShuffleIndex, "WaveShuffleIndex@"}, { 1, GenISAIntrinsic::GenISA_WorkGroupAny, "WorkGroupAny@"},
+{ 4, GenISAIntrinsic::GenISA_add_pair, "add_pair@"}, { 4, GenISAIntrinsic::GenISA_add_rtz, "add_rtz@"},
+{ 1, GenISAIntrinsic::GenISA_assume_uniform, "assume_uniform@"}, { 13, GenISAIntrinsic::GenISA_atomiccounterinc, "atomiccounterinc@"},
+{ 13, GenISAIntrinsic::GenISA_atomiccounterpredec, "atomiccounterpredec@"}, { 2, GenISAIntrinsic::GenISA_bf8tohf, "bf8tohf@"},
+{ 2, GenISAIntrinsic::GenISA_bfi, "bfi@"}, { 2, GenISAIntrinsic::GenISA_bfrev, "bfrev@"},
+{ 2, GenISAIntrinsic::GenISA_bftof, "bftof@"}, { 21, GenISAIntrinsic::GenISA_broadcastMessagePhase, "broadcastMessagePhase@"},
+{ 21, GenISAIntrinsic::GenISA_broadcastMessagePhaseV, "broadcastMessagePhaseV@"}, { 3, GenISAIntrinsic::GenISA_cmpSADs, "cmpSADs@"},
+{ 3, GenISAIntrinsic::GenISA_cmpxchgatomicstructured, "cmpxchgatomicstructured@"}, { 19, GenISAIntrinsic::GenISA_createMessagePhases, "createMessagePhases@"},
+{ 25, GenISAIntrinsic::GenISA_createMessagePhasesNoInit, "createMessagePhasesNoInit@"}, { 25, GenISAIntrinsic::GenISA_createMessagePhasesNoInitV, "createMessagePhasesNoInitV@"},
+{ 19, GenISAIntrinsic::GenISA_createMessagePhasesV, "createMessagePhasesV@"}, { 1, GenISAIntrinsic::GenISA_cycleCounter, "cycleCounter@"},
+{ 1, GenISAIntrinsic::GenISA_discard, "discard@"}, { 6, GenISAIntrinsic::GenISA_dp4a_ss, "dp4a_ss@"},
+{ 6, GenISAIntrinsic::GenISA_dp4a_su, "dp4a_su@"}, { 6, GenISAIntrinsic::GenISA_dp4a_us, "dp4a_us@"},
+{ 6, GenISAIntrinsic::GenISA_dp4a_uu, "dp4a_uu@"}, { 2, GenISAIntrinsic::GenISA_dpas, "dpas@"},
+{ 2, GenISAIntrinsic::GenISA_dual_subslice_id, "dual_subslice_id@"}, { 9, GenISAIntrinsic::GenISA_dummyInst, "dummyInst@"},
+{ 9, GenISAIntrinsic::GenISA_dummyInstID, "dummyInstID@"}, { 1, GenISAIntrinsic::GenISA_dwordatomicstructured, "dwordatomicstructured@"},
+{ 3, GenISAIntrinsic::GenISA_eu_id, "eu_id@"}, { 10, GenISAIntrinsic::GenISA_eu_thread_id, "eu_thread_id@"},
+{ 10, GenISAIntrinsic::GenISA_eu_thread_pause, "eu_thread_pause@"}, { 1, GenISAIntrinsic::GenISA_evaluateSampler, "evaluateSampler@"},
+{ 1, GenISAIntrinsic::GenISA_extractMVAndSAD, "extractMVAndSAD@"}, { 1, GenISAIntrinsic::GenISA_f32tof16_rtz, "f32tof16_rtz@"},
+{ 17, GenISAIntrinsic::GenISA_fcmpxchgatomicraw, "fcmpxchgatomicraw@"}, { 17, GenISAIntrinsic::GenISA_fcmpxchgatomicrawA64, "fcmpxchgatomicrawA64@"},
+{ 14, GenISAIntrinsic::GenISA_fcmpxchgatomicstructured, "fcmpxchgatomicstructured@"}, { 8, GenISAIntrinsic::GenISA_firstbitHi, "firstbitHi@"},
+{ 8, GenISAIntrinsic::GenISA_firstbitLo, "firstbitLo@"}, { 8, GenISAIntrinsic::GenISA_firstbitShi, "firstbitShi@"},
+{ 14, GenISAIntrinsic::GenISA_floatatomicraw, "floatatomicraw@"}, { 14, GenISAIntrinsic::GenISA_floatatomicrawA64, "floatatomicrawA64@"},
+{ 11, GenISAIntrinsic::GenISA_floatatomicstructured, "floatatomicstructured@"}, { 2, GenISAIntrinsic::GenISA_flushsampler, "flushsampler@"},
+{ 6, GenISAIntrinsic::GenISA_fma_rtn, "fma_rtn@"}, { 6, GenISAIntrinsic::GenISA_fma_rtp, "fma_rtp@"},
+{ 6, GenISAIntrinsic::GenISA_fma_rtz, "fma_rtz@"}, { 1, GenISAIntrinsic::GenISA_frc, "frc@"},
+{ 1, GenISAIntrinsic::GenISA_fsat, "fsat@"}, { 3, GenISAIntrinsic::GenISA_ftobf, "ftobf@"},
+{ 7, GenISAIntrinsic::GenISA_ftof_rte, "ftof_rte@"}, { 7, GenISAIntrinsic::GenISA_ftof_rtn, "ftof_rtn@"},
+{ 7, GenISAIntrinsic::GenISA_ftof_rtp, "ftof_rtp@"}, { 7, GenISAIntrinsic::GenISA_ftof_rtz, "ftof_rtz@"},
+{ 7, GenISAIntrinsic::GenISA_ftoi_rte, "ftoi_rte@"}, { 7, GenISAIntrinsic::GenISA_ftoi_rtn, "ftoi_rtn@"},
+{ 7, GenISAIntrinsic::GenISA_ftoi_rtp, "ftoi_rtp@"}, { 3, GenISAIntrinsic::GenISA_ftotf32, "ftotf32@"},
+{ 8, GenISAIntrinsic::GenISA_ftoui_rte, "ftoui_rte@"}, { 8, GenISAIntrinsic::GenISA_ftoui_rtn, "ftoui_rtn@"},
+{ 8, GenISAIntrinsic::GenISA_ftoui_rtp, "ftoui_rtp@"}, { 7, GenISAIntrinsic::GenISA_gather4Cptr, "gather4Cptr@"},
+{ 9, GenISAIntrinsic::GenISA_gather4POCptr, "gather4POCptr@"}, { 9, GenISAIntrinsic::GenISA_gather4POptr, "gather4POptr@"},
+{ 7, GenISAIntrinsic::GenISA_gather4ptr, "gather4ptr@"}, { 3, GenISAIntrinsic::GenISA_getEnqueuedLocalSize, "getEnqueuedLocalSize@"},
+{ 3, GenISAIntrinsic::GenISA_getGlobalSize, "getGlobalSize@"}, { 11, GenISAIntrinsic::GenISA_getLocalID_X, "getLocalID_X@"},
+{ 11, GenISAIntrinsic::GenISA_getLocalID_Y, "getLocalID_Y@"}, { 11, GenISAIntrinsic::GenISA_getLocalID_Z, "getLocalID_Z@"},
+{ 8, GenISAIntrinsic::GenISA_getLocalSize, "getLocalSize@"}, { 15, GenISAIntrinsic::GenISA_getMessagePhase, "getMessagePhase@"},
+{ 15, GenISAIntrinsic::GenISA_getMessagePhaseV, "getMessagePhaseV@"}, { 16, GenISAIntrinsic::GenISA_getMessagePhaseX, "getMessagePhaseX@"},
+{ 16, GenISAIntrinsic::GenISA_getMessagePhaseXV, "getMessagePhaseXV@"}, { 3, GenISAIntrinsic::GenISA_getNumWorkGroups, "getNumWorkGroups@"},
+{ 4, GenISAIntrinsic::GenISA_getPayloadHeader, "getPayloadHeader@"}, { 6, GenISAIntrinsic::GenISA_getPrintfBuffer, "getPrintfBuffer@"},
+{ 6, GenISAIntrinsic::GenISA_getPrivateBase, "getPrivateBase@"}, { 4, GenISAIntrinsic::GenISA_getR0, "getR0@"},
+{ 4, GenISAIntrinsic::GenISA_getRtGlobalBufferPtr, "getRtGlobalBufferPtr@"}, { 6, GenISAIntrinsic::GenISA_getSR0, "getSR0@"},
+{ 6, GenISAIntrinsic::GenISA_getSR0_0, "getSR0_0@"}, { 14, GenISAIntrinsic::GenISA_getStageInGridOrigin, "getStageInGridOrigin@"},
+{ 14, GenISAIntrinsic::GenISA_getStageInGridSize, "getStageInGridSize@"}, { 4, GenISAIntrinsic::GenISA_getSyncBuffer, "getSyncBuffer@"},
+{ 3, GenISAIntrinsic::GenISA_getWorkDim, "getWorkDim@"}, { 1, GenISAIntrinsic::GenISA_globalSync, "globalSync@"},
+{ 1, GenISAIntrinsic::GenISA_hftobf8, "hftobf8@"}, { 12, GenISAIntrinsic::GenISA_hw_thread_id, "hw_thread_id@"},
+{ 12, GenISAIntrinsic::GenISA_hw_thread_id_alloca, "hw_thread_id_alloca@"}, { 1, GenISAIntrinsic::GenISA_ibfe, "ibfe@"},
+{ 17, GenISAIntrinsic::GenISA_icmpxchgatomicraw, "icmpxchgatomicraw@"}, { 17, GenISAIntrinsic::GenISA_icmpxchgatomicrawA64, "icmpxchgatomicrawA64@"},
+{ 14, GenISAIntrinsic::GenISA_icmpxchgatomictyped, "icmpxchgatomictyped@"}, { 1, GenISAIntrinsic::GenISA_imulH, "imulH@"},
+{ 12, GenISAIntrinsic::GenISA_intatomicraw, "intatomicraw@"}, { 12, GenISAIntrinsic::GenISA_intatomicrawA64, "intatomicrawA64@"},
+{ 9, GenISAIntrinsic::GenISA_intatomictyped, "intatomictyped@"}, { 2, GenISAIntrinsic::GenISA_is_uniform, "is_uniform@"},
+{ 2, GenISAIntrinsic::GenISA_isat, "isat@"}, { 7, GenISAIntrinsic::GenISA_itof_rtn, "itof_rtn@"},
+{ 7, GenISAIntrinsic::GenISA_itof_rtp, "itof_rtp@"}, { 7, GenISAIntrinsic::GenISA_itof_rtz, "itof_rtz@"},
+{ 1, GenISAIntrinsic::GenISA_launder, "launder@"}, { 3, GenISAIntrinsic::GenISA_ldmcsptr, "ldmcsptr@"},
+{ 7, GenISAIntrinsic::GenISA_ldmsptr, "ldmsptr@"}, { 7, GenISAIntrinsic::GenISA_ldmsptr16bit, "ldmsptr16bit@"},
+{ 2, GenISAIntrinsic::GenISA_ldptr, "ldptr@"}, { 5, GenISAIntrinsic::GenISA_ldraw_indexed, "ldraw_indexed@"},
+{ 5, GenISAIntrinsic::GenISA_ldrawvector_indexed, "ldrawvector_indexed@"}, { 2, GenISAIntrinsic::GenISA_ldstructured, "ldstructured@"},
+{ 1, GenISAIntrinsic::GenISA_lodptr, "lodptr@"}, { 1, GenISAIntrinsic::GenISA_memoryfence, "memoryfence@"},
+{ 3, GenISAIntrinsic::GenISA_mov_identity, "mov_identity@"}, { 3, GenISAIntrinsic::GenISA_movcr, "movcr@"},
+{ 3, GenISAIntrinsic::GenISA_movflag, "movflag@"}, { 4, GenISAIntrinsic::GenISA_mul_pair, "mul_pair@"},
+{ 4, GenISAIntrinsic::GenISA_mul_rtz, "mul_rtz@"}, { 2, GenISAIntrinsic::GenISA_pair_to_ptr, "pair_to_ptr@"},
+{ 2, GenISAIntrinsic::GenISA_patchInstanceId, "patchInstanceId@"}, { 1, GenISAIntrinsic::GenISA_ptr_to_pair, "ptr_to_pair@"},
+{ 2, GenISAIntrinsic::GenISA_readsurfaceinfoptr, "readsurfaceinfoptr@"}, { 3, GenISAIntrinsic::GenISA_resetRoundingMode, "resetRoundingMode@"},
+{ 3, GenISAIntrinsic::GenISA_resinfoptr, "resinfoptr@"}, { 1, GenISAIntrinsic::GenISA_rsq, "rsq@"},
+{ 4, GenISAIntrinsic::GenISA_rt_spill_anchor, "rt_spill_anchor@"}, { 4, GenISAIntrinsic::GenISA_rt_swstack_offset, "rt_swstack_offset@"},
+{ 7, GenISAIntrinsic::GenISA_sampleBCptr, "sampleBCptr@"}, { 7, GenISAIntrinsic::GenISA_sampleBptr, "sampleBptr@"},
+{ 6, GenISAIntrinsic::GenISA_sampleCptr, "sampleCptr@"}, { 7, GenISAIntrinsic::GenISA_sampleDCptr, "sampleDCptr@"},
+{ 7, GenISAIntrinsic::GenISA_sampleDptr, "sampleDptr@"}, { 6, GenISAIntrinsic::GenISA_sampleKillPix, "sampleKillPix@"},
+{ 7, GenISAIntrinsic::GenISA_sampleLCptr, "sampleLCptr@"}, { 7, GenISAIntrinsic::GenISA_sampleLptr, "sampleLptr@"},
+{ 6, GenISAIntrinsic::GenISA_sampleinfoptr, "sampleinfoptr@"}, { 6, GenISAIntrinsic::GenISA_sampleptr, "sampleptr@"},
+{ 15, GenISAIntrinsic::GenISA_setMessagePhase, "setMessagePhase@"}, { 15, GenISAIntrinsic::GenISA_setMessagePhaseV, "setMessagePhaseV@"},
+{ 16, GenISAIntrinsic::GenISA_setMessagePhaseX, "setMessagePhaseX@"}, { 16, GenISAIntrinsic::GenISA_setMessagePhaseXV, "setMessagePhaseXV@"},
+{ 16, GenISAIntrinsic::GenISA_setMessagePhaseX_legacy, "setMessagePhaseX_legacy@"}, { 15, GenISAIntrinsic::GenISA_setMessagePhase_legacy, "setMessagePhase_legacy@"},
+{ 3, GenISAIntrinsic::GenISA_setRoundingModeFP, "setRoundingModeFP@"}, { 13, GenISAIntrinsic::GenISA_simdBlockRead, "simdBlockRead@"},
+{ 13, GenISAIntrinsic::GenISA_simdBlockReadBindless, "simdBlockReadBindless@"}, { 14, GenISAIntrinsic::GenISA_simdBlockWrite, "simdBlockWrite@"},
+{ 14, GenISAIntrinsic::GenISA_simdBlockWriteBindless, "simdBlockWriteBindless@"}, { 19, GenISAIntrinsic::GenISA_simdGetMessagePhase, "simdGetMessagePhase@"},
+{ 19, GenISAIntrinsic::GenISA_simdGetMessagePhaseV, "simdGetMessagePhaseV@"}, { 4, GenISAIntrinsic::GenISA_simdLaneId, "simdLaneId@"},
+{ 14, GenISAIntrinsic::GenISA_simdMediaBlockRead, "simdMediaBlockRead@"}, { 14, GenISAIntrinsic::GenISA_simdMediaBlockWrite, "simdMediaBlockWrite@"},
+{ 9, GenISAIntrinsic::GenISA_simdMediaRegionCopy, "simdMediaRegionCopy@"}, { 19, GenISAIntrinsic::GenISA_simdSetMessagePhase, "simdSetMessagePhase@"},
+{ 19, GenISAIntrinsic::GenISA_simdSetMessagePhaseV, "simdSetMessagePhaseV@"}, { 11, GenISAIntrinsic::GenISA_simdShuffleDown, "simdShuffleDown@"},
+{ 11, GenISAIntrinsic::GenISA_simdShuffleXor, "simdShuffleXor@"}, { 5, GenISAIntrinsic::GenISA_simdSize, "simdSize@"},
+{ 1, GenISAIntrinsic::GenISA_slice_id, "slice_id@"}, { 1, GenISAIntrinsic::GenISA_source_value, "source_value@"},
+{ 5, GenISAIntrinsic::GenISA_srnd_ftohf, "srnd_ftohf@"}, { 5, GenISAIntrinsic::GenISA_srnd_hftobf8, "srnd_hftobf8@"},
+{ 2, GenISAIntrinsic::GenISA_staticConstantPatchValue, "staticConstantPatchValue@"}, { 8, GenISAIntrinsic::GenISA_storeraw_indexed, "storeraw_indexed@"},
+{ 8, GenISAIntrinsic::GenISA_storerawvector_indexed, "storerawvector_indexed@"}, { 15, GenISAIntrinsic::GenISA_storestructured1, "storestructured1@"},
+{ 15, GenISAIntrinsic::GenISA_storestructured2, "storestructured2@"}, { 15, GenISAIntrinsic::GenISA_storestructured3, "storestructured3@"},
+{ 15, GenISAIntrinsic::GenISA_storestructured4, "storestructured4@"}, { 4, GenISAIntrinsic::GenISA_sub_group_dpas, "sub_group_dpas@"},
+{ 4, GenISAIntrinsic::GenISA_sub_pair, "sub_pair@"}, { 3, GenISAIntrinsic::GenISA_subslice_id, "subslice_id@"},
+{ 1, GenISAIntrinsic::GenISA_systemmemoryfence, "systemmemoryfence@"}, { 1, GenISAIntrinsic::GenISA_tf32tof, "tf32tof@"},
+{ 18, GenISAIntrinsic::GenISA_threadgroupbarrier, "threadgroupbarrier@"}, { 19, GenISAIntrinsic::GenISA_threadgroupbarrier_signal, "threadgroupbarrier_signal@"},
+{ 19, GenISAIntrinsic::GenISA_threadgroupbarrier_wait, "threadgroupbarrier_wait@"}, { 25, GenISAIntrinsic::GenISA_threadgroupnamedbarriers_signal, "threadgroupnamedbarriers_signal@"},
+{ 25, GenISAIntrinsic::GenISA_threadgroupnamedbarriers_wait, "threadgroupnamedbarriers_wait@"}, { 5, GenISAIntrinsic::GenISA_typedmemoryfence, "typedmemoryfence@"},
+{ 5, GenISAIntrinsic::GenISA_typedread, "typedread@"}, { 5, GenISAIntrinsic::GenISA_typedwrite, "typedwrite@"},
+{ 2, GenISAIntrinsic::GenISA_uaddc, "uaddc@"}, { 12, GenISAIntrinsic::GenISA_uavSerializeAll, "uavSerializeAll@"},
+{ 12, GenISAIntrinsic::GenISA_uavSerializeOnResID, "uavSerializeOnResID@"}, { 1, GenISAIntrinsic::GenISA_ubfe, "ubfe@"},
+{ 8, GenISAIntrinsic::GenISA_uitof_rtn, "uitof_rtn@"}, { 8, GenISAIntrinsic::GenISA_uitof_rtp, "uitof_rtp@"},
+{ 8, GenISAIntrinsic::GenISA_uitof_rtz, "uitof_rtz@"}, { 1, GenISAIntrinsic::GenISA_umulH, "umulH@"},
+{ 1, GenISAIntrinsic::GenISA_urbfence, "urbfence@"}, { 2, GenISAIntrinsic::GenISA_usat, "usat@"},
+{ 2, GenISAIntrinsic::GenISA_usubb, "usubb@"}, { 6, GenISAIntrinsic::GenISA_vaBoolCentroid, "vaBoolCentroid@"},
+{ 6, GenISAIntrinsic::GenISA_vaBoolSum, "vaBoolSum@"}, { 3, GenISAIntrinsic::GenISA_vaCentroid, "vaCentroid@"},
+{ 10, GenISAIntrinsic::GenISA_vaConvolve, "vaConvolve@"}, { 17, GenISAIntrinsic::GenISA_vaConvolveGRF_16x1, "vaConvolveGRF_16x1@"},
+{ 17, GenISAIntrinsic::GenISA_vaConvolveGRF_16x4, "vaConvolveGRF_16x4@"}, { 2, GenISAIntrinsic::GenISA_vaDilate, "vaDilate@"},
+{ 2, GenISAIntrinsic::GenISA_vaErode, "vaErode@"}, { 8, GenISAIntrinsic::GenISA_vaMinMax, "vaMinMax@"},
+{ 8, GenISAIntrinsic::GenISA_vaMinMaxFilter, "vaMinMaxFilter@"}, { 1, GenISAIntrinsic::GenISA_vectorUniform, "vectorUniform@"},
+{ 10, GenISAIntrinsic::GenISA_vmeSendFBR, "vmeSendFBR@"}, { 10, GenISAIntrinsic::GenISA_vmeSendFBR2, "vmeSendFBR2@"},
+{ 10, GenISAIntrinsic::GenISA_vmeSendIME, "vmeSendIME@"}, { 10, GenISAIntrinsic::GenISA_vmeSendIME2, "vmeSendIME2@"},
+{ 10, GenISAIntrinsic::GenISA_vmeSendSIC, "vmeSendSIC@"}, { 10, GenISAIntrinsic::GenISA_vmeSendSIC2, "vmeSendSIC2@"},
+{ 0, GenISAIntrinsic::GenISA_wavebarrier, "wavebarrier@"}}};
+
+std::string input_name(Name);
+unsigned start = 0;
+unsigned end = 366;
+unsigned initial_size = end;
+unsigned cur_pos = (start + end) / 2;
+char letter;
+char input_letter;
+bool isError = false;
+bool bump = false;
+unsigned start_index = std::string("llvm.genx.GenISA.").size();
+for (unsigned i = 0; i < Len; i++)
+{
+    input_letter = input_name[start_index + i];
+    unsigned counter = 0;
+    while (1)
+    {
+        if (counter == initial_size || cur_pos >= initial_size)
+        {
+            isError = true;
+            break;
+        }
+        counter++;
+        letter = LengthTable[cur_pos].str[i];
+        if (letter == input_letter)
+        {
+            if (LengthTable[cur_pos].num == i)
+                return LengthTable[cur_pos].id;
+            bump = true;
+            break;
+        }
+        else if (input_letter == '\0' && letter == '@')
+            return LengthTable[cur_pos].id;
+        else if (input_letter == '.' && letter == '_')
+            break;
+        else if (input_letter == '.' && letter == '@')
+        {
+            unsigned original_cur_pos = cur_pos;
+            while (1)
+            {
+                if (cur_pos >= initial_size || LengthTable[cur_pos].num < i)
+                    return LengthTable[original_cur_pos].id;
+                if (LengthTable[cur_pos].str[i] == '_')
+                    break;
+                cur_pos += 1;
+            }
+            break;
+        }
+        else if ((bump && letter < input_letter) || letter == '@')
+        {
+            cur_pos += 1;
+            continue;
+        }
+        else if (bump && letter > input_letter)
+        {
+            cur_pos -= 1;
+            continue;
+        }
+        else if (letter < input_letter)
+            start = cur_pos;
+        else
+            end = cur_pos;
+        cur_pos = (start + end) / 2;
+    }
+    if (isError)
+        break;
+}
+
+#endif
+
+// Global intrinsic function declaration type table.
+#ifdef GET_INTRINSIC_GENERATOR_GLOBAL
+static const unsigned IIT_Table[] = {
+  0x4AFAF1F, 0x0, 0x44F, 0x44, 0x3, 0x9F4F, 0x534F0, 0xCF44F40,
+  0x0, 0x44F4F, 0x447A, 0x47, 0x47A, 0x447A, 0x447, 0x4,
+  0x447A, 0x47A, 0x447A, 0x443F, 0x470F, 0x444, 0x442F, 0x44,
+  0x44, 0x4F, 0x40, 0x42F2F2F, 0x51F, 0x444F, 0x4F, 0x4F,
+  0x11, (1U<<31) | 0, 0x4F, 0x1470F, 0x2F2F, 0x2F2F, 0x2F2F, 0x2F2F,
+  (1U<<31) | 6, (1U<<31) | 25, 0x3F0, 0x9F4F0, 0x7B, 0x4, 0x2F2F2F, 0x77,
+  0x0, 0x1, 0x44F, 0x740, 0x47A, 0x7947, 0x797A7, 0x01,
+  (1U<<31) | 92, (1U<<31) | 107, 0x447744F7, 0x448844F8, (1U<<31) | 123, 0x4440, 0x4444CF1F, 0x4444CF1F,
+  0x449F44F1, 0x44444F0, (1U<<31) | 135, (1U<<31) | 145, 0x4F, 0x4470F, 0x4444441F, 0x44444440,
+  (1U<<31) | 155, (1U<<31) | 165, 0x44477770, (1U<<31) | 177, 0x740, (1U<<31) | 190, 0x4447A, 0x447A,
+  (1U<<31) | 200, 0x4447A, 0x44477770, 0x447A, 0x44477770, 0x7777770, 0x42F, 0x3342F,
+  0x42F0, 0x43F0, (1U<<31) | 210, 0xCF4F4F, 0x3, 0x3, 0x179, 0x1479,
+  0x14479, 0x121F1F, 0x77, (1U<<31) | 222, 0x4F44F, (1U<<31) | 250, 0x4470F, 0x4470F,
+  0x40, 0x47A, 0x447A, 0x4F471, 0x470F, 0x9F4F, 0x4F4F, 0x47,
+  0x47, 0x44, 0x4F0, 0x4F0, 0x440, 0x40, 0x51F0, 0x42E,
+  0x130, 0x3, 0x3, 0x9F4F, 0x441, 0x33333, 0x33333, 0x44F0,
+  (1U<<31) | 273, 0x40, 0x44, 0x40, 0x740, 0x44, (1U<<31) | 296, 0x44470F,
+  0x44F4, 0x44, 0x41, 0x447B, 0x47B, (1U<<31) | 312, 0x00, 0x00,
+  0x111, 0x442E, 0x421F1F, 0x414, 0x4421F1F, 0x441, 0x41121F1F, 0x441F1F,
+  0x44, (1U<<31) | 324, 0x2F2F2F, 0x4F0, 0x4F4, 0x4F4, 0x9F2F, 0x44444,
+  0x44, 0x9F2F, 0x44441F, 0x444BF1F, 0x44440, 0x44444F4, 0x44, 0x44,
+  0x43F, 0x43F, 0x49, 0x10, 0x4444, 0x4444, 0x4444, 0x4444,
+  (1U<<31) | 332, 0x4, 0x0, 0x1F0, 0x44444F4, 0x4, 0x4, 0x40,
+  0x3F0, 0x44440, 0x77, (1U<<31) | 346, (1U<<31) | 356, 0x77444F7, 0x44, 0x44,
+  0x44, 0x42F4CF2F, (1U<<31) | 367, 0x47444F7, 0x0, 0x2F2F2F2F, 0x2F2F2F2F, 0x2F2F2F2F,
+  0x77, 0x2F2F, 0x4AF1F, 0xAF2F, 0xAF2F, 0xAF2F, 0xAF2F, 0xAF1F,
+  0xAF1F, 0xAF1F, 0x4AF1F, 0xAF1F, 0xAF1F, 0xAF1F, (1U<<31) | 377, (1U<<31) | 398,
+  (1U<<31) | 419, (1U<<31) | 438, 0x3F, 0x3F, 0x3, 0x3, 0x3, 0x3F,
+  0x444, 0x43F4, 0x4441F, 0x44BF1F, 0x3F, 0x3F, 0x4F, 0x4F,
+  0x3F, 0x4F, 0x44, 0x4, 0x3F, 0x3F, 0x4F, 0x1F,
+  0x0, 0x14AF1F, 0x4, 0x4, 0x4444, (1U<<31) | 457, (1U<<31) | 467, (1U<<31) | 478,
+  0x1F1F1F, 0x41F4CF1F, (1U<<31) | 490, (1U<<31) | 500, 0x0F1, 0x1F1F, 0x9F2F, 0x9F2F,
+  0x9F2F, 0x1F1F, (1U<<31) | 511, (1U<<31) | 527, (1U<<31) | 542, (1U<<31) | 559, 0x144CF70F, 0x144CF3F,
+  0x444F7A, (1U<<31) | 571, (1U<<31) | 586, 0x40, 0x44, 0x44, (1U<<31) | 596, 0x2F2F2F,
+  0x444F, 0x4, (1U<<31) | 604, 0x44F4C, 0x0, 0x44F4A, 0x2F2F, 0x1F1F,
+  0x1F1F, (1U<<31) | 610, (1U<<31) | 632, (1U<<31) | 654, (1U<<31) | 676, (1U<<31) | 708, (1U<<31) | 740, (1U<<31) | 756,
+  (1U<<31) | 778, 0x4F4A, (1U<<31) | 798, 0x4444, 0x443F3F, 0x1F4444, (1U<<31) | 818, 0x1F4440,
+  0x4440, 0x40, 0xCF3F, 0x4CF3F, 0xBF4F0, 0x4BF4F0, 0x4441F, 0x44BF1F,
+  0x3, 0x44443F, 0x3F44440, (1U<<31) | 827, 0x1F444444, (1U<<31) | 841, 0x41F1F1F, 0x41F1F,
+  0x4, 0x4, 0x40, 0x1AFAF2F, 0x1AFAF1F, 0x8F1F, (1U<<31) | 852, 0x14BF44F0,
+  0x7444F0, 0x77444F0, 0x777444F0, (1U<<31) | 862, (1U<<31) | 872, (1U<<31) | 886, 0x4, 0x10,
+  0x9F2F, 0x0, 0x0, 0x0, 0x440, 0x40, 0x10, 0x44444F7A,
+  (1U<<31) | 894, 0x9F9F3F, 0x0, 0x40, 0x4444, 0x9F2F, 0x9F2F, 0x9F2F,
+  0x1F1F1F, 0x0, 0x1F1F, 0x9F9F3F, (1U<<31) | 906, (1U<<31) | 917, (1U<<31) | 928, (1U<<31) | 939,
+  0x44793, 0x44793A, (1U<<31) | 948, (1U<<31) | 957, (1U<<31) | 966, (1U<<31) | 975, 0x3F, (1U<<31) | 984,
+  0x4444A4A, (1U<<31) | 994, 0x4444BF3F, 0x4444440, 0x4444A4A, 0x0,
+};
+
+static const unsigned char IIT_LongEncodingTable[] = {
+  /* 0 */ 27, 1, 2, 14, 2, 0,
+  /* 6 */ 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0,
+  /* 25 */ 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0,
+  /* 92 */ 15, 1, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 0,
+  /* 107 */ 0, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 15, 1, 0,
+  /* 123 */ 15, 1, 15, 12, 4, 15, 17, 15, 25, 4, 4, 0,
+  /* 135 */ 0, 15, 4, 4, 15, 9, 4, 4, 4, 0,
+  /* 145 */ 0, 15, 4, 4, 15, 9, 4, 4, 4, 0,
+  /* 155 */ 0, 4, 4, 4, 4, 4, 4, 15, 1, 0,
+  /* 165 */ 0, 15, 2, 15, 2, 15, 2, 15, 2, 4, 4, 0,
+  /* 177 */ 0, 7, 7, 7, 7, 7, 7, 7, 7, 4, 4, 4, 0,
+  /* 190 */ 0, 7, 7, 7, 7, 4, 4, 4, 4, 0,
+  /* 200 */ 0, 7, 7, 7, 7, 4, 4, 4, 4, 0,
+  /* 210 */ 0, 15, 2, 15, 2, 15, 2, 15, 2, 4, 4, 0,
+  /* 222 */ 0, 7, 1, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 15, 2, 7, 7, 4, 1, 1, 1, 1, 4, 0,
+  /* 250 */ 0, 15, 2, 7, 1, 15, 2, 15, 2, 15, 2, 15, 2, 7, 7, 4, 4, 1, 1, 1, 1, 4, 0,
+  /* 273 */ 0, 4, 15, 4, 15, 12, 4, 4, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 15, 20, 4, 0,
+  /* 296 */ 0, 4, 15, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 4, 0,
+  /* 312 */ 0, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 0,
+  /* 324 */ 21, 4, 4, 4, 4, 4, 4, 0,
+  /* 332 */ 15, 3, 15, 11, 15, 19, 15, 27, 4, 4, 4, 4, 1, 0,
+  /* 346 */ 15, 2, 15, 12, 4, 15, 2, 15, 2, 0,
+  /* 356 */ 15, 2, 15, 12, 15, 20, 15, 2, 15, 2, 0,
+  /* 367 */ 15, 2, 15, 12, 15, 20, 15, 2, 4, 0,
+  /* 377 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 4, 0,
+  /* 398 */ 15, 3, 15, 10, 15, 10, 15, 10, 4, 4, 15, 10, 15, 20, 15, 28, 4, 4, 4, 4, 0,
+  /* 419 */ 15, 3, 15, 10, 15, 10, 4, 4, 15, 10, 15, 20, 15, 28, 4, 4, 4, 4, 0,
+  /* 438 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 4, 0,
+  /* 457 */ 15, 1, 15, 12, 4, 15, 1, 15, 1, 0,
+  /* 467 */ 15, 1, 15, 12, 15, 20, 15, 1, 15, 1, 0,
+  /* 478 */ 15, 1, 15, 12, 4, 4, 4, 15, 1, 15, 1, 0,
+  /* 490 */ 15, 1, 15, 12, 15, 20, 15, 1, 4, 0,
+  /* 500 */ 15, 1, 15, 12, 4, 4, 4, 15, 1, 4, 0,
+  /* 511 */ 15, 3, 15, 9, 15, 9, 15, 9, 15, 9, 15, 20, 4, 4, 4, 0,
+  /* 527 */ 15, 3, 4, 4, 4, 4, 4, 4, 4, 15, 12, 4, 4, 4, 0,
+  /* 542 */ 15, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 15, 12, 4, 4, 4, 0,
+  /* 559 */ 15, 3, 4, 4, 4, 4, 15, 12, 4, 4, 4, 0,
+  /* 571 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 0,
+  /* 586 */ 0, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+  /* 596 */ 21, 4, 4, 4, 4, 4, 4, 0,
+  /* 604 */ 21, 4, 4, 15, 4, 0,
+  /* 610 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 632 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 654 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 676 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 708 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 740 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 756 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 778 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 798 */ 15, 3, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10, 15, 20, 15, 28, 4, 4, 4, 0,
+  /* 818 */ 15, 3, 15, 3, 4, 4, 15, 9, 0,
+  /* 827 */ 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0,
+  /* 841 */ 15, 3, 15, 3, 4, 4, 4, 4, 15, 9, 0,
+  /* 852 */ 0, 15, 4, 4, 15, 8, 7, 4, 1, 0,
+  /* 862 */ 0, 15, 4, 4, 4, 7, 7, 7, 7, 0,
+  /* 872 */ 15, 3, 15, 11, 15, 19, 15, 27, 4, 4, 4, 4, 1, 0,
+  /* 886 */ 21, 4, 4, 4, 4, 4, 4, 0,
+  /* 894 */ 0, 15, 4, 4, 4, 4, 4, 7, 7, 7, 7, 0,
+  /* 906 */ 0, 27, 3, 2, 9, 7, 9, 4, 4, 4, 0,
+  /* 917 */ 0, 27, 3, 2, 9, 7, 9, 4, 4, 4, 0,
+  /* 928 */ 0, 27, 3, 2, 9, 7, 9, 4, 4, 4, 0,
+  /* 939 */ 0, 27, 3, 2, 9, 7, 4, 4, 0,
+  /* 948 */ 0, 27, 3, 2, 9, 7, 4, 4, 0,
+  /* 957 */ 0, 27, 3, 2, 9, 7, 4, 4, 0,
+  /* 966 */ 0, 27, 3, 2, 9, 7, 4, 4, 0,
+  /* 975 */ 0, 27, 3, 2, 9, 7, 4, 4, 0,
+  /* 984 */ 0, 4, 4, 4, 4, 4, 4, 4, 4, 0,
+  /* 994 */ 0, 4, 4, 4, 4, 4, 4, 4, 4, 0,
+  255
+};
+
+#endif
+
+// Add parameter attributes that are not common to all intrinsics.
+#ifdef GET_INTRINSIC_ATTRIBUTES
+static AttributeList getAttributes(LLVMContext &C, GenISAIntrinsic::ID id) {
+  static const uint8_t IntrinsicsToAttributesMap[] = {
+    1, // llvm.genx.GenISA.2fto2bf
+    2, // llvm.genx.GenISA.AcceptHitAndEndSearchHL
+    2, // llvm.genx.GenISA.AllocaNumber
+    2, // llvm.genx.GenISA.AllocateRayQuery
+    1, // llvm.genx.GenISA.AsyncStackID
+    3, // llvm.genx.GenISA.AsyncStackPtr
+    2, // llvm.genx.GenISA.BindlessThreadDispatch
+    2, // llvm.genx.GenISA.CallShaderHL
+    4, // llvm.genx.GenISA.CatchAllDebugLine
+    2, // llvm.genx.GenISA.ContinuationSignpost
+    1, // llvm.genx.GenISA.DCL.DSCntrlPtInputVec
+    1, // llvm.genx.GenISA.DCL.DSInputTessFactor
+    1, // llvm.genx.GenISA.DCL.DSPatchConstInputVec
+    1, // llvm.genx.GenISA.DCL.GSinputVec
+    1, // llvm.genx.GenISA.DCL.GSsystemValue
+    2, // llvm.genx.GenISA.DCL.HSControlPointID
+    5, // llvm.genx.GenISA.DCL.HSOutputCntrlPtInputVec
+    5, // llvm.genx.GenISA.DCL.HSPatchConstInputVec
+    1, // llvm.genx.GenISA.DCL.HSinputVec
+    1, // llvm.genx.GenISA.DCL.ShaderInputVec
+    1, // llvm.genx.GenISA.DCL.SystemValue
+    2, // llvm.genx.GenISA.DCL.input
+    1, // llvm.genx.GenISA.DCL.inputVec
+    1, // llvm.genx.GenISA.DispatchDimensions
+    1, // llvm.genx.GenISA.DispatchRayIndex
+    1, // llvm.genx.GenISA.EmitHitAttributes
+    2, // llvm.genx.GenISA.EndPrimitive
+    1, // llvm.genx.GenISA.FPBinaryOperator
+    2, // llvm.genx.GenISA.FillValue
+    1, // llvm.genx.GenISA.GetBufferPtr
+    4, // llvm.genx.GenISA.GetImplicitBufferPtr
+    4, // llvm.genx.GenISA.GetLocalIdBufferPtr
+    2, // llvm.genx.GenISA.GetPixelMask
+    1, // llvm.genx.GenISA.GetShaderRecordPtr
+    1, // llvm.genx.GenISA.GlobalBufferPointer
+    1, // llvm.genx.GenISA.GlobalRootSignatureValue
+    1, // llvm.genx.GenISA.GradientX
+    1, // llvm.genx.GenISA.GradientXfine
+    1, // llvm.genx.GenISA.GradientY
+    1, // llvm.genx.GenISA.GradientYfine
+    2, // llvm.genx.GenISA.GsCutControlHeader
+    2, // llvm.genx.GenISA.GsStreamHeader
+    2, // llvm.genx.GenISA.HDCCCSFastClear
+    2, // llvm.genx.GenISA.HDCuncompressedwrite
+    5, // llvm.genx.GenISA.HSURBPatchHeaderRead
+    1, // llvm.genx.GenISA.HitKind
+    1, // llvm.genx.GenISA.IEEE.Divide
+    1, // llvm.genx.GenISA.IEEE.Sqrt
+    2, // llvm.genx.GenISA.IgnoreHitHL
+    2, // llvm.genx.GenISA.InitDiscardMask
+    1, // llvm.genx.GenISA.InlinedData
+    2, // llvm.genx.GenISA.InnerScalarTessFactors
+    1, // llvm.genx.GenISA.Interpolant
+    1, // llvm.genx.GenISA.Interpolate
+    1, // llvm.genx.GenISA.Interpolate2
+    6, // llvm.genx.GenISA.IsHelperInvocation
+    2, // llvm.genx.GenISA.LSC2DBlockRead
+    2, // llvm.genx.GenISA.LSC2DBlockWrite
+    7, // llvm.genx.GenISA.LSCAtomicFP32
+    7, // llvm.genx.GenISA.LSCAtomicFP64
+    7, // llvm.genx.GenISA.LSCAtomicInts
+    8, // llvm.genx.GenISA.LSCFence
+    5, // llvm.genx.GenISA.LSCLoad
+    5, // llvm.genx.GenISA.LSCLoadBlock
+    7, // llvm.genx.GenISA.LSCLoadStatus
+    7, // llvm.genx.GenISA.LSCPrefetch
+    2, // llvm.genx.GenISA.LSCStore
+    2, // llvm.genx.GenISA.LSCStoreBlock
+    1, // llvm.genx.GenISA.LocalBufferPointer
+    1, // llvm.genx.GenISA.LocalRootSignatureValue
+    2, // llvm.genx.GenISA.MediaBlockRead
+    2, // llvm.genx.GenISA.MediaBlockRectangleRead
+    2, // llvm.genx.GenISA.MediaBlockWrite
+    9, // llvm.genx.GenISA.OUTPUT
+    2, // llvm.genx.GenISA.OUTPUTGS
+    2, // llvm.genx.GenISA.OUTPUTGS2
+    2, // llvm.genx.GenISA.OuterScalarTessFactors
+    2, // llvm.genx.GenISA.OutputMeshPrimitiveData
+    5, // llvm.genx.GenISA.OutputMeshPrimitiveDataInput
+    5, // llvm.genx.GenISA.OutputMeshSivDataInput
+    2, // llvm.genx.GenISA.OutputMeshVertexData
+    5, // llvm.genx.GenISA.OutputMeshVertexDataInput
+    2, // llvm.genx.GenISA.OutputTaskData
+    5, // llvm.genx.GenISA.OutputTaskDataInput
+    2, // llvm.genx.GenISA.OutputTessControlPoint
+    2, // llvm.genx.GenISA.OutputTessFactors
+    1, // llvm.genx.GenISA.PHASE.INPUT
+    1, // llvm.genx.GenISA.PHASE.INPUTVEC
+    2, // llvm.genx.GenISA.PHASE.OUTPUT
+    2, // llvm.genx.GenISA.PHASE.OUTPUTVEC
+    2, // llvm.genx.GenISA.PatchConstantOutput
+    1, // llvm.genx.GenISA.PayloadPtr
+    1, // llvm.genx.GenISA.PixelPositionX
+    1, // llvm.genx.GenISA.PixelPositionY
+    1, // llvm.genx.GenISA.PullCentroidBarys
+    1, // llvm.genx.GenISA.PullSampleIndexBarys
+    1, // llvm.genx.GenISA.PullSnappedBarys
+    6, // llvm.genx.GenISA.QuadPrefix
+    1, // llvm.genx.GenISA.ROUNDNE
+    2, // llvm.genx.GenISA.RTDualBlendSource
+    1, // llvm.genx.GenISA.RTStatefulBTIAndOffset
+    2, // llvm.genx.GenISA.RTWrite
+    1, // llvm.genx.GenISA.RayInfo
+    5, // llvm.genx.GenISA.RayTCurrent
+    2, // llvm.genx.GenISA.ReadTraceRaySync
+    5, // llvm.genx.GenISA.RenderTargetRead
+    5, // llvm.genx.GenISA.RenderTargetReadSampleFreq
+    2, // llvm.genx.GenISA.ReportHitHL
+    1, // llvm.genx.GenISA.RuntimeValue
+    3, // llvm.genx.GenISA.SWHotZonePtr
+    1, // llvm.genx.GenISA.SWStackPtr
+    1, // llvm.genx.GenISA.SampleOffsetX
+    1, // llvm.genx.GenISA.SampleOffsetY
+    2, // llvm.genx.GenISA.SetDebugReg
+    4, // llvm.genx.GenISA.SetImplicitBufferPtr
+    4, // llvm.genx.GenISA.SetLocalIdBufferPtr
+    2, // llvm.genx.GenISA.SetStream
+    2, // llvm.genx.GenISA.ShadowMemoryToSyncStack
+    2, // llvm.genx.GenISA.SpillValue
+    1, // llvm.genx.GenISA.StackAlloca
+    10, // llvm.genx.GenISA.StackIDRelease
+    1, // llvm.genx.GenISA.StackSize
+    1, // llvm.genx.GenISA.SyncStackID
+    3, // llvm.genx.GenISA.SyncStackPtr
+    2, // llvm.genx.GenISA.SyncStackToShadowMemory
+    1, // llvm.genx.GenISA.TileXOffset
+    1, // llvm.genx.GenISA.TileYOffset
+    2, // llvm.genx.GenISA.TraceRayAsync
+    2, // llvm.genx.GenISA.TraceRayAsyncHL
+    2, // llvm.genx.GenISA.TraceRayInlineAbort
+    2, // llvm.genx.GenISA.TraceRayInlineCandidateType
+    2, // llvm.genx.GenISA.TraceRayInlineCommitNonOpaqueTriangleHit
+    2, // llvm.genx.GenISA.TraceRayInlineCommitProceduralPrimitiveHit
+    2, // llvm.genx.GenISA.TraceRayInlineCommittedStatus
+    2, // llvm.genx.GenISA.TraceRayInlineHL
+    2, // llvm.genx.GenISA.TraceRayInlineRayInfo
+    2, // llvm.genx.GenISA.TraceRaySync
+    2, // llvm.genx.GenISA.TraceRaySyncProceed
+    2, // llvm.genx.GenISA.TraceRaySyncProceedHL
+    1, // llvm.genx.GenISA.URBRead
+    5, // llvm.genx.GenISA.URBReadOutput
+    2, // llvm.genx.GenISA.URBWrite
+    2, // llvm.genx.GenISA.UnmaskedRegionBegin
+    2, // llvm.genx.GenISA.UnmaskedRegionEnd
+    2, // llvm.genx.GenISA.UpdateDiscardMask
+    1, // llvm.genx.GenISA.VLAStackAlloca
+    6, // llvm.genx.GenISA.WaveAll
+    6, // llvm.genx.GenISA.WaveBallot
+    6, // llvm.genx.GenISA.WaveClustered
+    6, // llvm.genx.GenISA.WaveInverseBallot
+    6, // llvm.genx.GenISA.WavePrefix
+    11, // llvm.genx.GenISA.WaveShuffleIndex
+    2, // llvm.genx.GenISA.WorkGroupAny
+    1, // llvm.genx.GenISA.add.pair
+    1, // llvm.genx.GenISA.add.rtz
+    2, // llvm.genx.GenISA.assume.uniform
+    7, // llvm.genx.GenISA.atomiccounterinc
+    7, // llvm.genx.GenISA.atomiccounterpredec
+    1, // llvm.genx.GenISA.bf8tohf
+    1, // llvm.genx.GenISA.bfi
+    1, // llvm.genx.GenISA.bfrev
+    1, // llvm.genx.GenISA.bftof
+    2, // llvm.genx.GenISA.broadcastMessagePhase
+    2, // llvm.genx.GenISA.broadcastMessagePhaseV
+    2, // llvm.genx.GenISA.cmpSADs
+    7, // llvm.genx.GenISA.cmpxchgatomicstructured
+    2, // llvm.genx.GenISA.createMessagePhases
+    2, // llvm.genx.GenISA.createMessagePhasesNoInit
+    2, // llvm.genx.GenISA.createMessagePhasesNoInitV
+    2, // llvm.genx.GenISA.createMessagePhasesV
+    2, // llvm.genx.GenISA.cycleCounter
+    2, // llvm.genx.GenISA.discard
+    1, // llvm.genx.GenISA.dp4a.ss
+    1, // llvm.genx.GenISA.dp4a.su
+    1, // llvm.genx.GenISA.dp4a.us
+    1, // llvm.genx.GenISA.dp4a.uu
+    8, // llvm.genx.GenISA.dpas
+    1, // llvm.genx.GenISA.dual.subslice.id
+    2, // llvm.genx.GenISA.dummyInst
+    2, // llvm.genx.GenISA.dummyInstID
+    7, // llvm.genx.GenISA.dwordatomicstructured
+    1, // llvm.genx.GenISA.eu.id
+    1, // llvm.genx.GenISA.eu.thread.id
+    2, // llvm.genx.GenISA.eu.thread.pause
+    2, // llvm.genx.GenISA.evaluateSampler
+    2, // llvm.genx.GenISA.extractMVAndSAD
+    1, // llvm.genx.GenISA.f32tof16.rtz
+    2, // llvm.genx.GenISA.fcmpxchgatomicraw
+    7, // llvm.genx.GenISA.fcmpxchgatomicrawA64
+    7, // llvm.genx.GenISA.fcmpxchgatomicstructured
+    1, // llvm.genx.GenISA.firstbitHi
+    1, // llvm.genx.GenISA.firstbitLo
+    1, // llvm.genx.GenISA.firstbitShi
+    7, // llvm.genx.GenISA.floatatomicraw
+    7, // llvm.genx.GenISA.floatatomicrawA64
+    7, // llvm.genx.GenISA.floatatomicstructured
+    2, // llvm.genx.GenISA.flushsampler
+    1, // llvm.genx.GenISA.fma.rtn
+    1, // llvm.genx.GenISA.fma.rtp
+    1, // llvm.genx.GenISA.fma.rtz
+    1, // llvm.genx.GenISA.frc
+    1, // llvm.genx.GenISA.fsat
+    1, // llvm.genx.GenISA.ftobf
+    1, // llvm.genx.GenISA.ftof.rte
+    1, // llvm.genx.GenISA.ftof.rtn
+    1, // llvm.genx.GenISA.ftof.rtp
+    1, // llvm.genx.GenISA.ftof.rtz
+    1, // llvm.genx.GenISA.ftoi.rte
+    1, // llvm.genx.GenISA.ftoi.rtn
+    1, // llvm.genx.GenISA.ftoi.rtp
+    1, // llvm.genx.GenISA.ftotf32
+    1, // llvm.genx.GenISA.ftoui.rte
+    1, // llvm.genx.GenISA.ftoui.rtn
+    1, // llvm.genx.GenISA.ftoui.rtp
+    1, // llvm.genx.GenISA.gather4Cptr
+    1, // llvm.genx.GenISA.gather4POCptr
+    1, // llvm.genx.GenISA.gather4POptr
+    1, // llvm.genx.GenISA.gather4ptr
+    2, // llvm.genx.GenISA.getEnqueuedLocalSize
+    2, // llvm.genx.GenISA.getGlobalSize
+    2, // llvm.genx.GenISA.getLocalID.X
+    2, // llvm.genx.GenISA.getLocalID.Y
+    2, // llvm.genx.GenISA.getLocalID.Z
+    2, // llvm.genx.GenISA.getLocalSize
+    2, // llvm.genx.GenISA.getMessagePhase
+    2, // llvm.genx.GenISA.getMessagePhaseV
+    2, // llvm.genx.GenISA.getMessagePhaseX
+    2, // llvm.genx.GenISA.getMessagePhaseXV
+    2, // llvm.genx.GenISA.getNumWorkGroups
+    2, // llvm.genx.GenISA.getPayloadHeader
+    2, // llvm.genx.GenISA.getPrintfBuffer
+    2, // llvm.genx.GenISA.getPrivateBase
+    1, // llvm.genx.GenISA.getR0
+    2, // llvm.genx.GenISA.getRtGlobalBufferPtr
+    2, // llvm.genx.GenISA.getSR0
+    1, // llvm.genx.GenISA.getSR0.0
+    2, // llvm.genx.GenISA.getStageInGridOrigin
+    2, // llvm.genx.GenISA.getStageInGridSize
+    2, // llvm.genx.GenISA.getSyncBuffer
+    2, // llvm.genx.GenISA.getWorkDim
+    8, // llvm.genx.GenISA.globalSync
+    1, // llvm.genx.GenISA.hftobf8
+    1, // llvm.genx.GenISA.hw.thread.id
+    1, // llvm.genx.GenISA.hw.thread.id.alloca
+    1, // llvm.genx.GenISA.ibfe
+    2, // llvm.genx.GenISA.icmpxchgatomicraw
+    7, // llvm.genx.GenISA.icmpxchgatomicrawA64
+    7, // llvm.genx.GenISA.icmpxchgatomictyped
+    1, // llvm.genx.GenISA.imulH
+    7, // llvm.genx.GenISA.intatomicraw
+    7, // llvm.genx.GenISA.intatomicrawA64
+    7, // llvm.genx.GenISA.intatomictyped
+    1, // llvm.genx.GenISA.is.uniform
+    1, // llvm.genx.GenISA.isat
+    1, // llvm.genx.GenISA.itof.rtn
+    1, // llvm.genx.GenISA.itof.rtp
+    1, // llvm.genx.GenISA.itof.rtz
+    1, // llvm.genx.GenISA.launder
+    1, // llvm.genx.GenISA.ldmcsptr
+    1, // llvm.genx.GenISA.ldmsptr
+    1, // llvm.genx.GenISA.ldmsptr16bit
+    12, // llvm.genx.GenISA.ldptr
+    12, // llvm.genx.GenISA.ldraw.indexed
+    12, // llvm.genx.GenISA.ldrawvector.indexed
+    12, // llvm.genx.GenISA.ldstructured
+    1, // llvm.genx.GenISA.lodptr
+    8, // llvm.genx.GenISA.memoryfence
+    2, // llvm.genx.GenISA.mov.identity
+    2, // llvm.genx.GenISA.movcr
+    2, // llvm.genx.GenISA.movflag
+    1, // llvm.genx.GenISA.mul.pair
+    1, // llvm.genx.GenISA.mul.rtz
+    1, // llvm.genx.GenISA.pair.to.ptr
+    1, // llvm.genx.GenISA.patchInstanceId
+    1, // llvm.genx.GenISA.ptr.to.pair
+    1, // llvm.genx.GenISA.readsurfaceinfoptr
+    2, // llvm.genx.GenISA.resetRoundingMode
+    1, // llvm.genx.GenISA.resinfoptr
+    1, // llvm.genx.GenISA.rsq
+    1, // llvm.genx.GenISA.rt.spill.anchor
+    1, // llvm.genx.GenISA.rt.swstack.offset
+    1, // llvm.genx.GenISA.sampleBCptr
+    1, // llvm.genx.GenISA.sampleBptr
+    1, // llvm.genx.GenISA.sampleCptr
+    1, // llvm.genx.GenISA.sampleDCptr
+    1, // llvm.genx.GenISA.sampleDptr
+    1, // llvm.genx.GenISA.sampleKillPix
+    1, // llvm.genx.GenISA.sampleLCptr
+    1, // llvm.genx.GenISA.sampleLptr
+    1, // llvm.genx.GenISA.sampleinfoptr
+    1, // llvm.genx.GenISA.sampleptr
+    2, // llvm.genx.GenISA.setMessagePhase
+    2, // llvm.genx.GenISA.setMessagePhaseV
+    2, // llvm.genx.GenISA.setMessagePhaseX
+    2, // llvm.genx.GenISA.setMessagePhaseXV
+    2, // llvm.genx.GenISA.setMessagePhaseX.legacy
+    2, // llvm.genx.GenISA.setMessagePhase.legacy
+    2, // llvm.genx.GenISA.setRoundingModeFP
+    5, // llvm.genx.GenISA.simdBlockRead
+    5, // llvm.genx.GenISA.simdBlockReadBindless
+    2, // llvm.genx.GenISA.simdBlockWrite
+    2, // llvm.genx.GenISA.simdBlockWriteBindless
+    2, // llvm.genx.GenISA.simdGetMessagePhase
+    2, // llvm.genx.GenISA.simdGetMessagePhaseV
+    1, // llvm.genx.GenISA.simdLaneId
+    2, // llvm.genx.GenISA.simdMediaBlockRead
+    2, // llvm.genx.GenISA.simdMediaBlockWrite
+    2, // llvm.genx.GenISA.simdMediaRegionCopy
+    2, // llvm.genx.GenISA.simdSetMessagePhase
+    2, // llvm.genx.GenISA.simdSetMessagePhaseV
+    11, // llvm.genx.GenISA.simdShuffleDown
+    11, // llvm.genx.GenISA.simdShuffleXor
+    1, // llvm.genx.GenISA.simdSize
+    1, // llvm.genx.GenISA.slice.id
+    2, // llvm.genx.GenISA.source.value
+    1, // llvm.genx.GenISA.srnd.ftohf
+    1, // llvm.genx.GenISA.srnd.hftobf8
+    1, // llvm.genx.GenISA.staticConstantPatchValue
+    13, // llvm.genx.GenISA.storeraw.indexed
+    13, // llvm.genx.GenISA.storerawvector.indexed
+    2, // llvm.genx.GenISA.storestructured1
+    2, // llvm.genx.GenISA.storestructured2
+    2, // llvm.genx.GenISA.storestructured3
+    2, // llvm.genx.GenISA.storestructured4
+    8, // llvm.genx.GenISA.sub.group.dpas
+    1, // llvm.genx.GenISA.sub.pair
+    1, // llvm.genx.GenISA.subslice.id
+    8, // llvm.genx.GenISA.systemmemoryfence
+    1, // llvm.genx.GenISA.tf32tof
+    8, // llvm.genx.GenISA.threadgroupbarrier
+    8, // llvm.genx.GenISA.threadgroupbarrier.signal
+    8, // llvm.genx.GenISA.threadgroupbarrier.wait
+    8, // llvm.genx.GenISA.threadgroupnamedbarriers.signal
+    8, // llvm.genx.GenISA.threadgroupnamedbarriers.wait
+    8, // llvm.genx.GenISA.typedmemoryfence
+    12, // llvm.genx.GenISA.typedread
+    13, // llvm.genx.GenISA.typedwrite
+    1, // llvm.genx.GenISA.uaddc
+    2, // llvm.genx.GenISA.uavSerializeAll
+    2, // llvm.genx.GenISA.uavSerializeOnResID
+    1, // llvm.genx.GenISA.ubfe
+    1, // llvm.genx.GenISA.uitof.rtn
+    1, // llvm.genx.GenISA.uitof.rtp
+    1, // llvm.genx.GenISA.uitof.rtz
+    1, // llvm.genx.GenISA.umulH
+    8, // llvm.genx.GenISA.urbfence
+    1, // llvm.genx.GenISA.usat
+    1, // llvm.genx.GenISA.usubb
+    2, // llvm.genx.GenISA.vaBoolCentroid
+    2, // llvm.genx.GenISA.vaBoolSum
+    2, // llvm.genx.GenISA.vaCentroid
+    2, // llvm.genx.GenISA.vaConvolve
+    2, // llvm.genx.GenISA.vaConvolveGRF.16x1
+    2, // llvm.genx.GenISA.vaConvolveGRF.16x4
+    2, // llvm.genx.GenISA.vaDilate
+    2, // llvm.genx.GenISA.vaErode
+    2, // llvm.genx.GenISA.vaMinMax
+    2, // llvm.genx.GenISA.vaMinMaxFilter
+    2, // llvm.genx.GenISA.vectorUniform
+    2, // llvm.genx.GenISA.vmeSendFBR
+    2, // llvm.genx.GenISA.vmeSendFBR2
+    2, // llvm.genx.GenISA.vmeSendIME
+    2, // llvm.genx.GenISA.vmeSendIME2
+    2, // llvm.genx.GenISA.vmeSendSIC
+    2, // llvm.genx.GenISA.vmeSendSIC2
+    8, // llvm.genx.GenISA.wavebarrier
+  };
+
+  AttributeList AS[1];
+  unsigned NumAttrs = 0;
+  if (id != 0) {
+    switch(IntrinsicsToAttributesMap[id - Intrinsic::num_intrinsics]) {
+    default: IGC_ASSERT_EXIT_MESSAGE(0, "Invalid attribute number");
+    case 1: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::ReadNone};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 2: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 3: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::NoDuplicate,Attribute::ReadNone};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 4: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::InaccessibleMemOnly};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 5: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::ReadOnly};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 6: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::Convergent,Attribute::InaccessibleMemOnly};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 7: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::ArgMemOnly};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 8: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::Convergent};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 9: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::NoDuplicate};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 10: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::WriteOnly};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 11: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::Convergent,Attribute::ReadNone};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 12: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::ReadOnly,Attribute::ArgMemOnly};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    case 13: {
+      const Attribute::AttrKind Atts[] = {Attribute::NoUnwind,Attribute::WriteOnly,Attribute::ArgMemOnly};
+      AS[0] = AttributeList::get(C, AttributeList::FunctionIndex, Atts);
+      NumAttrs = 1;
+      break;
+      }
+    }
+  }
+  return AttributeList::get(C, makeArrayRef(AS, NumAttrs));
+}
+#endif // GET_INTRINSIC_ATTRIBUTES
+
+//Comments for each Intrinsic
+#ifdef GET_INTRINSIC_COMMENTS_TABLE
+static const std::array<IntrinsicComments,366> IDComments = {{
+{"", {""}, {"","",""}},
+{"Raytracing: equivalent to DXR AcceptHitAndEndSearch()", {""}, {"none"}},
+{"Raytracing: Temporary marker that will be lowered to an RTStack offset.", {""}, {""}},
+{"Raytracing: Allocation for RayQuery Object", {""}, {"rayFlags"}},
+{"Raytracing: lane Async stack id", {""}, {"none"}},
+{"Raytracing: Intrinsic used as marker in later passes to find per lane async stack base. It is just a cast and will be lowered prior to codegen", {""}, {""}},
+{"Raytracing: codegens to send.btd", {""}, {"global buffer pointer","stack id","shader record address"}},
+{"Raytracing: equivalent to DXR CallShader() (HL = high level)", {""}, {"continuation ID","continuation fn","ShaderIndex","User defined attributes struct"}},
+{"", {""}, {"none"}},
+{"Raytracing: Temporary used to mark continuation entry points", {"Returns the first argument"}, {"The SWStack base pointer","Offset from continuation stack frame pointer to payload address"}},
+{"", {"input reg (generated by this intrin)"}, {"vertex index","element index"}},
+{"", {"input reg (generated by this intrin)"}, {"system interpreted tessellation factor"}},
+{"", {"input reg (generated by this intrin)"}, {"input index"}},
+{"", {"input reg (generated by this intrin)"}, {"Vertex Idx","Attribute Idx"}},
+{"", {"input reg (generated by this intrin)"}, {"vertex idx","usage"}},
+{"", {"output"}, {"none"}},
+{"", {"input reg (generated by this intrin)"}, {"owordVertexIndex","owordAttributeIndex"}},
+{"", {"input reg (generated by this intrin)"}, {"owordAttributeIndex"}},
+{"", {"input reg (generated by this intrin)"}, {"Vertex Idx","Attribute Idx"}},
+{"", {"input reg (generated by this intrin)"}, {"dwordAttributeOrSetupIndex","interpolation mode: e_interpolation_PSOnly"}},
+{"", {"input reg (generated by this intrin)"}, {"usage"}},
+{"", {"scalar input reg"}, {"type (texture (t#) or vFace","index"}},
+{"", {"input reg (generated by this intrin)"}, {"input index","interpolation mode"}},
+{"Raytracing: Dispatch Dimensions", {""}, {""}},
+{"Raytracing: Dispatch Ray Index - input: 'Dimension'", {""}, {""}},
+{"", {"hit attributes ptr"}, {"none"}},
+{"", {""}, {"emitCount"}},
+{"Represents a generic intrinsic for fadd,fsub,fmul,fdiv", {"return value of operation"}, {"operand 0 of binary operator","operand 1 of binary operator","0x1:fadd, 0x2:fsub, 0x4:fmul, 0x8:fdiv, 0x10:frem"}},
+{"Raytracing: Fill value from the stack", {""}, {""}},
+{"", {"result"}, {"Resource index","Resource Type (CB, UAV, etc"}},
+{"", {"implicit buffer pointer for use in stack call"}, {"none"}},
+{"", {"pointer to local id buffer for use in stack call"}, {"none"}},
+{"Get live pixel mask from dmask", {""}, {""}},
+{"Raytracing: Get the shader record pointer for the given continuation", {""}, {""}},
+{"Raytracing: per lane stack size", {""}, {"none"}},
+{"Raytracing: ephemeral intrinsic later lowered to GlobalBufferPointer + offset", {"the value at that address"}, {"dword offset in the global root signature from the base","true if the root signature value is a constant buffer pointer"}},
+{"", {"result"}, {"coordinates x"}},
+{"", {"result"}, {"coordinates x"}},
+{"", {"result"}, {"coordinates y"}},
+{"", {"result"}, {"coordinates y"}},
+{"", {""}, {"DWORD 1","DWORD 2","DWORD 3","DWORD 4","DWORD 5","DWORD 6","DWORD 7","DWORD 8","DWORD 9","DWORD 10","DWORD 11","DWORD 12","DWORD 13","DWORD 14","DWORD 15","DWORD 16","emitCount"}},
+{"", {"DWORD 1"}, {"DWORD 2","DWORD 3","DWORD 4","DWORD 5","DWORD 6","DWORD 7","DWORD 8","DWORD 9","DWORD 10","DWORD 11","DWORD 12","DWORD 13","DWORD 14","DWORD 15","DWORD 16","DWORD 17","DWORD 18","DWORD 19","DWORD 20","DWORD 21","DWORD 22","DWORD 23","DWORD 24","DWORD 25","DWORD 26","DWORD 27","DWORD 28","DWORD 29","DWORD 30","DWORD 31","DWORD 32","DWORD 33","DWORD 34","DWORD 35","DWORD 36","DWORD 37","DWORD 38","DWORD 39","DWORD 40","DWORD 41","DWORD 42","DWORD 43","DWORD 44","DWORD 45","DWORD 46","DWORD 47","DWORD 48","DWORD 49","DWORD 50","DWORD 51","DWORD 52","DWORD 53","DWORD 54","DWORD 55","DWORD 56","DWORD 57","DWORD 58","DWORD 59","DWORD 60","DWORD 61","DWORD 62","DWORD 63","DWORD 64","Emit count",""}},
+{"Fast Clearing CCS Surface using HDC Send", {""}, {""}},
+{"XeHP SDV surface compression - HDC flat CCS builtin", {"nothing to return"}, {"ptr location where the value is stored to","value to be stored"}},
+{"", {"result"}, {"none"}},
+{"Raytracing: equivalent to DXR HitKind()", {""}, {"none"}},
+{"Correctly Rounded divide instrinsic -> produces ISA_DIVM", {"output"}, {"src0","src1"}},
+{"Correctly Rounded sqrt instrinsic -> produces ISA_SQRTM", {"output"}, {"src0"}},
+{"Raytracing: equivalent to DXR IgnoreHit()", {""}, {"none"}},
+{"", {""}, {"none"}},
+{"Raytracing: Used in raygen shaders data loaded inline directly to register", {""}, {""}},
+{"", {""}, {"enum for the type of Tess factor","tess factor value"}},
+{"", {""}, {""}},
+{"", {""}, {"input index","bary"}},
+{"", {""}, {"",""}},
+{"Check whether invocation is a helper invocation", {""}, {""}},
+{"LSC 2d block read", {""}, {"flat image base offset","flat image base width","flat image base height","flat image base pitch","offset x","offset y","elemSize","tile width","tile height","V - num blocks (2 for simple 2d block read)","transpose","vnni transform (for transpose+transform use transpose only and elemSize 32)"}},
+{"LSC 2d block write", {"nothing is returned"}, {"flat image base offset","flat image base width","flat image base height","flat image base pitch","offset x","offset y","elemSize","tile width","tile height","V - num blocks (2 for simple 2d block read)","transpose","vnni transform (for transpose+transform use transpose only and elemSize 32)","stored value"}},
+{"LSC atomic FP32 add,sub,min,max,fcas", {"return old value"}, {"memory pointer: ugm, ugml, tgm, slm","immediate offset (in bytes)","[src1] atomic store the result of operation with src1 and memory data and return the old value","[fcas] atomic compare src1_X and memory data and replace if equal with src1_Y. Returns the old value.","operation (add,sub,min,max,fcas)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC atomic FP64 add,sub,fcas", {"return old value"}, {"only a global memory pointer","immediate offset (in bytes)","[src1] atomic store the result of operation with src1 and memory data and return the old value","[fcas] atomic compare src1_X and memory data and replace if equal with src1_Y. Returns the old value.","operation (add,sub,fcas)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC atomic I16,U16,I32,U32,I64,U64 add,sub,min,max,cas,inc,dec,and,or,xor,load,store", {"return old value"}, {"memory pointer: ugm, ugml, tgm, slm (not for i64,u64)","immediate offset (in bytes)","[src1] atomic store the result of operation with src1 and memory data and return the old value","[cas] atomic compare src1_X and memory data and replace if equal with src1_Y. Returns the old value.","operation (add,sub,min,max,cas,inc,dec,and,or,xor,load,store,umin,umax)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC fence operation", {""}, {"memory port: ugm, ugml, tgm, slm","scope of the fence: threadgroup, local, tile, GPU, all GPUs, system Release, system Acquire","flush type: evict, invalidate, discard, clean, flushl3"}},
+{"LSC gathering load instruction", {"value loaded"}, {"address of value to load","immediate offset (in bytes)","data size (LSC_DATA_SIZE)","vector size (LSC_DATA_ELEMS)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC one-dimensional block load instruction", {"value loaded"}, {"base address of value to load from (must be uniform)","immediate offset (in bytes)","data size (LSC_DATA_SIZE)","vector size (LSC_DATA_ELEMS)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC load-status of address", {"result is a bit per lane"}, {"address of value to load","immediate offset (in bytes)","data size (LSC_DATA_SIZE)","vector size (LSC_DATA_ELEMS)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC prefetch (loads to cache)", {"no data is returned"}, {"memory address","immediate offset (in bytes)","data size (LSC_DATA_SIZE)","vector size (LSC_DATA_ELEMS)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC store instruction", {"nothing is returned"}, {"address to store to","immediate offset (in bytes)","value to be stored","data size (LSC_DATA_SIZE)","vector size (LSC_DATA_ELEMS)","cache controls options (LSC_CACHE_OPTS)"}},
+{"LSC one-dimensional block store instruction", {"nothing is returned"}, {"base address to store to (must be uniform)","immediate offset (in bytes)","value to be stored","data size (LSC_DATA_SIZE)","vector size (LSC_DATA_ELEMS)","cache controls options (LSC_CACHE_OPTS)"}},
+{"Raytracing: Pointer to local args in shader record", {""}, {"none"}},
+{"Raytracing: ephemeral intrinsic later lowered to LocalBufferPointer/InlinedData", {"the value at that address"}, {"byte offset in the local root signature from the base","size of local root signature dereferenceable data"}},
+{"", {""}, {"image id","x offset","y offset","isUAV","width","height"}},
+{"", {""}, {"image","xOffset","yOffset","isUAV","blockWidth","blockHeight","destination blob"}},
+{"", {""}, {"image id","x offset","y offset","isUAV","width","height","pixels"}},
+{"", {""}, {"0: source x","1: source y","2: source z","3: source w","4: usage (color/texcoord/pos)","5: index & mask"}},
+{"", {""}, {"x","y","z","w","type","idx_mask","emitCount"}},
+{"", {""}, {"x","y","z","w","x2","y2","z2","w2","type","idx_mask","emitCount"}},
+{"", {""}, {"enum for the type of Tess factor","tess factor value"}},
+{"", {""}, {"x","y","z","w","usage","owordOffset :  ignored for output types other than SHADER_OUTPUT_TYPE_DEFAULT (may be undef) ","primitiveIndex","mask"}},
+{"Load data from mesh per-primitive output", {""}, {"usage","owordOffset (see GenISA_OutputMeshPrimitiveData","primitiveIndex"}},
+{"Load data from mesh siv output", {""}, {"usage","primitiveIndex : ignored for PrimitiveCount"}},
+{"", {""}, {"x","y","z","w","usage","owordOffset : for SHADER_OUTPUT_TYPE_CLIPDISTANCE_LO or SHADER_OUTPUT_TYPE_CLIPDISTANCE_HI it refers to either low (=0) or high (=1) half of the Vertex Header's clipCullDistanceArray[8] for SHADER_OUTPUT_TYPE_REPLICATED_POSITION it is viewId for remained output types other than SHADER_OUTPUT_TYPE_DEFAULT it is ignored (may be undef)","vertexIndex","mask"}},
+{"Load data from mesh per-vertex output", {""}, {"usage","owordOffset (see GenISA_OutputMeshVertexData)","vertexIndex"}},
+{"", {""}, {"","","","","","",""}},
+{"Load from task output", {""}, {"usage","owordOffset"}},
+{"", {""}, {"source x","source y","source z","source w","index","cpid","mask"}},
+{"", {""}, {"QUAD_V_INSIDE_TESSFACTOR","QUAD_U_INSIDE_TESSFACTOR","QUAD_V_EQ_1_EDGE_TESSFACTOR, TRI_INSIDE_TESSFACTOR","QUAD_U_EQ_1_EDGE_TESSFACTOR, TRI_W_EQ_0_EDGE_TESSFACTOR","QUAD_V_EQ_0_EDGE_TESSFACTOR, TRI_V_EQ_0_EDGE_TESSFACTOR, LINE_DENSITY_TESSFACTOR","QUAD_U_EQ_0_EDGE_TESSFACTOR, TRI_U_EQ_0_EDGE_TESSFACTOR, LINE_DETAIL_TESSFACTOR"}},
+{"", {""}, {"index"}},
+{"", {""}, {"","",""}},
+{"", {""}, {"source x","index"}},
+{"", {""}, {"",""}},
+{"", {""}, {"source x","source y","source z","source w","index","mask"}},
+{"Raytracing: Temporary used to mark payload pointer after intrinsic lowering", {"Returns the first argument"}, {"The payload pointer","The SWStack base pointer"}},
+{"", {""}, {"none"}},
+{"", {""}, {"none"}},
+{"", {""}, {""}},
+{"", {""}, {"sample index","perspective"}},
+{"", {""}, {"x offset","y offset","perspective"}},
+{"", {""}, {"","",""}},
+{"", {"result"}, {"source"}},
+{"", {""}, {"0: oMask TODO: should be i32","1: pMask","2: Red0","3: Green0","4: Blue0","5: Alpha0","6: Red1","7: Green1","8: Blue1","9: Alpha1","10: depth","11: stencil","12: RT index","13: has mask","14: has depth","15: has stencil","16: per sample","17: sample index"}},
+{"Raytracing: Used for indirect stateful accesses", {"Just returns the second argument (the pointer)"}, {"Binding table index for the memory region","The pointer itself (which is just an offset from the surface state base address)"}},
+{"", {""}, {"0: src0 Alpha","1: oMask TODO: should be i32","2: pMask","3: Red","4: Green","5: Blue","6: Alpha","7: depth","8: stencil","9: RT index","10: Blend state index","11: has mask","12: has depth","13: has stencil","14: per sample","15: sample index"}},
+{"Raytracing: Query for different ray info. Input is query type, and dimension which is used for certain types - used for Async Raytracing", {""}, {"",""}},
+{"Raytracing: Signature retained so it is processed the same as the RayInfo intrinsic.", {""}, {"",""}},
+{"Raytracing: Intrinsic used as a marker in later passes to find where to read return value of GenISA_TraceRaySync", {""}, {"return value of TraceRaySyncProceed"}},
+{"", {"result"}, {"render target slot"}},
+{"", {"result"}, {"render target slot","sample index"}},
+{"Raytracing: equivalent to DXR ReportHit()", {""}, {"THit - Parametric distance of the intersection","HitKind","User defined intersection attributes struct"}},
+{"", {"result"}, {"index"}},
+{"Raytracing: Intrinsic used as marker in later passes to find hot zone base address. It is just a cast and will be lowered prior to codegen", {""}, {""}},
+{"Raytracing: Intrinsic used as marker in later passes to find SWStack base address. It is just a cast and will be lowered prior to codegen", {""}, {""}},
+{"", {""}, {"sample index"}},
+{"", {""}, {"sample index"}},
+{"", {"result (dbg0.1:ud)"}, {"dbg0.0:ud"}},
+{"", {"result"}, {"buffer pointer passed by runtime"}},
+{"", {"result"}, {"local id buffer pointer passed by runtime"}},
+{"", {""}, {"streamID","emitCount"}},
+{"Raytracing: Read sync RTStack to shadowmemory.", {""}, {"RayQuery object index"}},
+{"Raytracing: Spill a value onto the stack", {""}, {"",""}},
+{"", {"result"}, {"offset"}},
+{"Raytracing: codegens to send.btd and sets stack id release bit", {""}, {"stack id","predicate flag"}},
+{"Raytracing: per lane stack size in bytes", {""}, {"none"}},
+{"Raytracing: lane Syncstack id", {""}, {"none"}},
+{"Raytracing: Intrinsic used as marker in later passes to find per lane sync stack base. It is just a cast and will be lowered prior to codegen", {""}, {""}},
+{"Raytracing: Read sync RTStack to shadowmemory.", {""}, {"RayQuery object index","return value of TraceRaySyncProceed"}},
+{"Raytracing: returns the X-offset within a raytracing tile", {"The offset"}, {"TID (r0.4:uw & 0xff)","X Dimension Size (Tile)","X Dimension Size (Subtile) (0 == no subtile)","Y Dimension Size (Subtile) (0 == no subtile)"}},
+{"Raytracing: returns the Y-offset within a raytracing tile", {"The offset"}, {"TID (r0.4:uw & 0xff)","X Dimension Size (Tile)","X Dimension Size (Subtile) (0 == no subtile)","Y Dimension Size (Subtile) (0 == no subtile)"}},
+{"Raytracing: codegens to send.rta (sync bit not set)", {""}, {"global buffer pointer","Trace data: bitfield containg bvhLevel, stackID and trcCtrl"}},
+{"Raytracing: equivalent to DXR TraceRay(), lowers to GenISA_TraceRayAsync and RTStack IO operations", {""}, {"continuation id","continuation fn","BVH ptr","flag","mask","RayContributionToHitGroupIndex","hitgroup index multiplier","miss shader index","rayOrig x","rayOrig y","rayOrig z","rayDir  x","rayDir  y","rayDir  z","ray     Tmin","ray     Tmax","payload","reserved"}},
+{"Raytracing: Abort operation for RayQuery object at index taken in the input", {""}, {""}},
+{"Raytracing: Candidate Type Query for RayQuery object at index taken in the input", {""}, {""}},
+{"Raytracing: Commit Non Opaque Triangle Hit For RayQuery object at index taken in the input", {""}, {""}},
+{"Raytracing: Commit procedural primitive Hit For RayQuery object at index taken in the input", {""}, {"",""}},
+{"Raytracing: Commited status Query for RayQuery object at index taken in the input", {""}, {""}},
+{"Raytracing: equivalent to DXR TraceRayInline", {""}, {"Query Object Index","BVH ptr","flag","mask","rayOrig x","rayOrig y","rayOrig z","rayDir  x","rayDir  y","rayDir  z","ray     Tmin","ray     Tmax","reserved"}},
+{"Raytracing: Query for different ray info.", {""}, {"Query Object Index","Info Type","Dimension used for certain types"}},
+{"Raytracing: codegens to send.rta (with the sync bit set)", {"dst is used to sync the message"}, {"global buffer pointer","Trace data: bitfield containg bvhLevel, stackID and trcCtrl"}},
+{"Raytracing: codegens to ShadowMemoryToSyncStack AND send.rta (sync bit set)", {""}, {""}},
+{"Raytracing: Proceed operation for RayQuery object at index taken in the input", {""}, {""}},
+{"", {"result"}, {"vertex index","URB owordOffset"}},
+{"In-place data read using URB Write Handle", {""}, {"owordOffset"}},
+{"", {""}, {"urb offset","channel mask","x0","y0","z0","w0","x1","y1","z1","w1"}},
+{"", {""}, {""}},
+{"", {""}, {""}},
+{"update live pixel dmask from discard pixel mask", {""}, {"",""}},
+{"", {"result"}, {"laneOffset","size"}},
+{"Accumulate all the active lanes", {""}, {"value","IGC:WaveOps","helperLaneMode : 0: not used; 1: helper lanes participatein wave ops, 2: helper lanes do not participate in wave ops."}},
+{"All lanes get the same value", {"return a bitfield with 1 for active lane with input true, 0 for the rest."}, {"Bool b","helperLaneMode : 0: not used; 1: helper lanes participatein wave ops, 2: helper lanes do not participate in wave ops."}},
+{"Accumulate all active lanes within consecutive input clusters and broadcast the result to associated output clusters. A k-cluster is a sequence of values from k consecutive (not necessarily active) lanes, such that: clusters are disjoint, size value is of 1 <= 2^p <= maxSubgroupSize, p >= 0.", {"the result for n-th input cluster is replicated to n-th output cluster"}, {"value","IGC::WaveOps","size - must be a compile time constant and assumed > 1","helperLaneMode : 0: not used; 1: helper lanes participatein wave ops, 2: helper lanes do not participate in wave ops."}},
+{"", {"return value of n-th bit from the input bitfield"}, {"bitfield","helperLaneMode : 0: not used; 1: helper lanes participatein wave ops, 2: helper lanes do not participate in wave ops."}},
+{"Accumulate and keep the intermediate results in each lane", {"result"}, {"value","IGC::WaveOps","type - either exclusive(0) or inclusive(1) operation","mask - subset of lanes to participate in the computation.","helperLaneMode : 0: not used; 1: helper lanes participatein wave ops, 2: helper lanes do not participate in wave ops."}},
+{"Read from a specific lane", {"TODO: could be changed to anytype when support has been backported from llvm 3.7"}, {"value","lane","helperLaneMode : 0: not used; 1: helper lanes participatein wave ops, 2: helper lanes do not participate in wave ops."}},
+{"This intrinsic implies a barrier", {""}, {""}},
+{"", {"",""}, {"","","",""}},
+{"", {""}, {"",""}},
+{"used by compiler to mark a uniform private array", {"return nothing"}, {"ptr"}},
+{"", {"dst0 Contains the returned counter value"}, {"Structured Buffer UaV with Count or Append flag"}},
+{"", {"dst0 Contains the returned counter value"}, {"Structured Buffer UAV with Count or Append flag"}},
+{"bf8 to half conversion", {"half result"}, {"bf8 source (as char)"}},
+{"", {"result"}, {"src0","src1","src2","src3"}},
+{"", {"result"}, {"src0"}},
+{"Convert bf16 to float", {"float result"}, {"bf16 source"}},
+{"", {"result"}, {"message phases reference","id of message phase","id of DW of the message phase","width"}},
+{"", {"result"}, {"message phases reference","id of message phase","id of DW of the message phase","width"}},
+{"", {"result"}, {"MVCurr","SADCurr","MVMin","SADMin"}},
+{"", {""}, {"Dst Buffer","array index","byte offset in structure","src0","src1"}},
+{"", {"result"}, {"num message phases to allocate and initialize with 0"}},
+{"", {"result"}, {"num message phases to allocate (no init)"}},
+{"", {"result"}, {"num message phases to allocate (no init)"}},
+{"", {"result"}, {"num message phases to allocate and initialize with 0"}},
+{"", {""}, {"none"}},
+{"", {""}, {"condition"}},
+{"", {"result = dot(a * b) + c"}, {"c","a of char4","b of char4"}},
+{"Accumulate byte-wise dot-product", {"result = dot(a * b) + c"}, {"c","a of char4","b of uchar4"}},
+{"Accumulate byte-wise dot-product", {"result = dot(a * b) + c"}, {"c","a of uchar4","b of char4"}},
+{"Accumulate byte-wise dot-product", {"result = dot(a * b) + c"}, {"c","a of uchar4","b of uchar4"}},
+{"", {""}, {"C matrix","A matrix","B matrix","precision of A matrix","precision of B matrix","systolic depth","repeat count","is_dpas_wide_instruction"}},
+{"", {""}, {"none"}},
+{"", {""}, {"none"}},
+{"used by compiler to preserve thread ID debug info", {"return thread ID"}, {"thread ID"}},
+{"", {""}, {"Dst Buffer","array index","byte offset in structure","src0","Instruction type (add, or, xor etc)"}},
+{"returns the eu id that is defined in the state register 'PREDEFINED_SR0'", {"result"}, {"none"}},
+{"returns the eu id that is defined in the state register 'PREDEFINED_SR0'", {"result"}, {"none"}},
+{"", {""}, {""}},
+{"", {""}, {""}},
+{"", {"result"}, {"Min MV loaded into from result","Min SAD loaded into from result","result from IME","MB block type"}},
+{"", {"result"}, {"input"}},
+{"", {""}, {"Dst Buffer","dst address","src0","src1"}},
+{"", {""}, {"Dst Buffer","dst address","src0","src1"}},
+{"", {""}, {"Dst Buffer","array index","byte offset in structure","src0","src1"}},
+{"", {""}, {""}},
+{"", {"result"}, {"src0"}},
+{"", {"result"}, {"src0"}},
+{"", {""}, {"Dst Buffer","dst address","src0","Instruction type (add, or, xor etc)"}},
+{"", {""}, {"Dst Buffer","dst address","src0","Instruction type (add, or, xor etc)"}},
+{"", {""}, {"Dst Buffer","array index","byte offset in structure","src0","Instruction type (add, or, xor etc)"}},
+{"", {""}, {"none"}},
+{"", {""}, {"","",""}},
+{"", {""}, {"","",""}},
+{"", {""}, {"","",""}},
+{"GENISA_frc for emitting HW Frc", {"output"}, {"src0"}},
+{"", {"result"}, {"source"}},
+{"Convert from float to bf16", {"bf16 result"}, {"float source","Rounding mode (ERoundingMode)"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"float to tf32 conversion", {"tf32 result (as int)"}, {"float source","Rounding mode(ERoundingMode)"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"coordinates ref","coordinates u","coordinates v","coordinates r","coordinates ai","src buffer","sampler","immediate offset u","immediate offset v","immediate offset w","src channel select"}},
+{"", {"result"}, {"coordinates ref","coordinates u","coordinates v","coordinates offu","coordinates offv","coordinates r","src buffer","sampler","immediate offset u","immediate offset v","immediate offset w","src channel offset"}},
+{"", {"result"}, {"coordinates u","coordinates v","coordinates offu","coordinates offv","coordinates r","src buffer","sampler","immediate offset u","immediate offset v","immediate offset w","src channel select"}},
+{"", {"result"}, {"coordinates u","coordinates v","coordinates r","coordinates ai","src buffer","sampler","immediate offset u","immediate offset v","immediate offset w","src channel offset"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"message phase","id of message phase"}},
+{"", {"result"}, {"message phases","id of message phase"}},
+{"", {"result"}, {"message phases reference","id of message phase","id of DW of the message phase"}},
+{"", {"result"}, {"message phases reference","id of message phase","id of DW of the message phase"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"sr0.# the state register", {"result"}, {"index/offset of the subregister within sr0"}},
+{"sr0.0 the first dword state register", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {"result"}, {"none"}},
+{"", {""}, {"none"}},
+{"half to bf8 conversion", {"bf8 result (as char)"}, {"half source","Rounding mode(ERoundingMode)","saturation (true: sat; false: no)"}},
+{"returns the hardware thread id that is located at 'PREDEFINED_HW_TID'", {"result"}, {"none"}},
+{"returns the hardware thread id that is located at 'PREDEFINED_HW_TID' and this ID should be used only by alloca", {"result"}, {"none"}},
+{"", {"result"}, {"bit field width","bit field offset","bit field src"}},
+{"", {""}, {"Dst Buffer","dst address","src0","src1"}},
+{"", {""}, {"Dst Buffer","dst address","src0","src1"}},
+{"", {""}, {"Dst Buffer","coordinates u","coordinates v","coordinates r","src0","src1"}},
+{"", {"result"}, {"source0","source1"}},
+{"", {""}, {"Dst Buffer","dst address","src0","Instruction type (add, or, xor etc)"}},
+{"", {""}, {"Dst Buffer","dst address","src0","Instruction type (add, or, xor etc)"}},
+{"", {""}, {"Dst Buffer","coordinates u","coordinates v","coordinates r","src0","Instruction type (add, or, xor etc)"}},
+{"", {""}, {""}},
+{"", {"result"}, {"source"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"Prevent the compiler from seeing where result comes from.", {"return the argument"}, {"value to be laundered"}},
+{"", {"result"}, {"coordinates x","coordinates y","coordinates z","lod","resource","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"sampleindex","mcsl","mcsh","coordinates x","coordinates y","coordinates z","lod","resource","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"sampleindex","mcs0","mcs1","mcs2","mcs3","coordinates x","coordinates y","coordinates z","lod","resource","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"coordinates x","coordinates y","coordinates z","lod","src buffer","immediate offset u","immediate offset v","immediate offset w"}},
+{"Read a scalar value from a buffer pointer at byte offset", {""}, {"buffer pointer, result of GetBufferPtr","offset from the base pointer, in bytes","aligment in bytes","volatile, must be an immediate"}},
+{"Read a vector from a buffer pointer at byte offset", {""}, {"buffer pointer, result of GetBufferPtr","offset from the base pointer, in bytes","aligment in bytes","volatile, must be an immediate"}},
+{"", {"result0"}, {"src buffer","array index","byte offset in structure"}},
+{"", {"result"}, {"coordinates u","coordinates v","coordinates r","coordinates ai","resource","sampler"}},
+{"", {""}, {"Commit Enable","L3_Flush_RW_Data","L3_Flush_Constant_Data","L3_Flush_Texture_Data","L3_Flush_Instructions","Fence has global effect","L1 Invalidate","L1 Evict"}},
+{"", {""}, {""}},
+{"returns the specified sub register of the control register 'PREDEFINED_CR0'", {"result"}, {"sub reg <0-3>"}},
+{"return the contents of the flag register that the user specifies", {"result"}, {"flag number"}},
+{"", {"",""}, {"","","",""}},
+{"", {""}, {"",""}},
+{"", {""}, {"",""}},
+{"", {"result"}, {"none"}},
+{"", {"",""}, {""}},
+{"", {"result : base address, width, Height, Depth, Mip count, Surface type, surface format, reserved"}, {"source buffer","miplevel"}},
+{"resets the FPU rounding mode", {""}, {"none"}},
+{"", {"result"}, {"source buffer","miplevel"}},
+{"", {"result"}, {"source"}},
+{"Raytracing: Marker for spilled values", {"return the input"}, {"input value"}},
+{"Raytracing: Marker for SWStack offset computation", {"return the input"}, {"input value"}},
+{"", {"result"}, {"coordinates ref","coordinates bias","coordinates u","coordinates v","coordinates r","coordinates ai","src buffer","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"bias","coordinates u","coordinates v","coordinates r","coordinates ai","minlod","resource","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"coordinates ref","coordinates u","coordinates v","coordinates r","coordinates ai","minlod","resource","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"coordinates ref","coordinates u","gradient du from dx","gradient du from dy","coordinates v","gradient dv from dx","gradient dv from dy","coordinates r","gradient dr from dx","gradient dr from dy","coordinates ai","resource","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"coordinates u","gradient du from dx","gradient du from dy","coordinates v","gradient dv from dx","gradient dv from dy","coordinates r","gradient dr from dx","gradient dr from dy","coordinates ai","minlod","resource","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"coordinates u","coordinates v","coordinates w","texture index","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"coordinates ref","coordinates lod","coordinates u","coordinates v","coordinates r","coordinates ai","resource","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"lod","coordinates u","coordinates v","coordinates r","coordinates ai","resource","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"result"}, {"source buffer"}},
+{"", {"result"}, {"coordinates u","coordinates v","coordinates r","coordinates ai","minlod","resource","sampler","immediate offset u","immediate offset v","immediate offset w"}},
+{"", {"new message phase result"}, {"cur message phase","id of message phase","message phase value"}},
+{"", {"new message phase result"}, {"cur message phase","id of message phase","message phase value"}},
+{"", {"new message phase result"}, {"curr message phase","id of message phase","id of DW of the message phase","new val"}},
+{"", {"new message phase result"}, {"curr message phase","id of message phase","id of DW of the message phase","new val"}},
+{"", {""}, {"curr message phase","id of message phase","id of DW of the message phase","new val"}},
+{"", {""}, {"curr message phase","id of message phase","message phase value"}},
+{"switches the FPU rounding mode", {""}, {"Rounding mode (ERoundingMode)"}},
+{"", {""}, {""}},
+{"", {""}, {"",""}},
+{"", {""}, {"",""}},
+{"", {""}, {"","",""}},
+{"", {"result"}, {"message phases","starting id of message phase","number of phases"}},
+{"", {"result"}, {"message phases","starting id of message phase","number of phases"}},
+{"", {"result"}, {"none"}},
+{"", {""}, {"","","",""}},
+{"", {""}, {"","","","",""}},
+{"", {""}, {"destination","destination byte offset","destination hstride","destination num elements","source","source byte offset","source vertical stride","source width","source hstride","type size (for dst and src)","execution size","source num elements"}},
+{"", {"new message phase result"}, {"curr message phase","starting id of message phase","number of phases","id of subreg per message phase","number of lanes per message phase","new val"}},
+{"", {"new message phase result"}, {"curr message phase","starting id of message phase","number of phases","id of subreg per message phase","number of lanes per message phase","new val"}},
+{"", {"result"}, {"curr","next","offset"}},
+{"", {"result"}, {"value","xor value"}},
+{"", {"result"}, {"none"}},
+{"returns the slice id that is defined in the state register 'PREDEFINED_SR0'", {"result"}, {"none"}},
+{"returns creates a mov from source to a null register", {"result"}, {"register"}},
+{"stochastic rounding:  srnd dst  src0  src1", {"dst: hf"}, {"src0: F","src1: random number. F(the same as src0's)","saturation (true: sat; false: no)"}},
+{"stochastic rounding:  srnd dst  src0  src1", {"dst: bf8 (as ub)"}, {"src0: HF","src1: random number. HF(the same as src0's)","saturation (true: sat; false: no)"}},
+{"GenISA_staticConstantPatchValue returns a static constant patch value as an integer.", {"symbol value"}, {"symbol name"}},
+{"Write a scalar value to a buffer pointer at byte offset", {""}, {"buffer pointer, result of GetBufferPtr","offset from the base pointer, in bytes","value to store","aligment in bytes","volatile, must be an immediate"}},
+{"Write a vector to a buffer pointer at byte offset", {""}, {"buffer pointer, result of GetBufferPtr","offset from the base pointer, in bytes","value to store","aligment in bytes","volatile, must be an immediate"}},
+{"", {""}, {"dst buffer","array index","byte offset in structure","src0 value to be stored"}},
+{"", {""}, {"dst buffer","array index","byte offset in structure","src0 value to be stored","src1 value to be stored"}},
+{"", {""}, {"dst buffer","array index","byte offset in structure","src0 value to be stored","src1 value to be stored","src2 value to be stored"}},
+{"", {""}, {"dst buffer","array index","byte offset in structure","src0 value to be stored","src1 value to be stored","src2 value to be stored","src3 value to be stored"}},
+{"XeHP SDV: dot product accumulate systolic", {"dst"}, {"src0(acc)","src1","src2","src1's precision","src2's precision","systolic depth","repeat count","isDpasw"}},
+{"", {"",""}, {"","","",""}},
+{"returns the subslice id defined in the state register 'PREDEFINED_SR0'", {"result"}, {"none"}},
+{"PVC system memory fence", {""}, {"indicates whether a fence to typed memory is also necessary"}},
+{"tf32 to float conversion", {"float result"}, {"tf32 source (as int)"}},
+{"", {""}, {"none"}},
+{"", {""}, {"none"}},
+{"", {""}, {"none"}},
+{"Named Barriers Init", {""}, {"thread group named barrier ID","thread group count"}},
+{"Named Barriers barrier", {""}, {"thread group named barrier ID"}},
+{"", {""}, {""}},
+{"", {"Return type"}, {"Src Buffer","coordinates u","coordinates v","coordinates r","LOD"}},
+{"", {""}, {"Dst Buffer to write to","coordinates u","coordinates v","coordinates r","LOD","x","y","z","w (4 elements since uav_typed will always write 4 destinations)"}},
+{"", {"result"}, {"source0","source1"}},
+{"", {""}, {"none"}},
+{"", {""}, {""}},
+{"", {"result"}, {"bit field width","bit field offset","bit field src"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"input"}},
+{"", {"result"}, {"source0","source1"}},
+{"Certain DG2 B0+ configurations, for read-after-write urb accesses", {""}, {"none"}},
+{"", {"result"}, {"source"}},
+{"", {"result0"}, {"source0","source1"}},
+{"", {"result"}, {"output buffer","coordinates","size","src image bti","sampler (accelerator) id"}},
+{"", {"result"}, {"output buffer","coordinates","size","src image bti","sampler (accelerator) id"}},
+{"", {"result"}, {"output buffer","coordinates","size","src image bti","sampler (accelerator) id"}},
+{"", {"result"}, {"output buffer","coordinates","src image bti","sampler (accelerator) id"}},
+{"New 2D convolve function w/o using SLM, 16x1 version", {"result"}, {"coordinates","src image bti","sampler (accelerator) id"}},
+{"New 2D convolve function w/o using SLM, 16x4 version", {"result"}, {"coordinates","src image bti","sampler (accelerator) id"}},
+{"", {"result"}, {"output buffer","coordinates","src image bti","sampler (accelerator) id"}},
+{"", {"result"}, {"output buffer","coordinates","src image bti","sampler (accelerator) id"}},
+{"", {"result"}, {"output buffer","coordinates","src image bti","sampler (accelerator) id"}},
+{"", {"result"}, {"output buffer","coordinates","src image bti","sampler (accelerator) id"}},
+{"used by compiler to mark an array in GRF", {"return the vector value"}, {"none"}},
+{"", {"result"}, {"output buffer","universal header input","fbr header input","src image bti","ref image bti","interMbMode","subMbShape","subMbPredMode"}},
+{"", {"result"}, {"header input","src image bti","fwd ref image bti","bwd ref image bti"}},
+{"", {"result"}, {"output buffer","universal header input","ime header input","src image bti","ref image bti","ref0 coordinate","ref1 coordinate","cost center"}},
+{"", {"result"}, {"header input","src image bti","fwd ref image bti","bwd ref image bti","stream mode"}},
+{"", {"result"}, {"output buffer","universal header input","sic header input","src image bti","ref0 image bti","ref1 image bti"}},
+{"", {"result"}, {"header input","src image bti","fwd ref image bti","bwd ref image bti"}},
+{"", {""}, {"none"}}}};
+return IDComments[id-Intrinsic::num_intrinsics - 1];
+#endif //GET_INTRINSIC_COMMENTS_TABLE
+#if defined(_MSC_VER) && defined(setjmp_undefined_for_msvc)
+// let's return it to _setjmp state
+#  pragma pop_macro("setjmp")
+#  undef setjmp_undefined_for_msvc
+#endif

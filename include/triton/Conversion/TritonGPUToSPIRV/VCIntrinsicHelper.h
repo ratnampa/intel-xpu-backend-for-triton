@@ -12,6 +12,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/GenXIntrinsics/GenXIntrinsics.h"
+// GenISA intrinsic
+#include "GenIntrinsics.h"
 #include <memory>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 #include <string>
@@ -37,10 +39,17 @@ spirv::FuncOp appendOrGetGenXDeclaration(OpBuilder &builder,
                                          llvm::GenXIntrinsic::ID id,
                                          ArrayRef<mlir::Type *> mlirTys);
 
-class VCIntrinsicCommon;
+std::string getGenISAName(llvm::GenISAIntrinsic::ID id,
+                          ArrayRef<mlir::Type *> mlirTys);
+
+spirv::FuncOp appendOrGetGenISADeclaration(OpBuilder &builder,
+                                           llvm::GenISAIntrinsic::ID id,
+                                           ArrayRef<mlir::Type *> mlirTys);
+
+class IntrinsicCommon;
 class VCIntrinsic;
 
-class VCIBuilder {
+class IntrinsicBuilder {
 #if 0
   struct Operand {
     std::string constraint;
@@ -104,7 +113,7 @@ class VCIBuilder {
   };
 #endif
 public:
-  explicit VCIBuilder(int threadsPerWarp, OpBuilder &builder)
+  explicit IntrinsicBuilder(int threadsPerWarp, OpBuilder &builder)
       : threadsPerWarp(threadsPerWarp), builder(builder){};
 
   template <typename INSTR = VCIntrinsic, typename... Args>
@@ -196,23 +205,23 @@ private:
   //  friend class GCNInstr;
   //  friend class GCNInstrCommon;
 public:
-  llvm::SmallVector<std::unique_ptr<VCIntrinsicCommon>, 2> instrs;
+  llvm::SmallVector<std::unique_ptr<IntrinsicCommon>, 2> instrs;
   //  int oprCounter{};
   OpBuilder &builder;
   int threadsPerWarp;
 };
-class VCIBuilder;
+class IntrinsicBuilder;
 
-class VCIntrinsicCommon {
+class IntrinsicCommon {
 
 public:
-  VCIntrinsicCommon(VCIBuilder *builder) {}
+  IntrinsicCommon(IntrinsicBuilder *builder) {}
 
 private:
 };
 
 template <class ConcreteT>
-struct VCIntrinsicSIMTAdaptor : public VCIntrinsicCommon {
+struct VCIntrinsicSIMTAdaptor : public IntrinsicCommon {
 
   void vectorizeArgTypes(SmallVector<mlir::Type> &mlirSIMDTys,
                          SmallVector<mlir::Type> &mlirSIMTTys,
@@ -243,10 +252,10 @@ struct VCIntrinsicSIMTAdaptor : public VCIntrinsicCommon {
   }
 
   template <class... TYPES>
-  explicit VCIntrinsicSIMTAdaptor(VCIBuilder *builder,
+  explicit VCIntrinsicSIMTAdaptor(IntrinsicBuilder *builder,
                                   llvm::GenXIntrinsic::ID intrinsic,
                                   std::string suffix, TYPES... tys)
-      : VCIntrinsicCommon(builder), threadsPerWarp(builder->threadsPerWarp) {
+      : IntrinsicCommon(builder), threadsPerWarp(builder->threadsPerWarp) {
     auto mlirContext = builder->builder.getContext();
 
     SmallVector<mlir::Type> mlirSIMTTys;
@@ -280,6 +289,23 @@ protected:
   int threadsPerWarp;
 };
 
+template <class ConcreteT> struct GenISAIntrinsic : public IntrinsicCommon {
+
+  template <class... TYPES>
+  explicit GenISAIntrinsic(IntrinsicBuilder *builder,
+                           llvm::GenISAIntrinsic::ID intrinsic, TYPES... tys)
+      : IntrinsicCommon(builder) {
+    SmallVector<mlir::Type *> mlirTys{&tys...};
+    // get GenISA intrinsic declaration.
+    intrinsicDecl =
+        appendOrGetGenISADeclaration(builder->builder, intrinsic, mlirTys);
+    llvm::outs().flush();
+  }
+
+protected:
+  spirv::FuncOp intrinsicDecl;
+};
+
 // data type for D_C_A_B.
 enum class DPASEngineType : uint8_t {
   // floating-point XMX engine instr
@@ -287,33 +313,70 @@ enum class DPASEngineType : uint8_t {
   FP32_FP32_BF16_BF16,
   FP32_FP32_TF32_TF32,
   FP16_FP16_FP16_FP16,
-  BP16_BP16_BP16_BP16,
+  BF16_BF16_BF16_BF16,
   // integer XMX engine instr
   // TODO: add integer support
   //
   NOT_APPLICABLE,
 };
 
-class GenXDPAS2 : public VCIntrinsicSIMTAdaptor<GenXDPAS2> {
+// refer to IGC/visa/Common_ISA_util.cpp#87
+static inline uint8_t encodePrecision(DPASEngineType type) {
+  if (type == DPASEngineType::FP32_FP32_BF16_BF16 ||
+      type == DPASEngineType::BF16_BF16_BF16_BF16)
+    return 9;
+  else if (type == DPASEngineType::FP32_FP32_FP16_FP16 ||
+           type == DPASEngineType::FP16_FP16_FP16_FP16)
+    return 10;
+  else if (type == DPASEngineType::FP32_FP32_TF32_TF32)
+    return 12;
+  else {
+    assert(0 && "add more support");
+    return 0;
+  }
+};
 
-  // refer to IGC/visa/Common_ISA_util.cpp#87
-  static uint8_t encodePrecision(DPASEngineType type) {
-    if (type == DPASEngineType::FP32_FP32_BF16_BF16 ||
-        type == DPASEngineType::BP16_BP16_BP16_BP16)
-      return 9;
-    else if (type == DPASEngineType::FP32_FP32_FP16_FP16 ||
-             type == DPASEngineType::FP16_FP16_FP16_FP16)
-      return 10;
-    else if (type == DPASEngineType::FP32_FP32_TF32_TF32)
-      return 12;
-    else {
-      assert(0 && "add more support");
-      return 0;
-    }
-  };
+class GenISA_DPAS : public GenISAIntrinsic<GenISA_DPAS> {
 
 public:
-  explicit GenXDPAS2(VCIBuilder *builder, DPASEngineType dpasTy,
+  explicit GenISA_DPAS(IntrinsicBuilder *builder, DPASEngineType dpasTy,
+                       uint32_t systolicDepth, uint32_t repeatCount,
+                       mlir::Type dTy, mlir::Type cTy, mlir::Type aTy,
+                       mlir::Type bTy)
+      : GenISAIntrinsic<GenISA_DPAS>(
+            builder, llvm::GenISAIntrinsic::ID::GenISA_sub_group_dpas, dTy, cTy,
+            aTy, bTy),
+        dpasTy(dpasTy), systolicDepth(systolicDepth), repeatCount(repeatCount) {
+  }
+
+  Value operator()(ConversionPatternRewriter &rewriter, Location loc, Value C,
+                   Value A, Value B) {
+
+    auto srcPrec = encodePrecision(dpasTy);
+
+    auto funName = intrinsicDecl.getName();
+    auto retType = intrinsicDecl.getResultTypes();
+    auto funCall = rewriter.create<spirv::FunctionCallOp>(
+        loc, retType, funName,
+        ValueRange{C, A, B, i32_val(srcPrec) /*src1's precision*/,
+                   i32_val(srcPrec) /*src1's precision*/,
+                   i32_val(systolicDepth) /*systolic depth*/,
+                   i32_val(repeatCount) /*repeate count*/,
+                   int_val(1, 0) /*is double = false*/});
+    auto ret = funCall.getReturnValue();
+    return ret;
+  }
+
+private:
+  DPASEngineType dpasTy;
+  uint32_t systolicDepth;
+  uint32_t repeatCount;
+};
+
+class GenXDPAS2 : public VCIntrinsicSIMTAdaptor<GenXDPAS2> {
+
+public:
+  explicit GenXDPAS2(IntrinsicBuilder *builder, DPASEngineType dpasTy,
                      uint8_t repeatCount, mlir::Type dTy, mlir::Type cTy,
                      mlir::Type bTy, mlir::Type aTy)
       : VCIntrinsicSIMTAdaptor<GenXDPAS2>(
@@ -374,14 +437,11 @@ public:
   }
 };
 
-#if 1
-
-#endif
 #if 0
 // GCN instruction common interface.
 // Put the generic logic for all the instructions here.
-struct VCIntrinsicCommon {
-  explicit VCIntrinsicCommon(GCNBuilder *builder) : builder(builder) {}
+struct IntrinsicCommon {
+  explicit IntrinsicCommon(GCNBuilder *builder) : builder(builder) {}
 
   using Operand = GCNBuilder::Operand;
   using Modifier = GCNBuilder::Modifier;

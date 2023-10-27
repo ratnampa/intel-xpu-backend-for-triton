@@ -419,9 +419,9 @@ getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
     JointMatrixMatmulLoader loader(
         sharedLayout.getOrder(), warpsPerTile, kDim, mmaLayout.getRepeatCount(),
         mmaLayout.getSystolicDepth(), mmaLayout.getExecutionSize(),
-        mmaLayout.getOpsPerChan(), mmaLayout.getThreadsPerWarp(),
-        smemObj.strides, instrShape, perPhase, maxPhase, vec, elemBytes,
-        rewriter, typeConverter, loc);
+        mmaLayout.getOpsPerChan(), mmaLayout.getSugGroupSize(), smemObj.strides,
+        instrShape, perPhase, maxPhase, vec, elemBytes, rewriter, typeConverter,
+        loc);
 
     // Offset of a slice within the original tensor in shared memory
     Value cSwizzleOffset = smemObj.getCSwizzleOffset(order[0]);
@@ -450,9 +450,9 @@ getLoadMatrixFn(Value tensor, const RankedTensorType &dstType,
     llvm::outs().flush();
 #endif
     auto totalElem = product<int>(instrShape);
-    auto threadsPerWarp = mmaLayout.getThreadsPerWarp();
-    auto matTy = spirv::StructType::get(
-        SmallVector<Type>(totalElem / threadsPerWarp, eltTy));
+    auto threadsPerWarp = mmaLayout.getSugGroupSize();
+    auto matTy = spirv::StructType::get(SmallVector<Type>(
+        totalElem / threadsPerWarp, typeConverter->convertType(eltTy)));
 #if 0
     llvm::outs() << "johnlu matTy matTy:" << matTy << "\n";
     llvm::outs().flush();

@@ -8,12 +8,14 @@
 #include <memory>
 
 using namespace mlir;
+using namespace mlir::triton::intel;
 
 namespace {
 
-SmallVector<unsigned, 2> warpsPerTileV2(triton::DotOp dotOp,
-                                        const ArrayRef<int64_t> shape,
-                                        int numWarps) {
+SmallVector<unsigned, 2> getWarpsPerTile(triton::DotOp dotOp,
+                                         struct IntelXMXCapability xmxCap,
+                                         const ArrayRef<int64_t> tensorShape,
+                                         int numWarps) {
   auto filter = [&dotOp](Operation *op) {
     return op->getParentRegion() == dotOp->getParentRegion();
   };
@@ -23,15 +25,20 @@ SmallVector<unsigned, 2> warpsPerTileV2(triton::DotOp dotOp,
       return {(unsigned)numWarps, 1};
 
   SmallVector<unsigned, 2> ret = {1, 1};
-  SmallVector<int64_t, 2> shapePerWarp = {16, 8};
+  SmallVector<int64_t, 2> shapePerWarp = {xmxCap.repeatCount,
+                                          xmxCap.executionSize};
+  uint32_t rowColRatio =
+      mlir::ceil<uint32_t>(xmxCap.repeatCount, xmxCap.executionSize);
+  uint32_t colRowRatio =
+      mlir::ceil<uint32_t>(xmxCap.executionSize, xmxCap.repeatCount);
   bool changed = false;
   do {
     changed = false;
     if (ret[0] * ret[1] >= numWarps)
       break;
-    if (shape[0] / shapePerWarp[0] / ret[0] >=
-        shape[1] / (shapePerWarp[1] * 2) / ret[1]) {
-      if (ret[0] < shape[0] / shapePerWarp[0]) {
+    if (tensorShape[0] / (shapePerWarp[0] * rowColRatio) / ret[0] >=
+        tensorShape[1] / (shapePerWarp[1] * colRowRatio) / ret[1]) {
+      if (ret[0] < tensorShape[0] / shapePerWarp[0]) {
         ret[0] *= 2;
       } else
         ret[1] *= 2;
@@ -44,7 +51,6 @@ SmallVector<unsigned, 2> warpsPerTileV2(triton::DotOp dotOp,
 
 class BlockedToMMA : public mlir::RewritePattern {
   std::map<std::string, int> computeCapability;
-  //  mutable int mmaV1Counter{}; // used to generate ID for MMAv1 encoding
 
 public:
   BlockedToMMA(mlir::MLIRContext *context,
@@ -79,20 +85,23 @@ public:
     auto oldAType = a.getType().cast<RankedTensorType>();
     auto oldBType = b.getType().cast<RankedTensorType>();
 
-    triton::gpu::intel::IntelMmaEncodingAttr mmaEnc;
+    auto xmxCap = getXMXCapability(arch);
+    unsigned mmaElemBitWidths =
+        oldAType.getElementType().getIntOrFloatBitWidth();
+    unsigned opsPerChan = xmxCap.opsChanBitWidths / mmaElemBitWidths;
 
-    auto warpsPerTile = warpsPerTileV2(dotOp, retShape, numWarps);
-    // Hard code for ATSM mnk 8*8*16, packed B on fp16.
+    auto warpsPerTile = getWarpsPerTile(dotOp, xmxCap, retShape, numWarps);
+
     int threadsPerWarp = 32;
     if (computeCapability.find("threads_per_warp") != computeCapability.end()) {
       auto iter = computeCapability.find("threads_per_warp");
       threadsPerWarp = iter->second;
     }
-    //    mmaEnc = triton::gpu::intel::IntelMmaEncodingAttr::get(
-    //        oldRetType.getContext(), {8, 16}, {16, 8}, {8, 8}, {}, {2, 1}, {},
-    //        warpsPerTile, threadsPerWarp);
-    mmaEnc = triton::gpu::intel::IntelMmaEncodingAttr::get(
-        oldRetType.getContext(), 8, 8, 8, 2, warpsPerTile, threadsPerWarp);
+
+    triton::gpu::intel::IntelMmaEncodingAttr mmaEnc =
+        triton::gpu::intel::IntelMmaEncodingAttr::get(
+            oldRetType.getContext(), xmxCap.repeatCount, xmxCap.systolicDepth,
+            xmxCap.executionSize, opsPerChan, warpsPerTile, threadsPerWarp);
 
     auto newRetType =
         RankedTensorType::get(retShape, oldRetType.getElementType(), mmaEnc);
@@ -102,12 +111,10 @@ public:
     auto newAcc = rewriter.create<triton::gpu::ConvertLayoutOp>(
         oldAcc.getLoc(), newRetType, oldAcc);
 
-    unsigned bitwidth = oldAType.getElementType().getIntOrFloatBitWidth();
-    unsigned XMXkWidth = 32 / bitwidth;
     auto newAEncoding = triton::gpu::DotOperandEncodingAttr::get(
-        oldAType.getContext(), 0, newRetType.getEncoding(), XMXkWidth);
+        oldAType.getContext(), 0, newRetType.getEncoding(), opsPerChan);
     auto newBEncoding = triton::gpu::DotOperandEncodingAttr::get(
-        oldBType.getContext(), 1, newRetType.getEncoding(), XMXkWidth);
+        oldBType.getContext(), 1, newRetType.getEncoding(), opsPerChan);
 
     auto newAType = RankedTensorType::get(
         oldAType.getShape(), oldAType.getElementType(), newAEncoding);

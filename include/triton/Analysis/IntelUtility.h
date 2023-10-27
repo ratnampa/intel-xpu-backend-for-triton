@@ -14,11 +14,20 @@
 #include <string>
 
 namespace mlir {
+namespace triton {
+namespace intel {
 
 enum class DeviceArch {
   ATS = 0,
   PVC = 1,
   UNKNOWN,
+};
+
+struct IntelXMXCapability {
+  uint32_t systolicDepth;
+  uint32_t repeatCount;
+  uint32_t executionSize;
+  uint32_t opsChanBitWidths;
 };
 
 DeviceArch
@@ -28,6 +37,10 @@ bool supportXMX(Value value, DeviceArch arch);
 
 bool supportXMX(triton::DotOp op, DeviceArch arch);
 
+IntelXMXCapability getXMXCapability(DeviceArch arch);
+
+} // namespace intel
+} // namespace triton
 } // namespace mlir
 
 #endif // TRITON_INTELUTILITY_H

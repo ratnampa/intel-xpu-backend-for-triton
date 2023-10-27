@@ -4,6 +4,31 @@
 #include "triton/Analysis/IntelUtility.h"
 
 namespace mlir {
+namespace triton {
+namespace intel {
+
+static IntelXMXCapability caps[] = {
+    [(uint32_t)DeviceArch::ATS] =
+        {
+            .systolicDepth = 8,
+            .repeatCount = 8,
+            .executionSize = 8,
+            .opsChanBitWidths = 32,
+        },
+
+    [(uint32_t)DeviceArch::PVC] =
+        {
+            .systolicDepth = 8,
+            .repeatCount = 8,
+            .executionSize = 16,
+            .opsChanBitWidths = 32,
+        },
+};
+
+IntelXMXCapability getXMXCapability(DeviceArch arch) {
+  assert(arch <= DeviceArch::UNKNOWN && "Unknown Intel GPU archs");
+  return caps[(uint32_t)arch];
+}
 
 DeviceArch computeCapabilityToXMXArch(
     const std::map<std::string, int> &computeCapability) {
@@ -28,7 +53,7 @@ bool supportXMX(Value value, DeviceArch arch) {
            (elemTy.isInteger(8) && version >= 2);*/
 }
 
-bool supportXMX(triton::DotOp op, mlir::DeviceArch arch) {
+bool supportXMX(triton::DotOp op, DeviceArch arch) {
   auto aElemTy = op.getA().getType().cast<RankedTensorType>().getElementType();
   auto bElemTy = op.getB().getType().cast<RankedTensorType>().getElementType();
   if (aElemTy.isF32() && bElemTy.isF32()) {
@@ -37,4 +62,6 @@ bool supportXMX(triton::DotOp op, mlir::DeviceArch arch) {
   return supportXMX(op.getA(), arch) && supportXMX(op.getB(), arch);
 }
 
+} // namespace intel
+} // namespace triton
 } // namespace mlir

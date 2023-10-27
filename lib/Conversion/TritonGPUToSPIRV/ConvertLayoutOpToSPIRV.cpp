@@ -152,7 +152,8 @@ private:
       llvm::outs().flush();
 #endif
       Value threadId = getThreadId(rewriter, loc);
-      unsigned threadsPerWarp = mmaLayout.getThreadsPerWarp();
+      unsigned threadsPerWarp =
+          product<unsigned>(mmaLayout.getThreadsPerWarp());
       Value laneId = urem(threadId, i32_val(threadsPerWarp));
       Value warpId = udiv(threadId, i32_val(threadsPerWarp));
       auto warpsPerCTA = mmaLayout.getWarpsPerCTA();
@@ -167,14 +168,17 @@ private:
       Value rowWarpIndex = mul(warpM, i32_val(shapeC[0]));
       Value colWarpIndex = mul(warpN, i32_val(shapeC[1]));
 
+      // clang-format off
       // For C operand sub-group size 16:
       //               execution size = 16
       // <------------------------------------------------------------->
-      // t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15 ^ t0 t1
-      // t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15 |repeat count =
-      // 8 t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15 | .
-      // .   .   .   .   .   .   .   .   .   .   .   .   .   .   . | t0  t1  t2
-      // t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15                  |
+      // t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15       ^
+      // t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15       |
+      // .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .         | repeat count = 8
+      // .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .         |
+      // t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15       |
+      // t0  t1  t2  t3  t4  t5  t6  t7  t8  t9  t10 t11 t12 t13 t14 t15       v
+      // clang-format on
       Value laneRowIndex = udiv(laneId, i32_val(mmaLayout.getExecutionSize()));
       Value laneColIndex = urem(laneId, i32_val(mmaLayout.getExecutionSize()));
       auto sizePerThreads = getSizePerThread(mmaLayout);
@@ -220,7 +224,7 @@ private:
                       ArrayRef<unsigned> paddedRepShape,
                       ArrayRef<unsigned> origRepShape,
                       ArrayRef<unsigned> outOrd, SmallVector<Value> &vals,
-                      Value smemBase) const {
+                      Value smemBase, bool isMM) const {
 
     auto accumNumCTAsEachRep = product<unsigned>(numCTAsEachRep);
     auto layout = type.getEncoding();
@@ -277,6 +281,30 @@ private:
     //    llvm::outs() << "\n";
     //    llvm::outs().flush();
 #endif
+#if 0
+    std::string printFunName;
+    if (stNotRd) {
+      printFunName = "print_mm_half_out";
+    } else {
+      printFunName = "print_mm_half_in";
+    }
+    if (isMM) {
+      auto printFuncTy = mlir::FunctionType::get(
+          rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f16_ty,
+                                  ptr_ty(llvmElemTy, spirv::StorageClass::Workgroup)}, TypeRange());
+
+      NamedAttrList attributes;
+      attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+      attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
+      auto linkageTypeAttr =
+          rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+      auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+          printFunName, linkageTypeAttr);
+      attributes.set("linkage_attributes", linkageAttr);
+      spirv::appendOrGetFuncOp(loc, rewriter, printFunName, printFuncTy,
+                               spirv::FunctionControl::Inline, attributes);
+    }
+#endif
     for (unsigned ctaId = 0; ctaId < accumNumCTAsEachRep; ++ctaId) {
       auto multiDimCTAInRepId =
           getMultiDimIndex<unsigned>(ctaId, numCTAsEachRep, order);
@@ -307,6 +335,12 @@ private:
       // TODO: This is actually redundant index calculation, we should
       //       consider of caching the index calculation result in case
       //       of performance issue observed.
+#if 0
+      if (isMM) {
+        llvm::outs() << "johnlu vec size: " << vec << "\n";
+        llvm::outs().flush();
+      }
+#endif
       for (unsigned elemId = 0; elemId < accumSizePerThread; elemId += vec) {
         SmallVector<Value> multiDimOffset =
             getMultiDimOffset(layout, loc, rewriter, elemId, type,
@@ -326,6 +360,17 @@ private:
               currVal = select(currVal, int_val(8, 1), int_val(8, 0));
             } else if (isPtr)
               currVal = ptrtoint(llvmElemTy, currVal);
+#if 0
+            if (isMM) {
+              auto tid = tid_val();
+              Value warp = udiv(tid, i32_val(8));
+              Value lane = urem(tid, i32_val(8));
+              rewriter.create<spirv::FunctionCallOp>(
+                  loc, TypeRange(), printFunName,
+                  ValueRange{warp, lane, multiDimOffset[0], multiDimOffset[1], i32_val(elemId), vals[elemId + linearCTAId * accumSizePerThread],
+                             ptr});
+            }
+#endif
             store(currVal, ptr);
           } else {
             Value currVal = load(ptr);
@@ -336,6 +381,17 @@ private:
             else if (isPtr)
               currVal = inttoptr(llvmElemTyOrig, currVal);
             vals[elemId + linearCTAId * accumSizePerThread] = currVal;
+#if 0
+            if (isMM) {
+              auto tid = tid_val();
+              Value warp = udiv(tid, i32_val(8));
+              Value lane = urem(tid, i32_val(8));
+              rewriter.create<spirv::FunctionCallOp>(
+                  loc, TypeRange(), printFunName,
+                  ValueRange{warp, lane, multiDimOffset[0], multiDimOffset[1], i32_val(elemId), vals[elemId + linearCTAId * accumSizePerThread], ptr
+                  });
+            }
+#endif
           }
         } else {
           auto vecTy = vec_ty(llvmElemTy, vec);
@@ -364,6 +420,17 @@ private:
               else if (isPtr)
                 currVal = inttoptr(llvmElemTyOrig, currVal);
               vals[elemId + linearCTAId * accumSizePerThread + v] = currVal;
+#if 0
+              if (isMM) {
+                auto tid = tid_val();
+                Value warp = udiv(tid, i32_val(8));
+                Value lane = urem(tid, i32_val(8));
+                rewriter.create<spirv::FunctionCallOp>(
+                    loc, TypeRange(), printFunName,
+                    ValueRange{warp, lane, multiDimOffset[0], multiDimOffset[1], i32_val(elemId + v), currVal,
+                               bitcast(ptr, ptr_ty(llvmElemTy, spirv::StorageClass::Workgroup))});
+              }
+#endif
             }
           }
         }
@@ -531,7 +598,7 @@ private:
 #endif
         processReplica(loc, rewriter, /*stNotRd*/ true, srcTy, inNumCTAsEachRep,
                        multiDimRepId, inVec, paddedRepShape, origRepShape,
-                       outOrd, vals, smemBase);
+                       outOrd, vals, smemBase, false);
       } else {
         assert(0 && "ConvertLayout with input layout not implemented");
         return failure();
@@ -543,7 +610,7 @@ private:
           dstLayout.isa<triton::gpu::intel::IntelMmaEncodingAttr>()) {
         processReplica(loc, rewriter, /*stNotRd*/ false, dstTy,
                        outNumCTAsEachRep, multiDimRepId, outVec, paddedRepShape,
-                       origRepShape, outOrd, outVals, smemBase);
+                       origRepShape, outOrd, outVals, smemBase, false);
       } else {
         assert(0 && "ConvertLayout with output layout not implemented");
         return failure();

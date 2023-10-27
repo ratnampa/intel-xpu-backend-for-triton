@@ -1,5 +1,6 @@
 #include "../DotOpToSPIRV.h"
 #include "../Utility.h"
+#include "GenIntrinsics.h"
 #include "triton/Conversion/TritonGPUToSPIRV/ESIMDHelper.h"
 #include "triton/Conversion/TritonGPUToSPIRV/VCIntrinsicHelper.h"
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
@@ -152,30 +153,37 @@ getMmaOperandsType(DPASEngineType mmaType, MLIRContext *ctx,
   Type bf16Ty = type::bf16Ty(ctx);
   Type i32Ty = type::i32Ty(ctx);
 
-  auto threadsPerWarp = layout.getThreadsPerWarp();
+  auto threadsPerWarp = layout.getSugGroupSize();
+  auto opsPerChan = layout.getOpsPerChan();
   auto shapeC = layout.getShapeC();
   auto elemNumC = product<unsigned>(shapeC) / threadsPerWarp;
   auto shapeA = layout.getShapeA();
   auto elemNumA = product<unsigned>(shapeA) / threadsPerWarp;
   auto shapeB = layout.getShapeB();
   auto elemNumB = product<unsigned>(shapeB) / threadsPerWarp;
-  //  Type fp16x2Pack2Ty =
-  //      spirv::StructType::get(SmallVector<Type>(2, vec_ty(fp16Ty, 2)));
   switch (mmaType) {
   case DPASEngineType::FP32_FP32_FP16_FP16: {
     Type cTy = vec_ty(fp32Ty, elemNumC);
-    Type aTy = vec_ty(i32Ty, elemNumA / 2); // pack fp16 to i32.
-    Type bTy = vec_ty(i32Ty, elemNumB / 2); // pack fp16 to i32.
+    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
     return {cTy, cTy, aTy, bTy};
   }
-    //  case XMXEngineType::FP32_FP32_BF16_BF16:
-    //    return {fp32x4Ty, fp32x4Ty, i32x4Ty, i32x4Ty};
-    //  case XMXEngineType::FP32_FP32_TF32_TF32:
-    //    return {fp32x4Ty, fp32x4Ty, i32x4Ty, i32x4Ty};
   case DPASEngineType::FP16_FP16_FP16_FP16: {
     Type cTy = vec_ty(fp16Ty, elemNumC);
-    Type aTy = vec_ty(i32Ty, elemNumA / 2); // pack fp16 to i32.
-    Type bTy = vec_ty(i32Ty, elemNumB / 2); // pack fp16 to i32.
+    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
+    return {cTy, cTy, aTy, bTy};
+  }
+  case DPASEngineType::FP32_FP32_BF16_BF16: {
+    Type cTy = vec_ty(fp32Ty, elemNumC);
+    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
+    return {cTy, cTy, aTy, bTy};
+  }
+  case DPASEngineType::BF16_BF16_BF16_BF16: {
+    Type cTy = vec_ty(bf16Ty, elemNumC);
+    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
     return {cTy, cTy, aTy, bTy};
   }
   default:
@@ -202,7 +210,7 @@ DPASEngineType getMmaType(triton::DotOp op) {
         op.getAllowTF32())
       return DPASEngineType::FP32_FP32_TF32_TF32;
   } else if (dTy.getElementType().isInteger(32)) {
-    // TODO:
+    // TODO: add integer dpas.
   } else if (dTy.getElementType().isF16()) {
     if (aTy.getElementType().isF16() && bTy.getElementType().isF16())
       return DPASEngineType::FP16_FP16_FP16_FP16;
@@ -297,21 +305,6 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   unsigned threadsPerWarp =
       triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
 
-  //  VCIBuilder builder(threadsPerWarp, rewriter);
-  //  auto dpas2Intrinsic =
-  //      builder.create<GenXDPAS2>(mmaType, 8, dTy, cTy, bTy, aTy);
-
-  //  return type. d, c, a, b
-  // param c, a, b
-  //  1st int, perceci
-  //
-  //  call <8 x float>
-  //  @llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32(<8 x float> %0,
-  //  <8 x i32> [[A]], <8 x i32> [[B]], i32 8, i32 8, i32 8, i32 8, i1 false)
-  auto dpasFuncTy = mlir::FunctionType::get(
-      rewriter.getContext(),
-      {cTy, aTy, bTy, i32_ty, i32_ty, i32_ty, i32_ty, i1_ty}, {dTy});
-
   //  llvm::outs() << "johnlu aTy: " << aTy << "\n";
   //  llvm::outs().flush();
   //  llvm::outs() << "johnlu bTy: " << bTy << "\n";
@@ -321,32 +314,22 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   //  llvm::outs() << "johnlu dTy: " << dTy << "\n";
   //  llvm::outs().flush();
 
-  NamedAttrList dpasAttributes;
-  //  attributes.set("libname", StringAttr::get(rewriter.getContext(),
-  //  "libdevice")); attributes.set("libpath",
-  //  StringAttr::get(rewriter.getContext(), ""));
-  auto dpasLinkageTypeAttr = rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(
-      spirv::LinkageType::Import);
-  auto dpasLinkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
-      "llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32",
-      dpasLinkageTypeAttr);
-  dpasAttributes.set("linkage_attributes", dpasLinkageAttr);
-  spirv::appendOrGetFuncOp(
-      loc, rewriter, "llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32",
-      dpasFuncTy, spirv::FunctionControl::Inline, dpasAttributes);
-
   auto callMma = [&](unsigned m, unsigned n, unsigned k) {
     auto valA = ha.at({m, k});
     auto valB = hb.at({n, k});
     auto valc = fc.at({m, n});
-    //    auto ret = (*dpas2Intrinsic)(rewriter, loc, valc, valB, valA);
-    auto ret = rewriter.create<spirv::FunctionCallOp>(
-        loc, TypeRange{dTy},
-        "llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32",
-        ValueRange{valc, valA, valB, i32_val(10), i32_val(10), i32_val(8),
-                   i32_val(8), int_val(1, 0)});
-    auto mmaType = typeConverter->convertType(dTensorTy);
-    Type elemTy = mmaType.cast<spirv::StructType>().getElementType(0);
+    IntrinsicBuilder builder(threadsPerWarp, rewriter);
+    GenISA_DPAS dpas2Intrinsic = *builder.create<GenISA_DPAS>(
+        mmaType, srcXMXLayout.getSystolicDepth(), srcXMXLayout.getRepeatCount(),
+        dTy, cTy, bTy, aTy);
+    auto ret = dpas2Intrinsic(rewriter, loc, valc, valA, valB);
+//    auto ret = rewriter.create<spirv::FunctionCallOp>(
+//        loc, TypeRange{dTy},
+//        "llvm.genx.GenISA.sub.group.dpas.v8f32.v8f32.v8i32.v8i32",
+//        ValueRange{valc, valA, valB, i32_val(10), i32_val(10), i32_val(8),
+//                   i32_val(8), int_val(1, 0)});
+//    auto mmaType = typeConverter->convertType(dTensorTy);
+//    Type elemTy = mmaType.cast<spirv::StructType>().getElementType(0);
 #if 0
     llvm::outs() << "johnlu XMX.cpp m: " << m << " n:" << n << " k:" << k
                  << "\n";
@@ -354,7 +337,8 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
     llvm::outs() << "johnlu XMX.cpp elemTy: " << elemTy << "\n";
     llvm::outs().flush();
 #endif
-    fc.at({m, n}) = ret.getReturnValue();
+    //    fc.at({m, n}) = ret.getReturnValue();
+    fc.at({m, n}) = ret;
     //    fc.at({m, n}) = rewriter.create<spirv::UndefOp>(loc, dTy);
   };
 

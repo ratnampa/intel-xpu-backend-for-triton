@@ -59,7 +59,7 @@ along the row (resp. col) dimension.
     "unsigned":$executionSize,
     "unsigned":$opsPerChan,
     ArrayRefParameter<"unsigned">:$warpsPerCTA,
-    "unsigned":$threadsPerWarp
+    "unsigned":$sugGroupSize
   );
 
   let builders = [
@@ -89,6 +89,7 @@ along the row (resp. col) dimension.
     SmallVector<unsigned> getShapeA() const;
     SmallVector<unsigned> getShapeB() const;
     SmallVector<unsigned> getShapeC() const;
+    SmallVector<unsigned> getThreadsPerWarp() const;
   }];
 
   let hasCustomAssemblyFormat = 1;

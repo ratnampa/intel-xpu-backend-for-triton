@@ -106,7 +106,7 @@ SmallVector<unsigned> IntelMmaEncodingAttr::getShapeC() const {
 }
 
 SmallVector<unsigned> IntelMmaEncodingAttr::getSizePerThread() const {
-  unsigned threadsPerWarp = getThreadsPerWarp();
+  unsigned threadsPerWarp = getSugGroupSize();
   auto shapeC = getShapeC();
   unsigned elemsNum = product<unsigned>(shapeC);
   unsigned elemsPerThread = elemsNum / threadsPerWarp;
@@ -173,7 +173,7 @@ unsigned IntelMmaEncodingAttr::getTotalElemsPerThreadForOperands(
   int warpsPerCTAM = getWarpsPerCTA()[0];
   int warpsPerCTAN = getWarpsPerCTA()[1];
   auto rep = getXMXRep(shapePerCTA, opIdx);
-  auto threadsPerWar = getThreadsPerWarp();
+  auto threadsPerWar = getSugGroupSize();
   if (opIdx == 0) {
     auto instrShapeA = getShapeA();
     auto totalElem = product<unsigned>(instrShapeA);
@@ -189,6 +189,10 @@ unsigned IntelMmaEncodingAttr::getTotalElemsPerThreadForOperands(
 Attribute IntelMmaEncodingAttr::getCTALayout() const {
   return CTALayoutAttr::get(getContext(), getCTAsPerCGA(), getCTASplitNum(),
                             getCTAOrder());
+}
+
+SmallVector<unsigned> IntelMmaEncodingAttr::getThreadsPerWarp() const {
+  return {1, getSugGroupSize()};
 }
 
 Attribute IntelMmaEncodingAttr::parse(AsmParser &parser, Type type) {
@@ -251,7 +255,7 @@ void IntelMmaEncodingAttr::print(AsmPrinter &printer) const {
           << "systolicDepth = " << getSystolicDepth() << ", "
           << "executionSize = " << getExecutionSize() << ", "
           << "opsPerChan = " << getOpsPerChan() << ", "
-          << "threadsPerWarp = " << getThreadsPerWarp() << ", "
+          << "threadsPerWarp = " << getSugGroupSize() << ", "
           << "warpsPerCTA = [" << getWarpsPerCTA() << "], "
           << "A = [" << rA << "], "
           << "B = [" << rB << "], "

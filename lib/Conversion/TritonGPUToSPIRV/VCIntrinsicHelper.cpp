@@ -13,38 +13,6 @@ namespace mlir {
 namespace triton {
 namespace intel {
 
-std::string getGenXName(llvm::GenXIntrinsic::ID id,
-                        ArrayRef<mlir::Type *> mlirTys) {
-  SmallVector<llvm::Type *, 4> llvmTys;
-  llvm::LLVMContext llvmContext;
-  mlir::LLVM::TypeToLLVMIRTranslator typeTranslator(llvmContext);
-  for (mlir::Type *ty : mlirTys) {
-    llvmTys.push_back(typeTranslator.translateType(*ty));
-  }
-  return llvm::GenXIntrinsic::getGenXName(id, llvmTys);
-}
-
-mlir::FunctionType getGenXType(mlir::MLIRContext &context,
-                               llvm::GenXIntrinsic::ID id,
-                               ArrayRef<mlir::Type *> mlirTys) {
-  SmallVector<llvm::Type *, 4> llvmTys;
-  llvm::LLVMContext llvmContext;
-  mlir::LLVM::TypeToLLVMIRTranslator llvmToMLIR(llvmContext);
-  for (mlir::Type *ty : mlirTys) {
-    llvmTys.push_back(llvmToMLIR.translateType(*ty));
-  }
-  auto llvmFuncType =
-      llvm::GenXIntrinsic::getGenXType(llvmContext, id, llvmTys);
-
-  LLVM::TypeFromLLVMIRTranslator mlirToLLVM(context);
-  auto mlirType = mlirToLLVM.translateType(llvmFuncType);
-  auto mlirLLVMFuncType = mlirType.cast<mlir::LLVM::LLVMFunctionType>();
-
-  auto funcTy = mlir::FunctionType::get(&context, mlirLLVMFuncType.getParams(),
-                                        mlirLLVMFuncType.getReturnTypes());
-  return funcTy;
-}
-
 // The code convert the function attribute from the original here:
 // https://github.com/llvm/llvm-project/blob/e575b7cb7a64297583d6382c16ce264d9fe45d08/mlir/lib/Target/LLVMIR/ModuleImport.cpp#L1547
 static void processPassthroughAttrs(mlir::MLIRContext &context,
@@ -75,6 +43,114 @@ static void processPassthroughAttrs(mlir::MLIRContext &context,
 
     llvm_unreachable("unexpected attribute kind");
   }
+}
+
+static llvm::GenISAIntrinsic::ID fixGenISAID(llvm::GenISAIntrinsic::ID id) {
+  auto idBase = llvm::GenISAIntrinsic::getGenIntrinsicIDBase();
+  return (llvm::GenISAIntrinsic::ID)(id - llvm::Intrinsic::num_intrinsics +
+                                     idBase);
+}
+
+std::string getGenISAName(llvm::GenISAIntrinsic::ID id,
+                          ArrayRef<mlir::Type *> mlirTys) {
+  SmallVector<llvm::Type *, 4> llvmTys;
+  llvm::LLVMContext llvmContext;
+  mlir::LLVM::TypeToLLVMIRTranslator typeTranslator(llvmContext);
+  for (mlir::Type *ty : mlirTys) {
+    llvmTys.push_back(typeTranslator.translateType(*ty));
+  }
+
+  return llvm::GenISAIntrinsic::getName(
+      (llvm::GenISAIntrinsic::ID)(id - llvm::Intrinsic::num_intrinsics),
+      llvmTys);
+}
+
+mlir::FunctionType getGenISAType(mlir::MLIRContext &context,
+                                 llvm::GenISAIntrinsic::ID id,
+                                 ArrayRef<mlir::Type *> mlirTys) {
+  SmallVector<llvm::Type *, 4> llvmTys;
+  llvm::LLVMContext llvmContext;
+  mlir::LLVM::TypeToLLVMIRTranslator llvmToMLIR(llvmContext);
+  for (mlir::Type *ty : mlirTys) {
+    llvmTys.push_back(llvmToMLIR.translateType(*ty));
+  }
+
+  auto llvmFuncType = llvm::GenISAIntrinsic::getType(
+      llvmContext,
+      (llvm::GenISAIntrinsic::ID)(id - llvm::Intrinsic::num_intrinsics),
+      llvmTys);
+
+  LLVM::TypeFromLLVMIRTranslator mlirToLLVM(context);
+  auto mlirType = mlirToLLVM.translateType(llvmFuncType);
+  auto mlirLLVMFuncType = mlirType.cast<mlir::LLVM::LLVMFunctionType>();
+
+  auto funcTy = mlir::FunctionType::get(&context, mlirLLVMFuncType.getParams(),
+                                        mlirLLVMFuncType.getReturnTypes());
+  return funcTy;
+}
+
+spirv::FuncOp appendOrGetGenISADeclaration(OpBuilder &builder,
+                                           llvm::GenISAIntrinsic::ID id,
+                                           ArrayRef<mlir::Type *> mlirTys) {
+  auto mlirContext = builder.getContext();
+
+  auto genISAName = getGenISAName(id, mlirTys);
+  FunctionType funcTy = getGenISAType(*mlirContext, id, mlirTys);
+
+  NamedAttrList attributes;
+
+  attributes.set(spirv::SPIRVDialect::getAttributeName(
+                     spirv::Decoration::LinkageAttributes),
+                 spirv::LinkageAttributesAttr::get(
+                     mlirContext, genISAName,
+                     spirv::LinkageTypeAttr::get(builder.getContext(),
+                                                 spirv::LinkageType::Import)));
+
+  llvm::LLVMContext llvmContext;
+  auto llvmAttributes = llvm::GenISAIntrinsic::getGenIntrinsicAttributes(
+      llvmContext, fixGenISAID(id));
+
+  for (auto &attr : llvmAttributes) {
+    processPassthroughAttrs(*mlirContext, attributes, attr);
+  }
+
+  auto funcOp = spirv::appendOrGetFuncOp(
+      mlir::UnknownLoc::get(mlirContext), builder, genISAName, funcTy,
+      spirv::FunctionControl::Inline, attributes);
+
+  return funcOp;
+}
+
+std::string getGenXName(llvm::GenXIntrinsic::ID id,
+                        ArrayRef<mlir::Type *> mlirTys) {
+  SmallVector<llvm::Type *, 4> llvmTys;
+  llvm::LLVMContext llvmContext;
+  mlir::LLVM::TypeToLLVMIRTranslator typeTranslator(llvmContext);
+  for (mlir::Type *ty : mlirTys) {
+    llvmTys.push_back(typeTranslator.translateType(*ty));
+  }
+  return llvm::GenXIntrinsic::getGenXName(id, llvmTys);
+}
+
+mlir::FunctionType getGenXType(mlir::MLIRContext &context,
+                               llvm::GenXIntrinsic::ID id,
+                               ArrayRef<mlir::Type *> mlirTys) {
+  SmallVector<llvm::Type *, 4> llvmTys;
+  llvm::LLVMContext llvmContext;
+  mlir::LLVM::TypeToLLVMIRTranslator llvmToMLIR(llvmContext);
+  for (mlir::Type *ty : mlirTys) {
+    llvmTys.push_back(llvmToMLIR.translateType(*ty));
+  }
+  auto llvmFuncType =
+      llvm::GenXIntrinsic::getGenXType(llvmContext, id, llvmTys);
+
+  LLVM::TypeFromLLVMIRTranslator mlirToLLVM(context);
+  auto mlirType = mlirToLLVM.translateType(llvmFuncType);
+  auto mlirLLVMFuncType = mlirType.cast<mlir::LLVM::LLVMFunctionType>();
+
+  auto funcTy = mlir::FunctionType::get(&context, mlirLLVMFuncType.getParams(),
+                                        mlirLLVMFuncType.getReturnTypes());
+  return funcTy;
 }
 
 spirv::FuncOp appendOrGetGenXDeclaration(OpBuilder &builder,

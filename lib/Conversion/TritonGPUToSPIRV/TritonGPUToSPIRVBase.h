@@ -357,7 +357,8 @@ public:
     // then (x + y) XOR z = 0byyyyxxxx XOR 0b00000zzzz = (x XOR z) + y
     // This means that we can use some immediate offsets for shared memory
     // operations.
-    auto dstPtrTy = ptr_ty(resElemTy, spirv::StorageClass::Workgroup);
+    auto dstPtrTy = ptr_ty(getTypeConverter()->convertType(resElemTy),
+                           spirv::StorageClass::Workgroup);
     auto dstOffset = dot(rewriter, loc, offsetVals, smemObj.strides);
     Value dstPtrBase = gep(dstPtrTy, smemObj.base, dstOffset);
 
