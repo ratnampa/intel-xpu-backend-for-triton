@@ -22,6 +22,13 @@ static SmallVector<Value> reorderValues(const SmallVector<Value> &values,
   assert(inEncoding == ouEncoding);
   if (!inEncoding)
     return values;
+  // If the parent of the dot operand is in block encoding, we don't need to
+  // reorder elements
+  auto parentEncoding =
+      dyn_cast<triton::gpu::TritonGPUMMAAttrInterface>(ouEncoding.getParent());
+  if (!parentEncoding)
+    return values;
+  // TODO: need to make sure the code with the variant sub-group size.
   size_t inBitWidth = inTensorTy.getElementType().getIntOrFloatBitWidth();
   size_t ouBitWidth = ouTensorTy.getElementType().getIntOrFloatBitWidth();
   auto ouEltTy = ouTensorTy.getElementType();
@@ -81,7 +88,6 @@ static SmallVector<Value> reorderValues(const SmallVector<Value> &values,
     //   ret.push_back(values[i + 14]);
     //   ret.push_back(values[i + 15]);
     // }
-    // return values;
   }
   llvm_unreachable("unimplemented code path");
 }
