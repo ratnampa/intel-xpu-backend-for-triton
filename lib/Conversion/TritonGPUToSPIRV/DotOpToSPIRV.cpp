@@ -11,11 +11,11 @@ using ::mlir::triton::gpu::MmaEncodingAttr;
 
 LogicalResult convertFMADot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
                             TritonGPUToSPIRVTypeConverter *typeConverter,
-                            ConversionPatternRewriter &rewriter);
+                            ConversionPatternRewriter &rewriter, Value tid);
 
 LogicalResult convertXMXDot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
                             TritonGPUToSPIRVTypeConverter *typeConverter,
-                            ConversionPatternRewriter &rewriter);
+                            ConversionPatternRewriter &rewriter, Value tid);
 
 struct DotOpSPIRVConversion
     : public ConvertTritonGPUOpToSPIRVPattern<triton::DotOp> {
@@ -39,15 +39,18 @@ struct DotOpSPIRVConversion
                          .cast<RankedTensorType>()
                          .getEncoding()
                          .dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>();
+    auto loc = op.getLoc();
     if (!isOuter && mmaLayout) {
-      return convertXMXDot(op, adaptor, getTypeConverter(), rewriter);
+      return convertXMXDot(op, adaptor, getTypeConverter(), rewriter,
+                           tid_val());
     }
 
     if (D.getType()
             .cast<RankedTensorType>()
             .getEncoding()
             .isa<BlockedEncodingAttr>())
-      return convertFMADot(op, adaptor, getTypeConverter(), rewriter);
+      return convertFMADot(op, adaptor, getTypeConverter(), rewriter,
+                           tid_val());
 
     llvm::report_fatal_error(
         "Unsupported DotOp found when converting TritonGPU to SPIRV.");

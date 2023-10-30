@@ -97,10 +97,9 @@ static Value composeValuesToDotOperandLayoutStruct(
     const ValueTableV2 &vals, int n0, int n1,
     TritonGPUToSPIRVTypeConverter *typeConverter, Location loc,
     ConversionPatternRewriter &rewriter
-#if 0
- ,
-    Value warp,
-    Value lane
+#if 1
+    ,
+    Value warp, Value lane
 #endif
 ) {
   std::vector<Value> elems;
@@ -223,7 +222,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
                          ConversionPatternRewriter &rewriter, Location loc,
                          Value a, Value b, Value c, Value d, Value loadedA,
                          Value loadedB, Value loadedC, DotOp op,
-                         DotOpAdaptor adaptor) {
+                         DotOpAdaptor adaptor, Value tid) {
   auto aTensorTy = a.getType().cast<RankedTensorType>();
   auto bTensorTy = b.getType().cast<RankedTensorType>();
   auto cTensorTy = c.getType().cast<RankedTensorType>();
@@ -354,8 +353,10 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
   llvm::outs().flush();
 #endif
   // Format the values to LLVM::Struct to passing to mma codegen.
+  Value warp = udiv(tid, i32_val(threadsPerWarp));
+  Value lane = urem(tid, i32_val(threadsPerWarp));
   Value res = composeValuesToDotOperandLayoutStruct(
-      fc, repM, repN, typeConverter, loc, rewriter);
+      fc, repM, repN, typeConverter, loc, rewriter, warp, lane);
 
   rewriter.replaceOp(op, res);
 
@@ -365,7 +366,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
 // Convert to xmx
 LogicalResult convertXMXDot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
                             TritonGPUToSPIRVTypeConverter *typeConverter,
-                            ConversionPatternRewriter &rewriter) {
+                            ConversionPatternRewriter &rewriter, Value tid) {
 
   Value A = op.getA();
   Value B = op.getB();
@@ -385,5 +386,5 @@ LogicalResult convertXMXDot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
       loadC(op.getC(), adaptor.getC(), typeConverter, op.getLoc(), rewriter);
 
   return convertDot(typeConverter, rewriter, op.getLoc(), A, B, C, op.getD(),
-                    loadedA, loadedB, loadedC, op, adaptor);
+                    loadedA, loadedB, loadedC, op, adaptor, tid);
 }

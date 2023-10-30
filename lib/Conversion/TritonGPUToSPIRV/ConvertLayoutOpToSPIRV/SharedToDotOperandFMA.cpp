@@ -1,5 +1,6 @@
 #include "../ConvertLayoutOpToSPIRV.h"
 #include "../Utility.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 
 using ValueTable = std::map<std::pair<int, int>, Value>;
 using ::mlir::spirv::getSharedMemoryObjectFromStruct;
@@ -139,6 +140,27 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
   int mShapePerCTATile = getShapePerCTATileForMN(dLayout, true /*isM*/);
   int mSizePerThread = getSizePerThreadForMN(dLayout, true /*isM*/);
 
+#if 0
+  std::string printFunName;
+  printFunName = "print_mm_half_in";
+  auto printFuncTy = mlir::FunctionType::get(
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f16_ty,
+                              ptr_ty(f16_ty, spirv::StorageClass::Workgroup)}, TypeRange());
+
+  NamedAttrList attributes;
+  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
+  auto linkageTypeAttr =
+      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+      printFunName, linkageTypeAttr);
+  attributes.set("linkage_attributes", linkageAttr);
+  spirv::appendOrGetFuncOp(loc, rewriter, printFunName, printFuncTy,
+                           spirv::FunctionControl::Inline, attributes);
+  Value warp = udiv(thread, i32_val(8));
+  Value lane = urem(thread, i32_val(8));
+  static uint32_t loadANum = 0;
+#endif
   for (unsigned k = 0; k < K; ++k)
     for (unsigned m = 0; m < M; m += mShapePerCTATile)
       for (unsigned mm = 0; mm < mSizePerThread; ++mm) {
@@ -146,8 +168,32 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
             add(mul(i32_val(m + mm), strideAM), mul(i32_val(k), strideAK));
         Value pa = gep(ptrTy, aPtrs[0], offset);
         Value va = load(pa);
+#if 0
+        // Create block structure for the masked memory copy.
+        auto *preheader = rewriter.getInsertionBlock();
+        auto opPosition = rewriter.getInsertionPoint();
+        auto *tailblock = rewriter.splitBlock(preheader, opPosition);
+        auto *condblock = rewriter.createBlock(tailblock);
+
+        // Test the mask
+        rewriter.setInsertionPoint(preheader, preheader->end());
+        rewriter.create<mlir::cf::CondBranchOp>(
+            loc, icmp_eq(warp, i32_val(0)), condblock, tailblock);
+
+        // Do the print
+        rewriter.setInsertionPoint(condblock, condblock->end());
+        rewriter.create<spirv::FunctionCallOp>(
+            loc, TypeRange(), printFunName,
+            ValueRange{warp, lane, i32_val(m + mm), i32_val(k), i32_val(loadANum), va, pa});
+        rewriter.create<mlir::cf::BranchOp>(loc, tailblock);
+        // The memory copy insert position
+        rewriter.setInsertionPoint(tailblock, tailblock->begin());
+#endif
         vas.emplace_back(va);
       }
+#if 0
+  loadANum++;
+#endif
 
   return getStructFromValueTable(vas, rewriter, loc, typeConverter, elemTy);
 }
@@ -204,6 +250,27 @@ Value loadBFMA(Value B, Value llB, BlockedEncodingAttr dLayout, Value thread,
   int nShapePerCTATile = getShapePerCTATileForMN(dLayout, false /*isM*/);
   int nSizePerThread = getSizePerThreadForMN(dLayout, false /*isM*/);
 
+#if 0
+  std::string printFunName;
+  printFunName = "print_mm_float_in";
+  auto printFuncTy = mlir::FunctionType::get(
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f32_ty,
+                              ptr_ty(f32_ty, spirv::StorageClass::Workgroup)}, TypeRange());
+
+  NamedAttrList attributes;
+  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
+  auto linkageTypeAttr =
+      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+      printFunName, linkageTypeAttr);
+  attributes.set("linkage_attributes", linkageAttr);
+  spirv::appendOrGetFuncOp(loc, rewriter, printFunName, printFuncTy,
+                           spirv::FunctionControl::Inline, attributes);
+  Value warp = udiv(thread, i32_val(8));
+  Value lane = urem(thread, i32_val(8));
+  static uint32_t loadBNum = 0;
+#endif
   for (unsigned k = 0; k < K; ++k)
     for (unsigned n = 0; n < N; n += nShapePerCTATile)
       for (unsigned nn = 0; nn < nSizePerThread; ++nn) {
@@ -211,9 +278,32 @@ Value loadBFMA(Value B, Value llB, BlockedEncodingAttr dLayout, Value thread,
             add(mul(i32_val(n + nn), strideBN), mul(i32_val(k), strideBK));
         Value pb = gep(ptrTy, bPtrs[0], offset);
         Value vb = load(pb);
+#if 0
+        // Create block structure for the masked memory copy.
+        auto *preheader = rewriter.getInsertionBlock();
+        auto opPosition = rewriter.getInsertionPoint();
+        auto *tailblock = rewriter.splitBlock(preheader, opPosition);
+        auto *condblock = rewriter.createBlock(tailblock);
+
+        // Test the mask
+        rewriter.setInsertionPoint(preheader, preheader->end());
+        rewriter.create<mlir::cf::CondBranchOp>(
+            loc, icmp_eq(warp, i32_val(0)), condblock, tailblock);
+
+        // Do the print
+        rewriter.setInsertionPoint(condblock, condblock->end());
+        rewriter.create<spirv::FunctionCallOp>(
+            loc, TypeRange(), printFunName,
+            ValueRange{warp, lane, i32_val(k), i32_val(n + nn), i32_val(loadBNum), vb, pb});
+        rewriter.create<mlir::cf::BranchOp>(loc, tailblock);
+        // The memory copy insert position
+        rewriter.setInsertionPoint(tailblock, tailblock->begin());
+#endif
         vbs.emplace_back(vb);
       }
-
+#if 0
+  loadBNum++;
+#endif
   return getStructFromValueTable(vbs, rewriter, loc, typeConverter, elemTy);
 }
 
