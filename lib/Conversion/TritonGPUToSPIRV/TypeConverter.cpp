@@ -120,6 +120,30 @@ TritonGPUToSPIRVTypeConverter::TritonGPUToSPIRVTypeConverter(
 
 Type TritonGPUToSPIRVTypeConverter::convertTritonPointerType(
     triton::PointerType type) {
+  auto ctx = type.getContext();
+  auto pointeeType = type.getPointeeType();
+  if (pointeeType.isa<RankedTensorType>()) {
+    auto rankedTensorType = pointeeType.cast<RankedTensorType>();
+    // struct { offset0, offset1, shape0, shape1, stride0,
+    // stride1, base_ptr};
+    auto eleType = rankedTensorType.getElementType();
+    auto shape = rankedTensorType.getShape();
+    SmallVector<Type, 4> types;
+    // offsets
+    for (size_t i = 0; i < shape.size(); ++i)
+      types.push_back(IntegerType::get(ctx, 32));
+    // shapes, strides
+    for (size_t i = 0; i < 2 * shape.size(); ++i)
+      types.push_back(IntegerType::get(ctx, 64));
+
+    std::optional<spirv::StorageClass> storageClass =
+        getStorageClassForMemorySpace(type.getAddressSpace());
+    assert(storageClass && "uncompatible pointer address type in SPIRV");
+    types.push_back(
+        spirv::PointerType::get(convertType(eleType), *storageClass));
+
+    return spirv::StructType::get(types);
+  }
   // Recursively translate pointee type
   std::optional<spirv::StorageClass> storageClass =
       getStorageClassForMemorySpace(type.getAddressSpace());

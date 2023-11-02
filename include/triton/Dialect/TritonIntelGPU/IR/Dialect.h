@@ -13,8 +13,8 @@
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h.inc"
 //#include "triton/Dialect/TritonGPU/IR/Traits.h"
 
-//#define GET_OP_CLASSES
-//#include "triton/Dialect/TritonGPU/IR/Ops.h.inc"
+#define GET_OP_CLASSES
+#include "triton/Dialect/TritonIntelGPU/IR/Ops.h.inc"
 
 namespace mlir {
 namespace triton {
