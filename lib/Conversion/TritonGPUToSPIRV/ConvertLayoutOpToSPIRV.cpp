@@ -54,11 +54,6 @@ public:
     auto dstTy = dst.getType().cast<RankedTensorType>();
     Attribute srcLayout = srcTy.getEncoding();
     Attribute dstLayout = dstTy.getEncoding();
-    // forwarding on mma->shared, lower distributed->shared otherwise
-    if (srcLayout.isa<triton::gpu::intel::IntelMmaEncodingAttr>() &&
-        dstLayout.isa<SharedEncodingAttr>()) {
-      return lowerMMAToShared(op, adaptor, rewriter);
-    }
     if (isaDistributedLayout(srcLayout) &&
         dstLayout.isa<SharedEncodingAttr>()) {
       return lowerDistributedToShared(op, adaptor, rewriter);

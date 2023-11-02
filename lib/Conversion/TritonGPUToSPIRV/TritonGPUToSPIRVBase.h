@@ -12,6 +12,7 @@
 #include "mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "triton/Analysis/AxisInfo.h"
+#include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 #include <set>
 using namespace mlir;
 using namespace mlir::triton;
@@ -738,6 +739,10 @@ public:
       if (auto blockedLayout = layout.dyn_cast<BlockedEncodingAttr>()) {
         result = emitBaseIndexWithinCTAForBlockedLayout(loc, rewriter,
                                                         blockedLayout, type);
+      } else if (auto mmaLayout = layout.dyn_cast<
+                                  triton::gpu::intel::IntelMmaEncodingAttr>()) {
+        result =
+            emitBaseIndexWithinCTAForMmaLayout(loc, rewriter, mmaLayout, type);
       } else if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
         auto parentLayout = sliceLayout.getParent();
         auto parentShape = sliceLayout.paddedShape(type.getShape());
@@ -769,6 +774,10 @@ public:
   emitOffsetForLayout(Attribute layout, RankedTensorType type) const {
     if (auto blockedLayout = layout.dyn_cast<BlockedEncodingAttr>())
       return emitOffsetForBlockedLayout(blockedLayout, type);
+    if (auto mmaLayout =
+            layout.dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
+      return emitOffsetForMmaLayout(mmaLayout, type);
+    }
     if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>())
       return emitOffsetForSliceLayout(sliceLayout, type);
     llvm_unreachable("unsupported emitOffsetForLayout");
@@ -793,6 +802,10 @@ public:
       if (auto blocked = layout.dyn_cast<BlockedEncodingAttr>()) {
         result = emitIndicesForDistributedLayout(loc, b, blocked, type,
                                                  withCTAOffset);
+      } else if (auto mma = layout.dyn_cast<
+                            triton::gpu::intel::IntelMmaEncodingAttr>()) {
+        result =
+            emitIndicesForDistributedLayout(loc, b, mma, type, withCTAOffset);
       } else if (auto slice = layout.dyn_cast<SliceEncodingAttr>()) {
         result =
             emitIndicesForDistributedLayout(loc, b, slice, type, withCTAOffset);
@@ -922,6 +935,82 @@ private:
       }
     }
     return reorderedOffset;
+  }
+
+  SmallVector<SmallVector<unsigned>> emitOffsetForMmaLayout(
+      const triton::gpu::intel::IntelMmaEncodingAttr &mmaLayout,
+      RankedTensorType type) const {
+    auto shape = type.getShape();
+    auto shapePerCTA = getShapePerCTA(mmaLayout, shape);
+    SmallVector<SmallVector<unsigned>> ret;
+    auto sizePerThread = mmaLayout.getSizePerThread();
+    for (unsigned i = 0; i < shapePerCTA[0];
+         i += getShapePerCTATile(mmaLayout)[0]) {
+      for (unsigned j = 0; j < shapePerCTA[1];
+           j += getShapePerCTATile(mmaLayout)[1]) {
+        for (unsigned elemRowIndex = 0; elemRowIndex < sizePerThread[0];
+             ++elemRowIndex) {
+          for (unsigned elemColIndex = 0; elemColIndex < sizePerThread[1];
+               ++elemColIndex) {
+            // The offsets for 2x2 are pushed as
+            // [0, 1]
+            // [2, 3]
+            ret.push_back({i + elemRowIndex, j + elemColIndex});
+          }
+        }
+      }
+    }
+    return ret;
+  }
+
+  SmallVector<Value> emitBaseIndexWithinCTAForMmaLayout(
+      Location loc, ConversionPatternRewriter &rewriter,
+      const triton::gpu::intel::IntelMmaEncodingAttr &mmaLayout,
+      RankedTensorType type) const {
+    auto shape = type.getShape();
+    auto _warpsPerCTA = mmaLayout.getWarpsPerCTA();
+    assert(_warpsPerCTA.size() == 2);
+    auto order = triton::gpu::getOrder(mmaLayout);
+    SmallVector<unsigned> instrShape = mmaLayout.getShapeC();
+    SmallVector<Value> warpsPerCTA = {i32_val(_warpsPerCTA[0]),
+                                      i32_val(_warpsPerCTA[1])};
+    auto shapePerCTA = getShapePerCTA(mmaLayout, shape);
+
+    Value threadId = getThreadId(rewriter, loc);
+    SmallVector<unsigned> threadsPerWarp = mmaLayout.getThreadsPerWarp();
+    Value warpSize = i32_val(product<unsigned>(threadsPerWarp));
+    Value laneId = urem(threadId, warpSize);
+    Value warpId = udiv(threadId, warpSize);
+
+    uint32_t repM = (_warpsPerCTA[0] * instrShape[0]) / shapePerCTA[0];
+    uint32_t repN = (_warpsPerCTA[1] * instrShape[1]) / shapePerCTA[1];
+
+    uint32_t warpsM;
+    if (repM > 1)
+      warpsM = _warpsPerCTA[0] / repM;
+    else
+      warpsM = shape[0] / instrShape[0];
+
+    uint32_t warpsN;
+    if (repN > 1)
+      warpsN = _warpsPerCTA[1] / repN;
+    else
+      warpsN = shape[1] / instrShape[1];
+
+    SmallVector<Value> multiDimWarpId(2);
+    multiDimWarpId = delinearize(rewriter, loc, warpId, _warpsPerCTA, order);
+    Value warpId0 = urem(multiDimWarpId[0], i32_val(warpsM));
+    Value warpId1 = urem(multiDimWarpId[1], i32_val(warpsN));
+
+    Value offWarp0 = mul(warpId0, i32_val(instrShape[0]));
+    Value offWarp1 = mul(warpId1, i32_val(instrShape[1]));
+
+    SmallVector<Value> multiDimBase(2);
+    Value laneRowIndex = udiv(laneId, i32_val(mmaLayout.getExecutionSize()));
+    Value laneColIndex = urem(laneId, i32_val(mmaLayout.getExecutionSize()));
+    multiDimBase[0] = add(laneRowIndex, offWarp0);
+    multiDimBase[1] = add(laneColIndex, offWarp1);
+    return multiDimBase;
   }
 
   // Emit indices calculation within each ConversionPattern, and returns a

@@ -144,7 +144,7 @@ SmallVector<unsigned> IntelMmaEncodingAttr::getCTASplitNum() const {
   return res;
 }
 SmallVector<unsigned> IntelMmaEncodingAttr::getCTAOrder() const {
-  SmallVector<unsigned> res{0, 1};
+  SmallVector<unsigned> res{1, 0};
   return res;
 }
 SmallVector<unsigned> IntelMmaEncodingAttr::getCTAsPerCGA() const {
@@ -263,6 +263,96 @@ void IntelMmaEncodingAttr::print(AsmPrinter &printer) const {
           << "}>";
 }
 
+// Dialect Interface
+
+struct TritonIntelGPUInferLayoutInterface
+    : public triton::DialectInferLayoutInterface {
+  using DialectInferLayoutInterface::DialectInferLayoutInterface;
+
+  LogicalResult
+  inferReduceOpEncoding(Attribute operandEncoding, unsigned axis,
+                        Attribute &resultEncoding) const override {
+    resultEncoding = mlir::triton::gpu::SliceEncodingAttr::get(
+        getDialect()->getContext(), axis, operandEncoding);
+    return success();
+  }
+
+  LogicalResult inferTransOpEncoding(Attribute operandEncoding,
+                                     Attribute &resultEncoding) const override {
+    mlir::triton::gpu::SharedEncodingAttr sharedEncoding =
+        operandEncoding.dyn_cast<mlir::triton::gpu::SharedEncodingAttr>();
+    if (!sharedEncoding)
+      return failure();
+    SmallVector<unsigned> retOrder(sharedEncoding.getOrder().begin(),
+                                   sharedEncoding.getOrder().end());
+    std::reverse(retOrder.begin(), retOrder.end());
+    // TODO(Qingyi): Need to check whether CTAOrder should also be reversed.
+    // This is not a problem for tests where numCTAs = 1.
+    resultEncoding = mlir::triton::gpu::SharedEncodingAttr::get(
+        getDialect()->getContext(), sharedEncoding.getVec(),
+        sharedEncoding.getPerPhase(), sharedEncoding.getMaxPhase(), retOrder,
+        sharedEncoding.getCTALayout(), sharedEncoding.getHasLeadingOffset());
+    return mlir::success();
+  }
+
+  LogicalResult
+  inferExpandDimsOpEncoding(Attribute operandEncoding, unsigned axis,
+                            Attribute &resultEncoding,
+                            std::optional<Location> location) const override {
+    auto sliceEncoding =
+        operandEncoding.dyn_cast<mlir::triton::gpu::SliceEncodingAttr>();
+    if (!sliceEncoding)
+      return emitOptionalError(
+          location, "ExpandDimsOp operand encoding must be SliceEncodingAttr");
+    if (sliceEncoding.getDim() != axis)
+      return emitOptionalError(
+          location, "Incompatible slice dimension for ExpandDimsOp operand");
+    resultEncoding = sliceEncoding.getParent();
+    return success();
+  }
+
+  LogicalResult
+  inferDotOpEncoding(Attribute operandEncoding, unsigned opIdx,
+                     Attribute retEncoding,
+                     std::optional<Location> location) const override {
+    auto mmaRetEncoding =
+        retEncoding.dyn_cast<mlir::triton::gpu::intel::IntelMmaEncodingAttr>();
+    if (mmaRetEncoding) {
+      // TODO: support gmma when A/B does not reside in shared memory
+      if (!operandEncoding.isa<mlir::triton::gpu::SharedEncodingAttr>())
+        return emitOptionalError(
+            location, "unexpected operand layout for MmaEncodingAttr v3");
+    } else if (auto dotOpEnc =
+                   operandEncoding
+                       .dyn_cast<mlir::triton::gpu::DotOperandEncodingAttr>()) {
+      if (opIdx != dotOpEnc.getOpIdx())
+        return emitOptionalError(location, "Wrong opIdx");
+      if (retEncoding != dotOpEnc.getParent())
+        return emitOptionalError(location, "Incompatible parent encoding");
+    } else
+      return emitOptionalError(
+          location, "Dot's a/b's encoding should be of DotOperandEncodingAttr");
+    return success();
+  }
+
+  LogicalResult
+  verifyDotOpEncodingCompatibility(Operation *op, Attribute operandEncodingA,
+                                   Attribute operandEncodingB) const override {
+    auto aEncoding =
+        operandEncodingA.dyn_cast<triton::gpu::DotOperandEncodingAttr>();
+    auto bEncoding =
+        operandEncodingB.dyn_cast<triton::gpu::DotOperandEncodingAttr>();
+    if (!aEncoding && !bEncoding)
+      return mlir::success();
+    // Verify that the encodings are valid.
+    if (!aEncoding || !bEncoding)
+      return op->emitError("mismatching encoding between A and B operands");
+    if (aEncoding.getKWidth() != bEncoding.getKWidth())
+      return op->emitError("mismatching kWidth between A and B operands");
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 
 void TritonIntelGPUDialect::initialize() {
@@ -270,6 +360,7 @@ void TritonIntelGPUDialect::initialize() {
 #define GET_ATTRDEF_LIST
 #include "triton/Dialect/TritonIntelGPU/IR/TritonIntelGPUAttrDefs.cpp.inc"
       >();
+  addInterfaces<TritonIntelGPUInferLayoutInterface>();
 }
 
 // verify TritonIntelGPU ops

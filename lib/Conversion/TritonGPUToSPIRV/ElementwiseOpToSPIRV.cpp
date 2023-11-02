@@ -1232,8 +1232,6 @@ void populateElementwiseOpToSPIRVPatterns(
   POPULATE_BINARY_OP(arith::MaxUIOp, arith::MaxUIOp)       // umax
 #undef POPULATE_BINARY_OP
 
-  //  patterns.add<SIMDTest>(typeConverter, context, benefit);
-
 #define POPULATE_UNARY_OP(SRC_OP, DST_OP)                                      \
   patterns.add<ElementwiseOpSPIRVConversion<SRC_OP, DST_OP>>(                  \
       typeConverter, context, benefit);
