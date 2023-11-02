@@ -390,7 +390,7 @@ public:
     spirv::Extension exts_opencl[] = {
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
         spirv::Extension::SPV_KHR_expect_assume};
-    auto triple = spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps_opencl,
+    auto triple = spirv::VerCapExtAttr::get(spirv::Version::V_1_4, caps_opencl,
                                             exts_opencl, context);
     auto targetAttr = spirv::TargetEnvAttr::get(
         triple, spirv::getDefaultResourceLimits(context),

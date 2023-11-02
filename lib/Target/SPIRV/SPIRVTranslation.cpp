@@ -35,7 +35,7 @@ namespace triton {
 
 namespace fs = std::filesystem;
 
-static spv_target_env defaultSPIRVTargetEnv = SPV_ENV_UNIVERSAL_1_0;
+static spv_target_env defaultSPIRVTargetEnv = SPV_ENV_OPENCL_2_2;
 
 static std::unique_ptr<llvm::Module> spirvToLLVM(uint32_t *binary_ptr,
                                                  size_t binary_size,
@@ -213,16 +213,6 @@ static bool linkExternLib(llvm::Module &module, llvm::StringRef name,
     return true;
   }
 
-  //  // check if ROCM
-  //  if (!isROCM) {
-  //    if (name == "libdevice") {
-  //      linkLibdevice(module);
-  //    }
-  //    // else {
-  //    //   assert(false && "unknown extern lib: ");
-  //    // }
-  //  }
-
   return false;
 }
 
@@ -365,7 +355,8 @@ static std::map<std::string, std::string> getExternLibs(mlir::ModuleOp module) {
   }
 
   if (!funcs.empty()) {
-    std::vector<std::string> lib_names = {"libprint_utils.spv"};
+    std::vector<std::string> lib_names = {"libsycl-fallback-imf.bc",
+                                          "libsycl-fallback-imf-fp64.bc"};
     // first search for environmental path
     std::string env_path = ::triton::tools::getenv("TRITON_LIBDEVICE_PATH");
     if (!env_path.empty()) {
@@ -450,8 +441,9 @@ getExternLibs(spirv::ModuleOp module) {
   }
 
   if (!funcs.empty()) {
-    std::vector<std::string> lib_names = {"libprint_utils.spv", /*"libsycl-fallback-imf.spv",
-                                          "libsycl-fallback-imf-fp64.spv"*/};
+    std::vector<std::string> lib_names = {
+        /*"libprint_utils.bc",*/ "libsycl-fallback-imf.bc",
+        "libsycl-fallback-imf-fp64.bc"};
     // first search for environmental path
     std::string env_path = ::triton::tools::getenv("TRITON_LIBDEVICE_PATH");
     if (!env_path.empty()) {
@@ -564,7 +556,7 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
         spirv::Extension::SPV_KHR_expect_assume,
         spirv::Extension::SPV_INTEL_vector_compute};
     newModuleOp->setAttr("vce_triple", spirv::VerCapExtAttr::get(
-                                           spirv::Version::V_1_0, caps_opencl,
+                                           spirv::Version::V_1_4, caps_opencl,
                                            exts_opencl, builder.getContext()));
 
     spirvModules.push_back(newModuleOp);
@@ -629,23 +621,10 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
   // analyses on the used library functions, and eliminate any unused functions
   // as dead code.
   auto externLibs = getExternLibs(spirvModules[0]);
-  std::vector<uint32_t> linked_binary(binary.data(),
-                                      binary.data() + binary.size());
-  if (!linkExternLib(linked_binary, externLibs))
-    return failure();
-
-  if (::triton::tools::getBoolEnv("MLIR_ENABLE_DUMP")) {
-    std::string spirvDisassemble;
-    llvm::raw_string_ostream disassemble(spirvDisassemble);
-    if (!failed(disassembleSPIRV(linked_binary.data(), linked_binary.size(),
-                                 disassemble)))
-      llvm::dbgs() << "SPIRV IR after link:\n" << spirvDisassemble << "\n";
-  }
 
   llvm::LLVMContext context;
   context.setOpaquePointers(false);
-  auto llvmModule =
-      spirvToLLVM(linked_binary.data(), linked_binary.size(), context);
+  auto llvmModule = spirvToLLVM(binary.data(), binary.size(), context);
 
   //  llvm::outs() << "johnlu llvmModule: " << *llvmModule << "\n";
   //  llvm::outs().flush();
@@ -653,11 +632,10 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
   // This allows the optimizers to inline and perform
   // analyses on the used library functions, and eliminate any unused functions
   // as dead code.
-  //  auto externLibs = getExternLibs(module);
-  //  for (auto &lib : externLibs) {
-  //    if (linkExternLib(*llvmModule, lib.first, lib.second))
-  //      return failure();
-  //  }
+  for (auto &lib : externLibs) {
+    if (linkExternLib(*llvmModule, lib.first, lib.second))
+      return failure();
+  }
 
   auto optPipeline = mlir::makeOptimizingTransformer(
       /*optLevel=*/3, /*sizeLevel=*/0,
