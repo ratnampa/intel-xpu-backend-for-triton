@@ -8,6 +8,7 @@
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 #include "triton/Dialect/TritonIntelGPU/Transforms/Passes.h"
+#include "triton/Dialect/TritonNvidiaGPU/Transforms/Passes.h"
 
 #include <Python.h>
 #include <cctype>
@@ -347,6 +348,10 @@ void init_triton_translation(py::module &m) {
       .def("add_triton_intel_gpu_decompose_conversions_pass",
            [](mlir::PassManager &self) {
              self.addPass(mlir::createTritonIntelGPUDecomposeConversionsPass());
+           })
+      .def("add_tritongpu_rewrite_tensor_pointer_pass",
+           [](mlir::PassManager &self, py::dict computeCapability) {
+             self.addPass(mlir::createTritonGPURewriteTensorPointerPass(80));
            });
 }
 
