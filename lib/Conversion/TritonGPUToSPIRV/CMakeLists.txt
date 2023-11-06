@@ -2,6 +2,8 @@
 # VCIntrinsics is required.
 find_package(VCIntrinsics)
 
+target_compile_options(LLVMGenXIntrinsics PRIVATE "-Wno-deprecated-declarations")
+
 add_mlir_conversion_library(TritonGPUToSPIRV
     TritonGPUToSPIRV.cpp
     ReshapeOpToSPIRV.cpp

@@ -7,5 +7,5 @@ add_mlir_dialect_library(TritonIntelGPUIR
   TritonIntelGPUAttrDefsIncGen
 
   LINK_LIBS PUBLIC
-  MLIRGPUOps
+  MLIRGPUDialect
 )

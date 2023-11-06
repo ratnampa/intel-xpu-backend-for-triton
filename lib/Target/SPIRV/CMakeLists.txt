@@ -3,6 +3,9 @@ find_package(SPIRV_Tools)
 
 set_target_properties(SPIRV-Tools-shared PROPERTIES EXCLUDE_FROM_ALL ON)
 
+target_compile_options(SPIRV-Tools-static PRIVATE "-Wno-deprecated-declarations")
+
+
 # SPIRV-LLVM Translator is required.
 find_package(SPIRVToLLVMTranslator)
 
@@ -18,7 +21,7 @@ add_mlir_translation_library(TritonSPIRV
         MLIRSupport
         MLIRTargetLLVMIRExport
         # spirv tools
-        SPIRV-Tools
+        SPIRV-Tools-static
         SPIRV-Tools-link
         LLVMSPIRVLib
         )
@@ -30,10 +33,10 @@ execute_process(
         WORKING_DIRECTORY ${SPIRVToLLVMTranslator_SOURCE_DIR}
         COMMAND_ERROR_IS_FATAL ANY)
 
-execute_process(
-        COMMAND ${GIT_EXECUTABLE} apply --whitespace=fix /home/chengjun/workspace/CLionProject/triton-torch-xpu/third_party/intel_xpu_backend/lib/Target/SPIRV/freeze_insn_workaround.patch
-        WORKING_DIRECTORY ${SPIRVToLLVMTranslator_SOURCE_DIR}
-        COMMAND_ERROR_IS_FATAL ANY)
+#execute_process(
+#        COMMAND ${GIT_EXECUTABLE} apply --whitespace=fix /home/chengjun/workspace/CLionProject/triton-torch-xpu/third_party/intel_xpu_backend/lib/Target/SPIRV/freeze_insn_workaround.patch
+#        WORKING_DIRECTORY ${SPIRVToLLVMTranslator_SOURCE_DIR}
+#        COMMAND_ERROR_IS_FATAL ANY)
 
 # Add SPIRVLLVMTranslator include dir
 target_include_directories(TritonSPIRV PRIVATE ${SPIRVToLLVMTranslator_INCLUDE_DIR})

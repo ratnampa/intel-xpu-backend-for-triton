@@ -1115,7 +1115,7 @@ void populateElementwiseOpToSPIRVPatterns(
 #define POPULATE_TERNARY_OP(SRC_OP, DST_OP)                                    \
   patterns.add<ElementwiseOpSPIRVConversion<SRC_OP, DST_OP>>(                  \
       typeConverter, context, benefit);
-  POPULATE_TERNARY_OP(mlir::arith::SelectOp, spirv::SelectOp)
+  POPULATE_TERNARY_OP(mlir::arith::SelectOp, mlir::arith::SelectOp)
 #undef POPULATE_TERNARY_OP
 
 #define POPULATE_BINARY_OP(SRC_OP, DST_OP)                                     \

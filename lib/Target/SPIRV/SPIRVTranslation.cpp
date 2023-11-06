@@ -623,7 +623,6 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
   auto externLibs = getExternLibs(spirvModules[0]);
 
   llvm::LLVMContext context;
-  context.setOpaquePointers(false);
   auto llvmModule = spirvToLLVM(binary.data(), binary.size(), context);
 
   //  llvm::outs() << "johnlu llvmModule: " << *llvmModule << "\n";
