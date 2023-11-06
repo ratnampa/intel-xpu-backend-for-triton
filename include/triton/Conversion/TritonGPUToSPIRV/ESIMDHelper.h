@@ -53,7 +53,10 @@ class ESIMDToSIMTAdaptor {
         mlirSIMDTys.push_back(simdTy);
         vectorizedTys.push_back(simdTy);
       } else {
-        llvm_unreachable("un-supported type of SIMT wrapper");
+        mlir::VectorType simdTy = mlir::VectorType::get(threadsPerWarp, argTy);
+        mlirSIMTTys.push_back(argTy);
+        mlirSIMDTys.push_back(simdTy);
+        vectorizedTys.push_back(simdTy);
       }
     } else {
       mlirSIMTTys.push_back(argTy.mlirTy);

@@ -444,118 +444,34 @@ public:
     Type elemTy = this->getTypeConverter()->convertType(resultElementTy);
     SmallVector<Value> resultVals;
 
-    auto aTy = mlir::VectorType::get(128, f16_ty);
-    auto bTy = mlir::VectorType::get(128, i32_ty);
-    auto cTy = mlir::VectorType::get(128, i32_ty);
-    auto dTy = mlir::VectorType::get(128, i32_ty);
-    //        SmallVector<mlir::Type*, 4> funcTys;
-    //        funcTys.push_back(&dTy);
-    //        funcTys.push_back(&aTy);
-    //        funcTys.push_back(&bTy);
-    //        funcTys.push_back(&cTy);
-
-    std::string simdFunc = "SIMDwrapper";
-#if 1
     auto mod = op->getParentOfType<ModuleOp>();
     unsigned threadsPerWarp =
         triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
-    auto simdLenght = threadsPerWarp * 1;
-    auto valueTy = i32_ty;
-    auto valSIMDTy = mlir::VectorType::get({(int64_t)simdLenght}, valueTy);
 
-    //    auto aTy = mlir::VectorType::get(2, f16_ty);
-    //    auto bTy = mlir::VectorType::get(2, i32_ty);
-    //    auto cTy = mlir::VectorType::get(2, i32_ty);
-    //    auto dTy = mlir::VectorType::get(2, i32_ty);
-    //    VCIBuilder builder(threadsPerWarp, rewriter);
-    //    auto dpas2Intrinsic = builder.create<GenXDPAS2>(dTy, cTy, bTy, aTy);
-    //    Value ret = dpas2Intrinsic(cVal, bVal, aVal);
+    std::string simdFunc = "SIMDwrapperIAdd";
+    auto esimdFunc =
+        ESIMDToSIMTAdaptor(rewriter, simdFunc, elemTy, elemTy, elemTy);
+    spirv::FuncOp &esimdWrapper = esimdFunc.esimdWrapper;
 
-    auto simdFunTy =
-        mlir::FunctionType::get(rewriter.getContext(), {valSIMDTy}, {dTy});
-    spirv::FuncOp wrapper;
-    {
-      // SIMD function
-      NamedAttrList attributes;
-      wrapper = mlir::triton::intel::appendOrGetESIMDFunc(rewriter, simdFunc,
-                                                          simdFunTy, loc);
-      if (wrapper.empty()) {
-        auto block = wrapper.addEntryBlock();
-        auto entryBlock = &wrapper.getFunctionBody().front();
+    if (esimdWrapper.empty()) {
+      auto block = esimdWrapper.addEntryBlock();
+      auto entryBlock = &esimdWrapper.getFunctionBody().front();
 
-        OpBuilder rewriter(entryBlock, entryBlock->begin());
+      OpBuilder rewriter(entryBlock, entryBlock->begin());
+      Value a = entryBlock->getArgument(0);
+      Value b = entryBlock->getArgument(1);
 
-        Value retVal = rewriter.create<spirv::UndefOp>(loc, bTy);
-
-        for (int i = 0; i < simdLenght; i++)
-          retVal = insert_val(dTy, i32_val(i + 10), retVal,
-                              rewriter.getI32ArrayAttr(i));
-
-        rewriter.create<spirv::ReturnValueOp>(loc, TypeRange(),
-                                              ValueRange{retVal});
-      }
+      Value ret = rewriter.create<spirv::IAddOp>(loc, a, b);
+      rewriter.create<spirv::ReturnValueOp>(loc, TypeRange(), ValueRange{ret});
     }
+
+    // get the interface for the SIMT.
     auto funPtrTy = spirv::FunctionPointerINTELType::get(
-        simdFunTy, spirv::StorageClass::Function);
+        esimdFunc.esimdFunTy, spirv::StorageClass::Function);
     spirv::INTELConstantFunctionPointerOp funValue =
-        rewriter.create<spirv::INTELConstantFunctionPointerOp>(loc, funPtrTy,
-                                                               simdFunc);
+        rewriter.create<spirv::INTELConstantFunctionPointerOp>(
+            loc, funPtrTy, esimdFunc.esimdWrapper.getName());
 
-    //  std::cout << "johnlu address of" << std::endl;
-    //  (*this)->print(llvm::outs());
-    //  llvm::outs().flush();
-    //  std::cout << std::endl;
-    Type simtDTy;
-    if (simdLenght / 16 > 1)
-      simtDTy = mlir::VectorType::get(simdLenght / 16, i32_ty);
-    else
-      simtDTy = i32_ty;
-
-    std::string intfSIMDFunc =
-        "_Z33__regcall3____builtin_invoke_simd" + simdFunc;
-    auto simtToSIMDFunTy = mlir::FunctionType::get(
-        rewriter.getContext(), {funPtrTy, valueTy}, {simtDTy});
-    {
-      // SIMT -> SIMD calling abi
-      auto simtWrapper =
-          spirv::appendOrGetFuncOp(loc, rewriter, intfSIMDFunc, simtToSIMDFunTy,
-                                   spirv::FunctionControl::Inline);
-
-      simtWrapper->setAttr(
-          spirv::SPIRVDialect::getAttributeName(
-              spirv::Decoration::LinkageAttributes),
-          spirv::LinkageAttributesAttr::get(
-              rewriter.getContext(), intfSIMDFunc,
-              spirv::LinkageTypeAttr::get(rewriter.getContext(),
-                                          spirv::LinkageType::Import)));
-    }
-
-    auto funCall = rewriter.create<spirv::FunctionCallOp>(
-        loc, TypeRange{simtDTy}, intfSIMDFunc,
-        ValueRange{funValue, i32_val(0)});
-    auto ret = funCall.getReturnValue();
-
-    auto printFuncTy = mlir::FunctionType::get(
-        rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty}, TypeRange());
-    spirv::FuncOp funcOp = SIMDTest::appendOrGetFuncOp(
-        rewriter, op, "libdevice", "print_scalar", printFuncTy);
-
-    for (int i = 0; i < (simdLenght / 16); i++) {
-      Value scalar;
-      if (simdLenght / 16 > 1)
-        scalar = extract_val(i32_ty, ret, rewriter.getI32ArrayAttr(i));
-      else
-        scalar = ret;
-      Value tid = tid_val();
-      Value warp = udiv(tid, i32_val(16));
-      Value lane = urem(tid, i32_val(16));
-      rewriter.create<spirv::FunctionCallOp>(
-          loc, TypeRange(), "print_scalar",
-          ValueRange{warp, lane, i32_val(i), scalar});
-    }
-
-#endif
-    //
     SmallVector<SmallVector<Value>> allOperands;
     auto operands = adaptor.getOperands();
     for (const auto &operand : operands) {
@@ -572,12 +488,11 @@ public:
     if (allOperands.size() == 0)
       allOperands.push_back({});
     for (const SmallVector<Value> &operands : allOperands) {
-      Value curr = rewriter.create<spirv::IAddOp>(
-          loc, elemTy, operands, adaptor.getAttributes().getValue());
-      //      Value curr =
-      //          ((ConcreteT *)(this))
-      //              ->createDestOp(op, adaptor, rewriter, elemTy, operands,
-      //              loc);
+      auto funCall = rewriter.create<spirv::FunctionCallOp>(
+          loc, TypeRange{esimdFunc.simtIntfTy.getResults()},
+          esimdFunc.simtIntfName,
+          ValueRange{funValue, operands[0], operands[1]});
+      Value curr = funCall.getReturnValue();
       if (!bool(curr))
         return failure();
       resultVals.push_back(curr);
@@ -1251,6 +1166,7 @@ void populateElementwiseOpToSPIRVPatterns(
   POPULATE_UNARY_OP(triton::PtrToIntOp, spirv::ConvertPtrToUOp)
 #undef POPULATE_UNARY_OP
 
+  // patterns.add<SIMDTest>(typeConverter, context, 100);
   patterns.add<CmpIOpSPIRVConversion>(typeConverter, context, benefit);
   patterns.add<CmpFOpSPIRVConversion>(typeConverter, context, benefit);
 
