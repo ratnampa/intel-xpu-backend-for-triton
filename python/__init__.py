@@ -18,8 +18,6 @@ from triton.runtime.driver import DriverBase  # noqa:E402
 
 from .extensions import SYCLBuildExtension, SYCLExtension, use_profile  # noqa:E402
 
-THREADS_PER_WARP = 8
-
 
 @functools.lru_cache()
 def version_key():
@@ -105,6 +103,7 @@ def ttgir_to_spirv(mod, extern_libs, arch):
         _add_external_libs(mod, extern_libs)
     spirv_code, share_memory_size = _triton.translate_triton_gpu_to_spirv(str(mod), arch)  # noqa: E501
     mod.share_memory_size = share_memory_size
+    mod.threads_per_warp = arch["threads_per_warp"]
     return spirv_code
 
 
@@ -459,7 +458,7 @@ class XPUBackend(BaseBackend):
             metadata["name"] = spirv_get_kernel_name(next_module)
             if "shared" not in metadata:
                 metadata["shared"] = module.share_memory_size
-            metadata["threads_per_warp"] = THREADS_PER_WARP
+            metadata["threads_per_warp"] = module.threads_per_warp
 
         if ir == "spvbin":
             asm[ir] = next_module
@@ -500,8 +499,8 @@ class XPUBackend(BaseBackend):
         max_num_sub_groups = arch['max_num_sub_groups']
         sub_group_sizes = arch['sub_group_sizes']
         # TODO: chose a reasonable subgroup size
-        threads_per_warp = THREADS_PER_WARP  # 8
-        assert threads_per_warp in sub_group_sizes, "Current platform does not support threads_per_warp to be 32"  # noqa: E501
+        threads_per_warp = 16
+        assert threads_per_warp in sub_group_sizes, "Current platform does not support threads_per_warp to be {}".format(threads_per_warp)  # noqa: E501
         num_warps = max_work_group_size // threads_per_warp
         assert num_warps <= max_num_sub_groups, \
             "invalid setting. max_work_group_size {}, max_num_subgroup {}, subgroup_sizes {}".format(  # noqa: E501

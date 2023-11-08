@@ -151,6 +151,7 @@ getMmaOperandsType(DPASEngineType mmaType, MLIRContext *ctx,
   Type fp16Ty = type::f16Ty(ctx);
   Type bf16Ty = type::bf16Ty(ctx);
   Type i32Ty = type::i32Ty(ctx);
+  Type i16Ty = type::i16Ty(ctx);
 
   auto threadsPerWarp = layout.getSugGroupSize();
   auto opsPerChan = layout.getOpsPerChan();
@@ -163,25 +164,45 @@ getMmaOperandsType(DPASEngineType mmaType, MLIRContext *ctx,
   switch (mmaType) {
   case DPASEngineType::FP32_FP32_FP16_FP16: {
     Type cTy = vec_ty(fp32Ty, elemNumC);
-    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type aTy;
+    if (threadsPerWarp == 32) {
+      aTy = vec_ty(i16Ty, elemNumA);
+    } else {
+      aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    }
     Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
     return {cTy, cTy, aTy, bTy};
   }
   case DPASEngineType::FP16_FP16_FP16_FP16: {
     Type cTy = vec_ty(fp16Ty, elemNumC);
-    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type aTy;
+    if (threadsPerWarp == 32) {
+      aTy = vec_ty(i16Ty, elemNumA);
+    } else {
+      aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    }
     Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
     return {cTy, cTy, aTy, bTy};
   }
   case DPASEngineType::FP32_FP32_BF16_BF16: {
     Type cTy = vec_ty(fp32Ty, elemNumC);
-    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type aTy;
+    if (threadsPerWarp == 32) {
+      aTy = vec_ty(i16Ty, elemNumA);
+    } else {
+      aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    }
     Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
     return {cTy, cTy, aTy, bTy};
   }
   case DPASEngineType::BF16_BF16_BF16_BF16: {
     Type cTy = vec_ty(bf16Ty, elemNumC);
-    Type aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    Type aTy;
+    if (threadsPerWarp == 32) {
+      aTy = vec_ty(i16Ty, elemNumA);
+    } else {
+      aTy = vec_ty(i32Ty, elemNumA / opsPerChan); // pack scalar to i32.
+    }
     Type bTy = vec_ty(i32Ty, elemNumB / opsPerChan); // pack scalar to i32.
     return {cTy, cTy, aTy, bTy};
   }
@@ -320,7 +341,7 @@ LogicalResult convertDot(TritonGPUToSPIRVTypeConverter *typeConverter,
     IntrinsicBuilder builder(threadsPerWarp, rewriter);
     GenISA_DPAS dpas2Intrinsic = *builder.create<GenISA_DPAS>(
         mmaType, srcXMXLayout.getSystolicDepth(), srcXMXLayout.getRepeatCount(),
-        dTy, cTy, bTy, aTy);
+        dTy, cTy, aTy, bTy);
     auto ret = dpas2Intrinsic(rewriter, loc, valc, valA, valB);
 //    auto ret = rewriter.create<spirv::FunctionCallOp>(
 //        loc, TypeRange{dTy},
