@@ -88,11 +88,6 @@ static LogicalResult parseUInt(AsmParser &parser, const NamedAttribute &attr,
 //===----------------------------------------------------------------------===//
 // MMA encoding
 //===----------------------------------------------------------------------===//
-
-bool IntelMmaEncodingAttr::isVolta() const { return false; }
-
-bool IntelMmaEncodingAttr::isAmpere() const { return false; }
-
 SmallVector<unsigned> IntelMmaEncodingAttr::getShapeA() const {
   return {getRepeatCount(), getSystolicDepth() * getOpsPerChan()};
 }
@@ -192,7 +187,57 @@ Attribute IntelMmaEncodingAttr::getCTALayout() const {
 }
 
 SmallVector<unsigned> IntelMmaEncodingAttr::getThreadsPerWarp() const {
-  return {1, getSugGroupSize()};
+  auto executionSize = getExecutionSize();
+  auto subGroupSize = getSugGroupSize();
+  if (subGroupSize < executionSize) {
+    llvm::report_fatal_error("IntelMmaEncodingAttr sub-group size could not be "
+                             "smaller than the execution size");
+  }
+  return {subGroupSize / executionSize, executionSize};
+}
+SmallVector<unsigned>
+IntelMmaEncodingAttr::getShapePerCTATileForDotOperands(ArrayRef<int64_t> shape,
+                                                       int opIdx) const {
+  auto parentShapePerCTATile = getShapePerCTATile(shape);
+  auto threadsPerWarp = getThreadsPerWarp();
+  if (opIdx == 0) {
+    auto shapeA = getShapeA();
+    return {parentShapePerCTATile[0], shapeA[1]};
+  } else if (opIdx == 1) {
+    auto shapeB = getShapeB();
+    return {shapeB[0], parentShapePerCTATile[1]};
+  } else {
+    llvm::report_fatal_error("DotOperandEncodingAttr opIdx must be 0 or 1");
+  }
+}
+SmallVector<unsigned>
+IntelMmaEncodingAttr::getSizePerThreadForOperands(unsigned opIdx) const {
+  if (opIdx == 0) {
+    auto shapeA = getShapeA();
+    auto subGroupSize = getSugGroupSize();
+    auto systolicDepth = getSystolicDepth();
+    if (subGroupSize < systolicDepth) {
+      llvm::report_fatal_error("IntelMmaEncodingAttr sub-group size could not "
+                               "be smaller than the systolic depth");
+    }
+    SmallVector<unsigned, 2> threadsPerWarp = {subGroupSize / systolicDepth,
+                                               systolicDepth};
+    return {shapeA[0] / threadsPerWarp[0], shapeA[1] / threadsPerWarp[1]};
+  } else if (opIdx == 1) {
+    auto shapeB = getShapeB();
+    auto subGroupSize = getSugGroupSize();
+    auto executionSize = getExecutionSize();
+    if (subGroupSize < executionSize) {
+      llvm::report_fatal_error("IntelMmaEncodingAttr sub-group size could not "
+                               "be smaller than the execution size");
+    }
+    SmallVector<unsigned, 2> threadsPerWarp = {subGroupSize / executionSize,
+                                               executionSize};
+    return {shapeB[0] / threadsPerWarp[0], shapeB[1] / threadsPerWarp[1]};
+  } else {
+    llvm::report_fatal_error("DotOperandEncodingAttr opIdx must be 0 or 1");
+    return {};
+  }
 }
 
 Attribute IntelMmaEncodingAttr::parse(AsmParser &parser, Type type) {

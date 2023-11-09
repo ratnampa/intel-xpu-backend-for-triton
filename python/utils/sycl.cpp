@@ -39,6 +39,8 @@ ze_module_handle_t create_module(ze_context_handle_t context,
                                  uint32_t *binary_ptr, size_t binary_size) {
 
   const char *build_flags = "";
+  //  const char *build_flags = "doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer
+  //  -DPASTokenReduction -Xfinalizer -SWSBDepReduction -Xfinalizer";
   const ze_module_format_t format = ZE_MODULE_FORMAT_IL_SPIRV;
 
   ze_module_desc_t module_description = {};
@@ -165,6 +167,7 @@ py::tuple spirv_to_sycl_kernel(sycl::device &device, uint32_t *binary_ptr,
   sycl::kernel *ptr = compiled_kernel[compiled_kernel.size() - 1].get();
   if (getBoolEnv("MLIR_ENABLE_DUMP")) {
     std::cout << "compiled kernel ptr: " << ptr << std::endl;
+    std::cout << "total spill size: " << n_spills << std::endl;
     std::cout << "total kernels:" << compiled_kernel.size() << std::endl;
     for (auto &k : compiled_kernel) {
       std::cout << "  kernel:"

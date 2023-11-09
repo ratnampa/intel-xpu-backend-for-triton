@@ -77,10 +77,9 @@ along the row (resp. col) dimension.
   ];
 
   let extraClassDeclaration = extraDistributedDeclaration # [{
-    bool isVolta() const;
-    bool isAmpere() const;
     SmallVector<unsigned> getSizePerThread() const;
     SmallVector<unsigned> getShapePerCTATile(ArrayRef<int64_t> tensorShape) const;
+    SmallVector<unsigned> getShapePerCTATileForDotOperands(ArrayRef<int64_t> shape, int opIdx) const;
     unsigned getTotalElemsPerThreadForOperands(ArrayRef<int64_t> shape, Type eltTy, int opIdx) const;
 
     SmallVector<int64_t> getXMXRep(ArrayRef<int64_t> shape, int opIdx) const;
@@ -90,6 +89,7 @@ along the row (resp. col) dimension.
     SmallVector<unsigned> getShapeB() const;
     SmallVector<unsigned> getShapeC() const;
     SmallVector<unsigned> getThreadsPerWarp() const;
+    SmallVector<unsigned> getSizePerThreadForOperands(unsigned opIdx) const;
   }];
 
   let hasCustomAssemblyFormat = 1;
