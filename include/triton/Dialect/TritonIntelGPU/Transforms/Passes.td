@@ -35,4 +35,48 @@ def TritonIntelGPUDecomposeConversions: Pass<"tritonintelgpu-decompose-conversio
                            "mlir::triton::TritonDialect"];
 }
 
+def TritonIntelGPUBufferDotOperandsInCacheConversions: Pass<"tritonintelgpu-buffer-cache", "mlir::ModuleOp"> {
+  let summary = "Use the cache to buffer the dot operands";
+
+  let description = ".....";
+
+  let constructor = "mlir::createTritonIntelGPUBufferDotOperandsInCachePass()";
+
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::gpu::intel::TritonIntelGPUDialect",
+                           "mlir::triton::TritonDialect"];
+}
+
+def TritonIntelGPUPipeline : Pass<"tritonintelgpu-pipeline", "mlir::ModuleOp"> {
+  let summary = "Intel GPU pipeline";
+
+  let description = [{
+    Use the cache prefetch to buffer the `LoadOp` in loops that needed at next iteration
+    Replace `LoadOp` in loops by `InsertSliceAsyncOp` instructions that asynchronously construct the data
+    needed at the next iteration
+  }];
+
+  let constructor = "mlir::createTritonIntelGPUPipelinePass()";
+
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::gpu::intel::TritonIntelGPUDialect",
+                           "mlir::scf::SCFDialect",
+                           "mlir::arith::ArithDialect"];
+
+  let options = [
+    Option<"numStages", "num-stages",
+           "int32_t", /*default*/"3",
+           "number of pipeline stages">,
+    Option<"numWarps", "num-warps",
+           "int32_t", /*default*/"4",
+           "number of warps per block">,
+    Option<"numCTAs", "num-ctas",
+           "int32_t", /*default*/"1",
+           "number of CTAs per CGA">,
+    Option<"computeCapability", "compute-capability",
+                "std::map<std::string, int>", /*default*/"std::map<std::string, int>{}",
+                "device compute capability">
+  ];
+}
+
 #endif

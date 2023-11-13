@@ -349,6 +349,15 @@ void init_triton_translation(py::module &m) {
            [](mlir::PassManager &self) {
              self.addPass(mlir::createTritonIntelGPUDecomposeConversionsPass());
            })
+      .def("add_triton_intel_gpu_prefetch_cache_pass",
+           [](mlir::PassManager &self) {
+             self.addPass(
+                 mlir::createTritonIntelGPUBufferDotOperandsInCachePass());
+           })
+      .def("add_triton_intel_gpu_pipe_line_pass",
+           [](mlir::PassManager &self, int numStages) {
+             self.addPass(mlir::createTritonIntelGPUPipelinePass(numStages));
+           })
       .def("add_tritongpu_rewrite_tensor_pointer_pass",
            [](mlir::PassManager &self, py::dict computeCapability) {
              self.addPass(mlir::createTritonGPURewriteTensorPointerPass(80));

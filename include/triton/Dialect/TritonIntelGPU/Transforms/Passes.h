@@ -10,6 +10,13 @@ std::unique_ptr<Pass> createTritonIntelGPUAccelerateMatmulPass(
 std::unique_ptr<Pass> createTritonIntelGPUDecomposeConversionsPass(
     std::map<std::string, int> computeCapability = {});
 
+std::unique_ptr<Pass> createTritonIntelGPUBufferDotOperandsInCachePass(
+    std::map<std::string, int> computeCapability = {});
+
+std::unique_ptr<Pass> createTritonIntelGPUPipelinePass(
+    int numStages = 3, int numWarps = 4, int numCTAs = 1,
+    std::map<std::string, int> computeCapability = {});
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "triton/Dialect/TritonIntelGPU/Transforms/Passes.h.inc"

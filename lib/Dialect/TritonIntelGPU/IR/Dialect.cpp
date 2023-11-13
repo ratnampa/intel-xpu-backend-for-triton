@@ -401,11 +401,18 @@ struct TritonIntelGPUInferLayoutInterface
 //===----------------------------------------------------------------------===//
 
 void TritonIntelGPUDialect::initialize() {
+
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "triton/Dialect/TritonIntelGPU/IR/TritonIntelGPUAttrDefs.cpp.inc"
       >();
+
   addInterfaces<TritonIntelGPUInferLayoutInterface>();
+
+  addOperations<
+#define GET_OP_LIST
+#include "triton/Dialect/TritonIntelGPU/IR/Ops.cpp.inc"
+      >();
 }
 
 // verify TritonIntelGPU ops

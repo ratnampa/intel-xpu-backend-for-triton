@@ -52,7 +52,6 @@ public:
                   .dyn_cast<triton::gpu::intel::IntelMmaEncodingAttr>()) {
         if (auto dstBlockedEncoding =
                 dstEncoding.dyn_cast<triton::gpu::BlockedEncodingAttr>()) {
-          llvm::outs() << "johnlu here1111\n";
           auto tmpType = RankedTensorType::get(
               dstType.getShape(), dstType.getElementType(),
               triton::gpu::SharedEncodingAttr::get(
