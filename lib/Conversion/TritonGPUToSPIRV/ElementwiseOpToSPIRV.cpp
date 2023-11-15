@@ -25,7 +25,7 @@ static SmallVector<Value> reorderValues(const SmallVector<Value> &values,
   // If the parent of the dot operand is in block encoding, we don't need to
   // reorder elements
   auto parentEncoding =
-      dyn_cast<triton::gpu::TritonGPUMMAAttrInterface>(ouEncoding.getParent());
+      dyn_cast<triton::gpu::MmaEncodingTrait>(ouEncoding.getParent());
   if (!parentEncoding)
     return values;
   // TODO: need to make sure the code with the variant sub-group size.

@@ -146,7 +146,7 @@ SmallVector<unsigned> IntelMmaEncodingAttr::getCTAsPerCGA() const {
   SmallVector<unsigned> res{1, 1};
   return res;
 }
-unsigned IntelMmaEncodingAttr::getNumCTAs() const { return 1; }
+// unsigned IntelMmaEncodingAttr::getNumCTAs() const { return 1; }
 SmallVector<int64_t> IntelMmaEncodingAttr::getXMXRep(ArrayRef<int64_t> shape,
                                                      int opIdx) const {
   auto warpsPerCTA = getWarpsPerCTA();
@@ -181,9 +181,19 @@ unsigned IntelMmaEncodingAttr::getTotalElemsPerThreadForOperands(
     return (totalElem / threadsPerWar) * rep[0] * rep[1];
   }
 }
-Attribute IntelMmaEncodingAttr::getCTALayout() const {
-  return CTALayoutAttr::get(getContext(), getCTAsPerCGA(), getCTASplitNum(),
-                            getCTAOrder());
+// Attribute IntelMmaEncodingAttr::getCTALayout() const {
+//   return CTALayoutAttr::get(getContext(), getCTAsPerCGA(), getCTASplitNum(),
+//                             getCTAOrder());
+// }
+SmallVector<unsigned> IntelMmaEncodingAttr::getWarpOrder() const {
+  return {1, 0};
+}
+SmallVector<unsigned> IntelMmaEncodingAttr::getThreadOrder() const {
+  return {1, 0};
+}
+SmallVector<unsigned> IntelMmaEncodingAttr::getWarpsPerCTA() const {
+  return SmallVector<unsigned>(getWarpsPerCTA__().begin(),
+                               getWarpsPerCTA__().end());
 }
 
 SmallVector<unsigned> IntelMmaEncodingAttr::getThreadsPerWarp() const {
@@ -295,13 +305,14 @@ void IntelMmaEncodingAttr::print(AsmPrinter &printer) const {
   llvm::ArrayRef<unsigned> rB = shapeB;
   auto shapeC = getShapeC();
   llvm::ArrayRef<unsigned> rC = shapeC;
+  auto warpsPerCTA = getWarpsPerCTA();
   printer << "<{"
           << "repeatCount = " << getRepeatCount() << ", "
           << "systolicDepth = " << getSystolicDepth() << ", "
           << "executionSize = " << getExecutionSize() << ", "
           << "opsPerChan = " << getOpsPerChan() << ", "
           << "threadsPerWarp = " << getSugGroupSize() << ", "
-          << "warpsPerCTA = [" << getWarpsPerCTA() << "], "
+          << "warpsPerCTA = [" << llvm::ArrayRef<unsigned>(warpsPerCTA) << "], "
           << "A = [" << rA << "], "
           << "B = [" << rB << "], "
           << "C = [" << rC << "]"

@@ -5,13 +5,12 @@ include "mlir/IR/AttrTypeBase.td"
 include "triton/Dialect/TritonIntelGPU/IR/TritonIntelGPUDialect.td"
 //include "triton/Dialect/Triton/IR/TritonInterfaces.td"
 include "triton/Dialect/TritonGPU/IR/TritonGPUAttrDefs.td"
-include "triton/Dialect/TritonGPU/IR/TritonGPUInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Intel MMA Layout Encoding
 //===----------------------------------------------------------------------===//
 
-def IntelMmaEncodingAttr : DistributedEncoding<"IntelMmaEncoding", [TritonGPUMMAAttrInterface], TritonIntelGPU_Dialect> {
+def IntelMmaEncodingAttr : DistributedEncoding<"IntelMmaEncoding", [MmaEncodingTrait], TritonIntelGPU_Dialect> {
   let mnemonic = "xmx";
 
   let description = [{
@@ -58,7 +57,7 @@ along the row (resp. col) dimension.
     "unsigned":$systolicDepth,
     "unsigned":$executionSize,
     "unsigned":$opsPerChan,
-    ArrayRefParameter<"unsigned">:$warpsPerCTA,
+    ArrayRefParameter<"unsigned">:$warpsPerCTA__,
     "unsigned":$sugGroupSize
   );
 
@@ -77,19 +76,15 @@ along the row (resp. col) dimension.
   ];
 
   let extraClassDeclaration = extraDistributedDeclaration # [{
-    SmallVector<unsigned> getSizePerThread() const;
-    SmallVector<unsigned> getShapePerCTATile(ArrayRef<int64_t> tensorShape) const;
-    SmallVector<unsigned> getShapePerCTATileForDotOperands(ArrayRef<int64_t> shape, int opIdx) const;
-    unsigned getTotalElemsPerThreadForOperands(ArrayRef<int64_t> shape, Type eltTy, int opIdx) const;
 
     SmallVector<int64_t> getXMXRep(ArrayRef<int64_t> shape, int opIdx) const;
 
-    Attribute getCTALayout() const;
     SmallVector<unsigned> getShapeA() const;
     SmallVector<unsigned> getShapeB() const;
     SmallVector<unsigned> getShapeC() const;
-    SmallVector<unsigned> getThreadsPerWarp() const;
     SmallVector<unsigned> getSizePerThreadForOperands(unsigned opIdx) const;
+    SmallVector<unsigned> getShapePerCTATileForDotOperands(ArrayRef<int64_t> shape, int opIdx) const;
+    unsigned getTotalElemsPerThreadForOperands(ArrayRef<int64_t> shape, Type eltTy, int opIdx) const;
   }];
 
   let hasCustomAssemblyFormat = 1;
