@@ -75,7 +75,6 @@ namespace intel {
 // getWarpsPerCTAWithUniqueData(Attribute layout, ArrayRef<int64_t>
 // tensorShape);
 //
-// SmallVector<unsigned> getThreadsPerCTA(Attribute layout);
 //
 // SmallVector<unsigned>
 // getShapePerCTA(Attribute layout,

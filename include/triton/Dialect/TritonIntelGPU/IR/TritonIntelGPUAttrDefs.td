@@ -85,6 +85,10 @@ along the row (resp. col) dimension.
     SmallVector<unsigned> getSizePerThreadForOperands(unsigned opIdx) const;
     SmallVector<unsigned> getShapePerCTATileForDotOperands(ArrayRef<int64_t> shape, int opIdx) const;
     unsigned getTotalElemsPerThreadForOperands(ArrayRef<int64_t> shape, Type eltTy, int opIdx) const;
+
+    bool supportReduction() const {
+      return true;
+    }
   }];
 
   let hasCustomAssemblyFormat = 1;

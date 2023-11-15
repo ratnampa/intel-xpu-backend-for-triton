@@ -148,12 +148,12 @@ void init_triton_translation(py::module &m) {
         // initialize registry
         // note: we initialize llvm for undef
         mlir::DialectRegistry registry;
-        registry.insert<mlir::triton::TritonDialect,
-                        mlir::triton::gpu::TritonGPUDialect,
-                        mlir::triton::gpu::intel::TritonIntelGPUDialect,
-                        mlir::math::MathDialect, mlir::arith::ArithDialect,
-                        mlir::index::IndexDialect, mlir::scf::SCFDialect,
-                        mlir::cf::ControlFlowDialect>();
+        registry.insert<
+            mlir::triton::TritonDialect, mlir::triton::gpu::TritonGPUDialect,
+            mlir::triton::gpu::intel::TritonIntelGPUDialect,
+            mlir::math::MathDialect, mlir::arith::ArithDialect,
+            mlir::index::IndexDialect, mlir::scf::SCFDialect,
+            mlir::LLVM::LLVMDialect, mlir::cf::ControlFlowDialect>();
         context.appendDialectRegistry(registry);
         context.loadAllAvailableDialects();
 
@@ -169,39 +169,17 @@ void init_triton_translation(py::module &m) {
 
   m.def(
       "translate_triton_gpu_to_spirv",
-      [](const std::string &ttgir, py::dict computeCapability) {
-        mlir::MLIRContext context;
-
-        // initialize registry
-        // note: we initialize llvm for undef
-        mlir::DialectRegistry registry;
-        registry.insert<
-            mlir::triton::TritonDialect, mlir::triton::gpu::TritonGPUDialect,
-            mlir::triton::gpu::intel::TritonIntelGPUDialect,
-            mlir::math::MathDialect, mlir::arith::ArithDialect,
-            mlir::index::IndexDialect, mlir::scf::SCFDialect,
-            mlir::LLVM::LLVMDialect, mlir::cf::ControlFlowDialect>();
-        context.appendDialectRegistry(registry);
-        context.loadAllAvailableDialects();
-
+      [](mlir::ModuleOp &op, py::dict computeCapability) {
         auto capabilities =
             computeCapability.cast<std::map<std::string, int>>();
 
-        // parse module
-        mlir::OwningOpRef<mlir::ModuleOp> module =
-            mlir::parseSourceString<mlir::ModuleOp>(ttgir, &context);
-        if (!module)
-          throw std::runtime_error("Parse MLIR file failed.");
         auto spirvModule = ::mlir::triton::translateTritonGPUToSPIRVIR(
-            *module, std::move(capabilities));
+            op, std::move(capabilities));
         if (spirvModule.empty())
           throw std::runtime_error(
               "Failed to translate TritonGPU to SPIRV IR.");
 
-        auto shared =
-            (*module)->getAttrOfType<mlir::IntegerAttr>("triton_gpu.shared");
-        return py::make_tuple<py::return_value_policy::take_ownership>(
-            spirvModule, shared.getInt());
+        return spirvModule;
       },
       ret::take_ownership);
 
@@ -362,6 +340,18 @@ void init_triton_translation(py::module &m) {
            [](mlir::PassManager &self, py::dict computeCapability) {
              self.addPass(mlir::createTritonGPURewriteTensorPointerPass(80));
            });
+
+  m.def("get_shared_memory_size", [](mlir::ModuleOp mod) {
+    auto shared = mod->getAttrOfType<mlir::IntegerAttr>("triton_gpu.shared");
+    assert(shared);
+    return shared.getInt();
+  });
+  m.def("get_threads_per_warp", [](mlir::ModuleOp mod) {
+    auto threads_per_warp =
+        mod->getAttrOfType<mlir::IntegerAttr>("triton_gpu.threads-per-warp");
+    assert(threads_per_warp);
+    return threads_per_warp.getInt();
+  });
 }
 
 void init_intel_xpu_backend_for_triton(py::module &m) {

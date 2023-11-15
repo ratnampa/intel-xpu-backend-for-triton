@@ -110,9 +110,7 @@ def optimize_ttgir(mod, num_stages, arch):
 def ttgir_to_spirv(mod, extern_libs, arch):
     if extern_libs:
         _add_external_libs(mod, extern_libs)
-    spirv_code, share_memory_size = _triton.translate_triton_gpu_to_spirv(str(mod), arch)  # noqa: E501
-    mod.share_memory_size = share_memory_size
-    mod.threads_per_warp = arch["threads_per_warp"]
+    spirv_code = _triton.translate_triton_gpu_to_spirv(mod, arch)  # noqa: E501
     return spirv_code
 
 
@@ -466,8 +464,9 @@ class XPUBackend(BaseBackend):
         if ir == "spirv":
             metadata["name"] = spirv_get_kernel_name(next_module)
             if "shared" not in metadata:
-                metadata["shared"] = module.share_memory_size
-            metadata["threads_per_warp"] = module.threads_per_warp
+                metadata["shared"] = _triton.get_shared_memory_size(module)
+            if "threads_per_warp" not in metadata:
+                metadata["threads_per_warp"] = _triton.get_threads_per_warp(module)
 
         if ir == "spvbin":
             asm[ir] = next_module
