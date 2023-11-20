@@ -112,6 +112,18 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
   auto shapePerCTATile = getShapePerCTATile(dLayout);
   auto sizePerThread = getSizePerThread(dLayout);
 
+#if 0
+  llvm::outs() << "johnlu shapePerCTATile:" << "\n";
+  for (auto &i : shapePerCTATile)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
+  llvm::outs() << "johnlu sizePerThread:" << "\n";
+  for (auto &i : sizePerThread)
+    llvm::outs() << " " << i;
+  llvm::outs() << "\n";
+  llvm::outs().flush();
+#endif
+
   Value _0 = i32_val(0);
 
   Value mContig = i32_val(sizePerThread[order[1]]);
@@ -121,8 +133,12 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
                                 rewriter, loc);
   Value threadIdM = threadIds[0];
 
-  Value offA0 = isARow ? _0 : mul(threadIdM, mContig);
-  Value offA1 = isARow ? mul(threadIdM, mContig) : _0;
+  Value offA0 =
+      isARow ? _0
+             : urem(mul(threadIdM, mContig), i32_val(aShapePerCTA[order[1]]));
+  Value offA1 =
+      isARow ? urem(mul(threadIdM, mContig), i32_val(aShapePerCTA[order[1]]))
+             : _0;
   SmallVector<Value> aOff(aNumPtr);
   for (int i = 0; i < aNumPtr; ++i) {
     aOff[i] = add(mul(offA0, strideA0), mul(offA1, strideA1));
@@ -142,10 +158,10 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
 
 #if 0
   std::string printFunName;
-  printFunName = "print_mm_half_in";
+  printFunName = "print_mm_float_in";
   auto printFuncTy = mlir::FunctionType::get(
-      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f16_ty,
-                              ptr_ty(f16_ty, spirv::StorageClass::Workgroup)}, TypeRange());
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f32_ty,
+                              ptr_ty(f32_ty, spirv::StorageClass::Workgroup)}, TypeRange());
 
   NamedAttrList attributes;
   attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
@@ -157,8 +173,11 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
   attributes.set("linkage_attributes", linkageAttr);
   spirv::appendOrGetFuncOp(loc, rewriter, printFunName, printFuncTy,
                            spirv::FunctionControl::Inline, attributes);
-  Value warp = udiv(thread, i32_val(8));
-  Value lane = urem(thread, i32_val(8));
+  auto mod = rewriter.getInsertionBlock()->getParentOp()->getParentOfType<ModuleOp>();
+  unsigned threadsPerWarp =
+      triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
+  Value warp = udiv(thread, i32_val(threadsPerWarp));
+  Value lane = urem(thread, i32_val(threadsPerWarp));
   static uint32_t loadANum = 0;
 #endif
   for (unsigned k = 0; k < K; ++k)
@@ -168,6 +187,7 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
             add(mul(i32_val(m + mm), strideAM), mul(i32_val(k), strideAK));
         Value pa = gep(ptrTy, aPtrs[0], offset);
         Value va = load(pa);
+#if 0
 #if 0
         // Create block structure for the masked memory copy.
         auto *preheader = rewriter.getInsertionBlock();
@@ -182,12 +202,15 @@ Value loadAFMA(Value A, Value llA, BlockedEncodingAttr dLayout, Value thread,
 
         // Do the print
         rewriter.setInsertionPoint(condblock, condblock->end());
+#endif
         rewriter.create<spirv::FunctionCallOp>(
             loc, TypeRange(), printFunName,
-            ValueRange{warp, lane, i32_val(m + mm), i32_val(k), i32_val(loadANum), va, pa});
+            ValueRange{warp, lane, threadIds[0], threadIds[1], i32_val(loadANum), va, pa});
+#if 0
         rewriter.create<mlir::cf::BranchOp>(loc, tailblock);
         // The memory copy insert position
         rewriter.setInsertionPoint(tailblock, tailblock->begin());
+#endif
 #endif
         vas.emplace_back(va);
       }
@@ -231,8 +254,12 @@ Value loadBFMA(Value B, Value llB, BlockedEncodingAttr dLayout, Value thread,
                                 rewriter, loc);
   Value threadIdN = threadIds[1];
 
-  Value offB0 = isBRow ? mul(threadIdN, nContig) : _0;
-  Value offB1 = isBRow ? _0 : mul(threadIdN, nContig);
+  Value offB0 =
+      isBRow ? urem(mul(threadIdN, nContig), i32_val(bShapePerCTA[order[0]]))
+             : _0;
+  Value offB1 =
+      isBRow ? _0
+             : urem(mul(threadIdN, nContig), i32_val(bShapePerCTA[order[0]]));
   SmallVector<Value> bOff(bNumPtr);
   for (int i = 0; i < bNumPtr; ++i) {
     bOff[i] = add(mul(offB0, strideB0), mul(offB1, strideB1));

@@ -130,6 +130,17 @@ LogicalResult convertFMADot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
   llvm::outs().flush();
 #endif
 
+#if 0
+
+  for (auto &i : has) {
+    rewriter.create<spirv::FunctionCallOp>(
+        loc, TypeRange(), printFunName,
+        ValueRange{warp, lane, i32_val(i.first.first), i32_val(i.first.second), i32_val(0),
+                   i.second,
+                   i.second, i.second});
+  }
+#endif
+
   for (unsigned k = 0; k < K; k++) {
     for (unsigned m = 0; m < M; m += mShapePerCTATile)
       for (unsigned n = 0; n < N; n += nShapePerCTATile)
@@ -144,6 +155,8 @@ LogicalResult convertFMADot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
             ret[z] = rewriter.create<spirv::CLFmaOp>(loc, has[{m + mm, k}],
                                                      hbs[{n + nn, k}], ret[z]);
 #if 0
+
+#if 0
             // Create block structure for the masked memory copy.
             auto *preheader = rewriter.getInsertionBlock();
             auto opPosition = rewriter.getInsertionPoint();
@@ -155,16 +168,20 @@ LogicalResult convertFMADot(triton::DotOp op, triton::DotOp::Adaptor adaptor,
             rewriter.create<mlir::cf::CondBranchOp>(
                 loc, icmp_eq(warp, i32_val(0)), condblock, tailblock);
 
-            // Do the print
             rewriter.setInsertionPoint(condblock, condblock->end());
+#endif
+            // Do the print
             rewriter.create<spirv::FunctionCallOp>(
                 loc, TypeRange(), printFunName,
                 ValueRange{warp, lane, i32_val(m + mm), i32_val(n + nn), i32_val(k),
                            has[{m + mm, k}],
                            hbs[{n + nn, k}], ret[z]});
+#if 0
             rewriter.create<mlir::cf::BranchOp>(loc, tailblock);
             // The memory copy insert position
             rewriter.setInsertionPoint(tailblock, tailblock->begin());
+#endif
+
 #endif
           }
   }

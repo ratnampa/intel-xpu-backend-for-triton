@@ -660,25 +660,6 @@ private:
     return success();
   }
 
-  // work around for joint matrix
-  LogicalResult lowerMMAToShared(triton::gpu::ConvertLayoutOp op,
-                                 OpAdaptor adaptor,
-                                 ConversionPatternRewriter &rewriter) const {
-    auto loc = op.getLoc();
-    Value src = op.getSrc();
-    Value dst = op.getResult();
-    Value smemBase = getSharedMemoryBase(loc, rewriter, dst);
-    auto dstTy = dst.getType().cast<RankedTensorType>();
-
-    auto thread = getThreadId(rewriter, loc);
-    Value res =
-        XMXToShared::convertLayout(rewriter, loc, src, adaptor.getSrc(), dstTy,
-                                   smemBase, getTypeConverter(), thread);
-
-    rewriter.replaceOp(op, res);
-    return success();
-  }
-
   // blocked -> shared.
   // Swizzling in shared memory to avoid bank conflict. Normally used for
   // A/B operands of dots.
