@@ -2,12 +2,13 @@
 // Created by chengjun on 9/6/23.
 //
 
-#include "triton/Conversion/TritonGPUToSPIRV/VCIntrinsicHelper.h"
 #include "Utility.h"
+
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/Target/LLVMIR/TypeFromLLVM.h"
 #include "mlir/Target/LLVMIR/TypeToLLVM.h"
+#include "triton/Conversion/TritonGPUToSPIRV/VCIntrinsicHelper.h"
 
 namespace mlir {
 namespace triton {

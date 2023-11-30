@@ -320,11 +320,11 @@ static Value createPrefetch(scf::ForOp &forOp, tt::LoadOp loadOp) {
   if (!loadOp.getResult().hasOneUse())
     return Value();
 
-  auto args = forOp.getRegion().getArguments();
+  //  auto args = forOp.getRegion().getArguments();
   BlockArgument loadPtr = loadOp.getPtr().cast<BlockArgument>();
-  int argNum = loadPtr.getArgNumber();
-
-  Value ptr = forOp.getOpOperandForRegionIterArg(loadPtr).get();
+  //  int argNum = loadPtr.getArgNumber();
+  //  Value ptr = forOp.getOpOperandForRegionIterArg(loadPtr).get();
+  Value ptr = loadPtr;
 
   return ptr;
 }

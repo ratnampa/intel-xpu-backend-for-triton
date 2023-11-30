@@ -1,9 +1,10 @@
 //
 // Created by chengjun on 9/6/23.
 //
-#include "triton/Conversion/TritonGPUToSPIRV/ESIMDHelper.h"
 #include "Utility.h"
+
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
+#include "triton/Conversion/TritonGPUToSPIRV/ESIMDHelper.h"
 
 namespace mlir {
 namespace triton {

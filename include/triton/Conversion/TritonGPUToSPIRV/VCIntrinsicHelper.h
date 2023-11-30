@@ -5,7 +5,6 @@
 #ifndef TRITON_VCINTRINSICHELPER_H
 #define TRITON_VCINTRINSICHELPER_H
 
-//#include "Utility.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/IR/Value.h"
 #include "triton/Conversion/TritonGPUToSPIRV/ESIMDHelper.h"

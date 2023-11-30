@@ -2,6 +2,7 @@
 #define TRITO_INTEL_NGPU_CONVERSION_PASSES_H
 
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
+#include "mlir/Pass/Pass.h"
 #include "triton/Conversion/IntelGPUToSPIRV/TritonIntelGPUToSPIRVPass.h"
 
 namespace mlir {

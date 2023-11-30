@@ -1,5 +1,7 @@
+//#include "../TritonGPUToSPIRV/Utility.h"
+#include "triton/Conversion/IntelGPUToSPIRV/Passes.h"
+
 #include "../TritonGPUToSPIRV/TritonGPUToSPIRVBase.h"
-#include "../TritonGPUToSPIRV/Utility.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
