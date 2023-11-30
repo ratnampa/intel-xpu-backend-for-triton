@@ -86,11 +86,9 @@ void printInsertSliceOp(OpAsmPrinter &printer, OpT insertSliceOp) {
 void PrefetchCacheOp::getEffects(
     SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
         &effects) {
-  effects.emplace_back(MemoryEffects::Read::get(), getPtr(),
+  // The prefetch will impact the L1 cache
+  effects.emplace_back(MemoryEffects::Write::get(),
                        SideEffects::DefaultResource::get());
-  //  if (getIsVolatile())
-  //    effects.emplace_back(MemoryEffects::Write::get(),
-  //                         SideEffects::DefaultResource::get());
 }
 
 ParseResult PrefetchCacheOp::parse(OpAsmParser &parser,

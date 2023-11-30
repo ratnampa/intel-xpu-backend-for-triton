@@ -5,6 +5,8 @@
 #include "triton/Conversion/TritonGPUToSPIRV/VCIntrinsicHelper.h"
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
+#define DEBUG_PRINT 0
+
 using namespace mlir;
 using namespace mlir::triton;
 using namespace mlir::triton::intel;
@@ -103,15 +105,17 @@ static Value composeValuesToDotOperandLayoutStruct(
 #endif
 ) {
   std::vector<Value> elems;
-#if 0
+#if DEBUG_PRINT
   auto printFuncTy = mlir::FunctionType::get(
-      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f32_ty}, TypeRange());
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, i32_ty, f32_ty},
+      TypeRange());
 
   NamedAttrList attributes;
-  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libname",
+                 StringAttr::get(rewriter.getContext(), "libdevice"));
   attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
-  auto linkageTypeAttr =
-      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageTypeAttr = rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(
+      spirv::LinkageType::Import);
   auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
       "print_mm", linkageTypeAttr);
   attributes.set("linkage_attributes", linkageAttr);
@@ -125,7 +129,7 @@ static Value composeValuesToDotOperandLayoutStruct(
       auto valTy = vecType.getElementType();
       for (int i = 0; i < vecType.getNumElements(); ++i) {
         auto val = extract_element(valTy, matVal, i32_val(i));
-#if 0
+#if DEBUG_PRINT
         rewriter.create<spirv::FunctionCallOp>(
             loc, TypeRange(), "print_mm",
             ValueRange{warp, lane, i32_val(m), i32_val(k), i32_val(i), val});

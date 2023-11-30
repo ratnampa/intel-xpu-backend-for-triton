@@ -1,7 +1,3 @@
-//
-// Created by guangyey on 12/28/22.
-//
-
 #ifndef TRITON_TRITONGPUTOSPIRVPASS_H
 #define TRITON_TRITONGPUTOSPIRVPASS_H
 

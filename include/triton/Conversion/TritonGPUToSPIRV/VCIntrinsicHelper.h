@@ -5,7 +5,7 @@
 #ifndef TRITON_VCINTRINSICHELPER_H
 #define TRITON_VCINTRINSICHELPER_H
 
-#include "Utility.h"
+//#include "Utility.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/IR/Value.h"
 #include "triton/Conversion/TritonGPUToSPIRV/ESIMDHelper.h"
@@ -45,6 +45,14 @@ std::string getGenISAName(llvm::GenISAIntrinsic::ID id,
 spirv::FuncOp appendOrGetGenISADeclaration(OpBuilder &builder,
                                            llvm::GenISAIntrinsic::ID id,
                                            ArrayRef<mlir::Type *> mlirTys);
+
+mlir::FunctionType getGenISAType(mlir::MLIRContext &context,
+                                 llvm::GenISAIntrinsic::ID id,
+                                 ArrayRef<mlir::Type *> mlirTys);
+
+void processPassthroughAttrs(mlir::MLIRContext &context,
+                             NamedAttrList &attributes,
+                             const llvm::AttributeSet &funcAttrs);
 
 class IntrinsicCommon;
 class VCIntrinsic;
@@ -299,7 +307,6 @@ template <class ConcreteT> struct GenISAIntrinsic : public IntrinsicCommon {
     // get GenISA intrinsic declaration.
     intrinsicDecl =
         appendOrGetGenISADeclaration(builder->builder, intrinsic, mlirTys);
-    llvm::outs().flush();
   }
 
 protected:
@@ -371,6 +378,60 @@ private:
   DPASEngineType dpasTy;
   uint32_t systolicDepth;
   uint32_t repeatCount;
+};
+
+class GenISA_Prefetch {
+
+public:
+  explicit GenISA_Prefetch(IntrinsicBuilder *builder, mlir::Type ptrTy,
+                           int dataSize)
+      : dataSize(dataSize) {
+    // get GenISA intrinsic declaration.
+    SmallVector<mlir::Type *> mlirTys{&ptrTy};
+    auto genISAName =
+        getGenISAName(llvm::GenISAIntrinsic::ID::GenISA_LSCPrefetch, {});
+    auto mlirContext = builder->builder.getContext();
+    FunctionType funcTy = getGenISAType(
+        *mlirContext, llvm::GenISAIntrinsic::ID::GenISA_LSCPrefetch, mlirTys);
+
+    NamedAttrList attributes;
+
+    attributes.set(spirv::SPIRVDialect::getAttributeName(
+                       spirv::Decoration::LinkageAttributes),
+                   spirv::LinkageAttributesAttr::get(
+                       mlirContext, genISAName,
+                       spirv::LinkageTypeAttr::get(
+                           mlirContext, spirv::LinkageType::Import)));
+
+    llvm::LLVMContext llvmContext;
+    auto llvmAttributes = llvm::GenISAIntrinsic::getGenIntrinsicAttributes(
+        llvmContext, llvm::GenISAIntrinsic::ID::GenISA_LSCPrefetch);
+
+    for (auto &attr : llvmAttributes) {
+      processPassthroughAttrs(*mlirContext, attributes, attr);
+    }
+
+    intrinsicDecl = spirv::appendOrGetFuncOp(
+        mlir::UnknownLoc::get(mlirContext), builder->builder, genISAName,
+        funcTy, spirv::FunctionControl::Inline, attributes);
+  }
+
+  Value operator()(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
+                   int vecSize) {
+    auto funName = intrinsicDecl.getName();
+    auto retType = intrinsicDecl.getResultTypes();
+    auto funCall = rewriter.create<spirv::FunctionCallOp>(
+        loc, retType, funName,
+        ValueRange{ptr, i32_val(0) /*offset to the ptr*/,
+                   i32_val(dataSize) /*data size in bytes*/,
+                   i32_val(vecSize) /*element number*/,
+                   i32_val(0) /*cache control*/});
+    return Value();
+  }
+
+private:
+  spirv::FuncOp intrinsicDecl;
+  int dataSize;
 };
 
 class GenXDPAS2 : public VCIntrinsicSIMTAdaptor<GenXDPAS2> {

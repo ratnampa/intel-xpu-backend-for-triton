@@ -5,29 +5,20 @@ Copyright (C) 2017-2021 Intel Corporation
 SPDX-License-Identifier: MIT
 
 ============================= end_copyright_notice ===========================*/
+#pragma once
 
-#ifndef GENINTRINSICS_H
-#define GENINTRINSICS_H
+#include "GenIntrinsicEnum.h"
 
 //#include "common/LLVMWarningsPush.hpp"
-
-//#include "llvmWrapper/IR/Module.h"
-
-#include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Intrinsics.h"
 //#include "common/LLVMWarningsPop.hpp"
+
+#include <string>
+#include <vector>
 
 namespace llvm {
 
 namespace GenISAIntrinsic {
-enum ID : unsigned {
-  no_intrinsic = Intrinsic::num_intrinsics,
-#define GET_INTRINSIC_ENUM_VALUES
-#include "IntrinsicGenISA.gen"
-#undef GET_INTRINSIC_ENUM_VALUES
-  num_genisa_intrinsics
-};
 
 /// Intrinsic::getName(ID) - Return the LLVM name for an intrinsic, such as
 /// "llvm.ppc.altivec.lvx".
@@ -38,7 +29,7 @@ std::string getName(ID id, ArrayRef<Type *> Tys = std::nullopt);
 FunctionType *getType(LLVMContext &Context, ID id,
                       ArrayRef<Type *> Tys = std::nullopt);
 
-GenISAIntrinsic::ID getGenIntrinsicIDBase();
+AttributeList getGenIntrinsicAttributes(LLVMContext &C, GenISAIntrinsic::ID id);
 
 struct IntrinsicComments {
   const char *funcDescription;
@@ -70,7 +61,6 @@ getDeclaration(Module *M, ID id, ArrayRef<Type *> OverloadedTys = std::nullopt);
 Function *getDeclaration(Module *M, ID id,
                          ArrayRef<Type *> OverloadedTys = None);
 #endif
-AttributeList getGenIntrinsicAttributes(LLVMContext &C, GenISAIntrinsic::ID id);
 
 // Override of isIntrinsic method defined in Function.h
 inline const char *getGenIntrinsicPrefix() { return "llvm.genx."; }
@@ -82,5 +72,3 @@ ID getIntrinsicID(const Function *F);
 } // namespace GenISAIntrinsic
 
 } // namespace llvm
-
-#endif // GENINTRINSICS_H

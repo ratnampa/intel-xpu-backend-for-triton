@@ -15,9 +15,9 @@ namespace intel {
 
 // The code convert the function attribute from the original here:
 // https://github.com/llvm/llvm-project/blob/e575b7cb7a64297583d6382c16ce264d9fe45d08/mlir/lib/Target/LLVMIR/ModuleImport.cpp#L1547
-static void processPassthroughAttrs(mlir::MLIRContext &context,
-                                    NamedAttrList &attributes,
-                                    const llvm::AttributeSet &funcAttrs) {
+void processPassthroughAttrs(mlir::MLIRContext &context,
+                             NamedAttrList &attributes,
+                             const llvm::AttributeSet &funcAttrs) {
   for (llvm::Attribute attr : funcAttrs) {
     StringRef attrName;
     if (attr.isStringAttribute())
@@ -46,9 +46,10 @@ static void processPassthroughAttrs(mlir::MLIRContext &context,
 }
 
 static llvm::GenISAIntrinsic::ID fixGenISAID(llvm::GenISAIntrinsic::ID id) {
-  auto idBase = llvm::GenISAIntrinsic::getGenIntrinsicIDBase();
-  return (llvm::GenISAIntrinsic::ID)(id - llvm::Intrinsic::num_intrinsics +
-                                     idBase);
+  //  auto idBase = llvm::GenISAIntrinsic::getGenIntrinsicIDBase();
+  //  return (llvm::GenISAIntrinsic::ID)(id - llvm::Intrinsic::num_intrinsics +
+  //                                     idBase);
+  return id;
 }
 
 std::string getGenISAName(llvm::GenISAIntrinsic::ID id,
@@ -57,12 +58,55 @@ std::string getGenISAName(llvm::GenISAIntrinsic::ID id,
   llvm::LLVMContext llvmContext;
   mlir::LLVM::TypeToLLVMIRTranslator typeTranslator(llvmContext);
   for (mlir::Type *ty : mlirTys) {
-    llvmTys.push_back(typeTranslator.translateType(*ty));
+    auto llvmTy = typeTranslator.translateType(*ty);
+    llvmTys.push_back(llvmTy);
   }
 
-  return llvm::GenISAIntrinsic::getName(
-      (llvm::GenISAIntrinsic::ID)(id - llvm::Intrinsic::num_intrinsics),
-      llvmTys);
+  return llvm::GenISAIntrinsic::getName(id, llvmTys);
+}
+
+/// Mapping between SPIR-V storage classes to Triton memory spaces.
+///
+#define STORAGE_SPACE_MAP_LIST(MAP_FN)                                         \
+  MAP_FN(spirv::StorageClass::CrossWorkgroup, 1)                               \
+  MAP_FN(spirv::StorageClass::Workgroup, 3)
+
+#if 0
+MAP_FN(spirv::StorageClass::StorageBuffer, 0)                                \
+  MAP_FN(spirv::StorageClass::Uniform, 4)                                      \
+  MAP_FN(spirv::StorageClass::Private, 5)                                      \
+  MAP_FN(spirv::StorageClass::Function, 6)                                     \
+  MAP_FN(spirv::StorageClass::PushConstant, 7)                                 \
+  MAP_FN(spirv::StorageClass::UniformConstant, 8)                              \
+  MAP_FN(spirv::StorageClass::Input, 9)                                        \
+  MAP_FN(spirv::StorageClass::Output, 10)                                      \
+  MAP_FN(spirv::StorageClass::CrossWorkgroup, 11)                              \
+  MAP_FN(spirv::StorageClass::AtomicCounter, 12)                               \
+  MAP_FN(spirv::StorageClass::Image, 13)                                       \
+  MAP_FN(spirv::StorageClass::CallableDataKHR, 14)                             \
+  MAP_FN(spirv::StorageClass::IncomingCallableDataKHR, 15)                     \
+  MAP_FN(spirv::StorageClass::RayPayloadKHR, 16)                               \
+  MAP_FN(spirv::StorageClass::HitAttributeKHR, 17)                             \
+  MAP_FN(spirv::StorageClass::IncomingRayPayloadKHR, 18)                       \
+  MAP_FN(spirv::StorageClass::ShaderRecordBufferKHR, 19)                       \
+  MAP_FN(spirv::StorageClass::PhysicalStorageBuffer, 20)                       \
+  MAP_FN(spirv::StorageClass::CodeSectionINTEL, 21)                            \
+  MAP_FN(spirv::StorageClass::DeviceOnlyINTEL, 22)                             \
+  MAP_FN(spirv::StorageClass::HostOnlyINTEL, 23)
+#endif
+
+std::optional<spirv::StorageClass> static getStorageClassForMemorySpace(
+    unsigned space) {
+#define STORAGE_SPACE_MAP_FN(storage, space)                                   \
+  case space:                                                                  \
+    return storage;
+
+  switch (space) {
+    STORAGE_SPACE_MAP_LIST(STORAGE_SPACE_MAP_FN)
+  default:
+    return std::nullopt;
+  }
+#undef STORAGE_SPACE_MAP_FN
 }
 
 mlir::FunctionType getGenISAType(mlir::MLIRContext &context,
@@ -75,17 +119,38 @@ mlir::FunctionType getGenISAType(mlir::MLIRContext &context,
     llvmTys.push_back(llvmToMLIR.translateType(*ty));
   }
 
-  auto llvmFuncType = llvm::GenISAIntrinsic::getType(
-      llvmContext,
-      (llvm::GenISAIntrinsic::ID)(id - llvm::Intrinsic::num_intrinsics),
-      llvmTys);
+  auto llvmFuncType = llvm::GenISAIntrinsic::getType(llvmContext, id, llvmTys);
 
   LLVM::TypeFromLLVMIRTranslator mlirToLLVM(context);
   auto mlirType = mlirToLLVM.translateType(llvmFuncType);
   auto mlirLLVMFuncType = mlirType.cast<mlir::LLVM::LLVMFunctionType>();
+  SmallVector<mlir::Type> spirvTys;
+  auto inputTys = mlirLLVMFuncType.getParams();
+  for (auto &ty : inputTys) {
+    if (ty.isa<LLVM::LLVMPointerType>()) {
+      auto ptrTy = ty.cast<LLVM::LLVMPointerType>();
+      std::optional<spirv::StorageClass> storageClass =
+          getStorageClassForMemorySpace(ptrTy.getAddressSpace());
+      spirv::PointerType spirvBasePtrType = spirv::PointerType::get(
+          mlir::IntegerType::get(&context, 8), *storageClass);
+      spirvTys.push_back(spirvBasePtrType);
+    } else {
+      spirvTys.push_back(ty);
+    }
+  }
 
-  auto funcTy = mlir::FunctionType::get(&context, mlirLLVMFuncType.getParams(),
-                                        mlirLLVMFuncType.getReturnTypes());
+  SmallVector<mlir::Type> spirvRetTys;
+  auto retTys = mlirLLVMFuncType.getReturnTypes();
+
+  for (auto &ty : retTys) {
+    if (ty.isa<LLVM::LLVMVoidType>()) {
+      continue;
+    } else {
+      spirvRetTys.push_back(ty);
+    }
+  }
+
+  auto funcTy = mlir::FunctionType::get(&context, spirvTys, spirvRetTys);
   return funcTy;
 }
 

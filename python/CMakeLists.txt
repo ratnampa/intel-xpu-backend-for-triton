@@ -29,6 +29,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
             TritonIntelGPUTransforms
             TritonSPIRV
             TritonGPUToSPIRV
+            TritonIntelGPUToSPIRV
             ${dialect_libs}
             ${conversion_libs}
 

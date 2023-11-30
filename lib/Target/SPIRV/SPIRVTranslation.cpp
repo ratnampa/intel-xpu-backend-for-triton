@@ -10,6 +10,7 @@
 #include "mlir/Target/LLVMIR/LLVMTranslationInterface.h"
 #include "mlir/Target/SPIRV/Serialization.h"
 #include "mlir/Transforms/Passes.h"
+#include "triton/Conversion/IntelGPUToSPIRV/TritonIntelGPUToSPIRVPass.h"
 #include "triton/Conversion/TritonGPUToLLVM/TritonGPUToLLVMPass.h"
 #include "triton/Conversion/TritonGPUToSPIRV/TritonGPUToSPIRVPass.h"
 #include "triton/Tools/Sys/GetEnv.hpp"
@@ -441,9 +442,9 @@ getExternLibs(spirv::ModuleOp module) {
   }
 
   if (!funcs.empty()) {
-    std::vector<std::string> lib_names = {
-        /*"libprint_utils.bc",*/ "libsycl-fallback-imf.bc",
-        "libsycl-fallback-imf-fp64.bc"};
+    std::vector<std::string> lib_names = {"libprint_utils.bc",
+                                          "libsycl-fallback-imf.bc",
+                                          "libsycl-fallback-imf-fp64.bc"};
     // first search for environmental path
     std::string env_path = ::triton::tools::getenv("TRITON_LIBDEVICE_PATH");
     if (!env_path.empty()) {
@@ -672,7 +673,8 @@ translateTritonGPUToSPIRVIR(mlir::ModuleOp module,
       /*printAfterOnlyOnFailure*/ false, llvm::dbgs(), printingFlags);
 
   pm.addPass(mlir::createConvertSCFToCFPass());
-  pm.addPass(createConvertTritonGPUToSPIRVPass(std::move(computeCapability)));
+  pm.addPass(createConvertTritonGPUToSPIRVPass(computeCapability));
+  pm.addPass(createConvertTritonIntelGPUToSPIRVPass(computeCapability));
   //  pm.addPass(mlir::arith::createConvertArithToSPIRVPass());
   // Canonicalize to eliminate the remaining UnrealizedConversionCastOp
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());

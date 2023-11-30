@@ -2,6 +2,8 @@
 #include "Utility.h"
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
+#define DEBUG_PRINT 0
+
 using ::mlir::spirv::delinearize;
 using ::mlir::spirv::getSharedMemoryObjectFromStruct;
 using ::mlir::spirv::getStridesFromShapeAndOrder;
@@ -486,14 +488,16 @@ private:
     unsigned outElems = getTotalElemsPerThread(dstTy);
     auto outOrd = getOrder(dstLayout);
     SmallVector<Value> outVals(outElems);
-#if 0
+#if DEBUG_PRINT
     auto printFuncTy = mlir::FunctionType::get(
-        rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, f16_ty}, TypeRange());
+        rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, f16_ty},
+        TypeRange());
     NamedAttrList attributes;
-    attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+    attributes.set("libname",
+                   StringAttr::get(rewriter.getContext(), "libdevice"));
     attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
-    auto linkageTypeAttr =
-        rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+    auto linkageTypeAttr = rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(
+        spirv::LinkageType::Import);
     auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
         "print_scalar", linkageTypeAttr);
     attributes.set("linkage_attributes", linkageAttr);
@@ -506,6 +510,7 @@ private:
         triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
     Value warp = udiv(tid, i32_val(threadsPerWarp));
     Value lane = urem(tid, i32_val(threadsPerWarp));
+    llvm::outs() << "johnlu op: " << op << "\n";
 #endif
     for (unsigned repId = 0; repId < accumNumReplicates; ++repId) {
       auto multiDimRepId =
@@ -515,6 +520,7 @@ private:
       if (srcLayout.isa<BlockedEncodingAttr>() ||
           srcLayout.isa<SliceEncodingAttr>() ||
           srcLayout.isa<triton::gpu::intel::IntelMmaEncodingAttr>()) {
+#if DEBUG_PRINT
 #if 0
         if (auto xmxLayout =
                 srcLayout
@@ -583,12 +589,13 @@ private:
           llvm::outs() << "\n";
           llvm::outs().flush();
         }
-
-        for (int i = 0; i < vals.size(); i++) {
-              rewriter.create<spirv::FunctionCallOp>(
-                  loc, TypeRange(), "print_scalar",
-                  ValueRange{warp, lane, i32_val(99), i32_val(i), vals[i]});
-
+#endif
+        if (srcLayout.isa<BlockedEncodingAttr>()) {
+          for (int i = 0; i < vals.size(); i++) {
+            rewriter.create<spirv::FunctionCallOp>(
+                loc, TypeRange(), "print_scalar",
+                ValueRange{warp, lane, i32_val(99), i32_val(i), vals[i]});
+          }
         }
 #endif
         processReplica(loc, rewriter, /*stNotRd*/ true, srcTy, inNumCTAsEachRep,

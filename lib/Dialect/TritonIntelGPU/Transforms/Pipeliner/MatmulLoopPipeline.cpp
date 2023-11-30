@@ -149,6 +149,26 @@ static void createAsyncLoad(scf::ForOp &forOp, tt::LoadOp loadOp, Value alloc,
   }
 }
 
+static void createPrefetchOp(scf::ForOp &forOp, tt::LoadOp loadOp, Value ptr) {
+  OpBuilder builder(forOp);
+  // Replace the load with load/prefetch in different stage.
+  builder.setInsertionPoint(loadOp);
+  Location loc = loadOp->getLoc();
+  auto prefetchOp =
+      builder.create<triton::gpu::intel::PrefetchCacheOp>(loc, ptr);
+}
+
+/// Create an async load equivalent to the given load.
+static void createPrefetchLoad(scf::ForOp &forOp, tt::LoadOp loadOp,
+                               Value ptr) {
+  if (isLoadFromTensorPtr(loadOp)) {
+    //    createTMALoad(forOp, loadOp, alloc, insertIdx, extractIdx, phase);
+    //    assert(0 && "johnlu");
+  } else {
+    createPrefetchOp(forOp, loadOp, ptr);
+  }
+}
+
 // Return the transitive use of the load which is a dot operand.
 static Value loadDotOperand(tt::LoadOp loadOp, bool &hasMMAV3) {
   // We only pipeline loads that have one covert_layout (to dot_op) use
@@ -215,8 +235,7 @@ struct LoadDotOperand {
 
 /// Collect loads to pipeline. Return success if we can pipeline this loop
 static void collectOpsToPipeline(scf::ForOp forOp,
-                                 SmallVectorImpl<LoadDotOperand> &ops,
-                                 bool &hasMMAV3) {
+                                 SmallVectorImpl<LoadDotOperand> &ops) {
   ModuleOp moduleOp = forOp->getParentOfType<ModuleOp>();
   ModuleAxisInfoAnalysis axisInfoAnalysis(moduleOp);
 
@@ -251,6 +270,7 @@ static void collectOpsToPipeline(scf::ForOp forOp,
       }
       if (!candidate)
         continue;
+      bool hasMMAV3;
       Value dotOperand = loadDotOperand(loadOp, hasMMAV3);
       if (!dotOperand)
         continue;
@@ -290,119 +310,52 @@ static Value createAlloc(scf::ForOp &forOp, tt::LoadOp loadOp, Value dotOperand,
       RankedTensorType::get(bufferShape, ty.getElementType(), sharedEnc);
   Value alloc = builder.create<mlir::triton::gpu::AllocTensorOp>(
       loadOp.getLoc(), allocType);
-  builder.create<triton::gpu::intel::PrefetchCacheOp>(loadOp.getLoc(),
-                                                      loadOp.getPtr());
 
   return alloc;
 }
 
-// Convert load ops into their asyn version and apply multi-buffering based on
-// the number of stages.
-static void createAsynOps(scf::ForOp &forOp, ArrayRef<LoadDotOperand> loads,
-                          int numStages, bool hasMMAV3) {
-  struct AsyncLoad {
-    AsyncLoad(tt::LoadOp loadOp, Value alloc) : loadOp(loadOp), alloc(alloc) {}
-    tt::LoadOp loadOp;
-    Value alloc;
+static Value createPrefetch(scf::ForOp &forOp, tt::LoadOp loadOp) {
+  OpBuilder builder(forOp);
+  auto ty = loadOp.getType().cast<RankedTensorType>();
+  if (!loadOp.getResult().hasOneUse())
+    return Value();
+
+  auto args = forOp.getRegion().getArguments();
+  BlockArgument loadPtr = loadOp.getPtr().cast<BlockArgument>();
+  int argNum = loadPtr.getArgNumber();
+
+  Value ptr = forOp.getOpOperandForRegionIterArg(loadPtr).get();
+
+  return ptr;
+}
+
+static void createPrefetchOps(scf::ForOp &forOp, ArrayRef<LoadDotOperand> loads,
+                              int numStages) {
+  struct prefetchLoad {
+    prefetchLoad(tt::LoadOp load, Value ptr) : load(load), ptr(ptr) {}
+    tt::LoadOp load;
+    Value ptr;
   };
   int numBuffers = numStages - 1;
-  // For MMAv3 we need an extra buffer as this is assumed in the wgmma
-  // pipelining post-processing.
-  // TODO: Improve modeling of wgmma pipelining.
-  if (hasMMAV3)
-    numBuffers++;
-  SmallVector<AsyncLoad> asyncLoads;
-  SmallVector<Value> newOperands;
-  bool needsMbarrierPhase = false;
-  bool needsAsyncWait = false;
+  SmallVector<prefetchLoad> prefetchLoads;
+
   for (const LoadDotOperand &loadOperand : loads) {
     tt::LoadOp loadOp = loadOperand.load;
-    Value dotOperand = loadOperand.dotOperand;
-    Value alloc = createAlloc(forOp, loadOp, dotOperand, numBuffers);
-    assert(alloc && "Failed to create alloc for the async load.");
-    newOperands.push_back(alloc);
-    asyncLoads.emplace_back(loadOp, alloc);
 
-    if (isLoadFromTensorPtr(loadOp))
-      needsMbarrierPhase = true;
-    else
-      needsAsyncWait = true;
+    //    auto args = forOp.getRegion().getArguments();
+    //    BlockArgument loadPtr = loadOp.getPtr().cast<BlockArgument>();
+    //    int argNum = loadPtr.getArgNumber();
+    //    auto yield = cast<scf::YieldOp>(forOp.getBody()->getTerminator());
+    //
+    //    auto ops = yield->getOpOperands();
+    //    prefetchLoads.emplace_back(loadOp, ops[argNum-
+    //    forOp.getNumInductionVars()].get());
+    prefetchLoads.emplace_back(loadOp, loadOp.getPtr());
   }
 
-  OpBuilder builder(forOp);
-  Location loc = forOp.getLoc();
-  // Create two new counters to index into the allocs.
-  Value minusOne = builder.create<arith::ConstantIntOp>(loc, -1, 32);
-  Value zero = builder.create<arith::ConstantIntOp>(loc, 0, 32);
-  Value one = builder.create<arith::ConstantIntOp>(loc, 1, 32);
-  Value insertIdx = minusOne;
-  Value extractIdx = minusOne;
-  Value numBuffersVal =
-      builder.create<arith::ConstantIntOp>(loc, numBuffers, 32);
-  newOperands.push_back(insertIdx);
-  newOperands.push_back(extractIdx);
-  Value phase;
-  if (needsMbarrierPhase) {
-    phase = builder.create<arith::ConstantIntOp>(loc, 0, 1);
-    newOperands.push_back(phase);
+  for (prefetchLoad &prefetchLoad : prefetchLoads) {
+    createPrefetchLoad(forOp, prefetchLoad.load, prefetchLoad.ptr);
   }
-  unsigned newOperandIndex = forOp.getBody()->getNumArguments();
-  // Patch the loop to add the new loop carried dependencies.
-  scf::ForOp newForOp =
-      replaceForOpWithNewSignature(builder, forOp, newOperands);
-  forOp.erase();
-  forOp = newForOp;
-  for (int i = 0; i < asyncLoads.size(); i++) {
-    asyncLoads[i].alloc = newForOp.getBody()->getArgument(newOperandIndex + i);
-  }
-  insertIdx =
-      newForOp.getBody()->getArgument(newOperandIndex + asyncLoads.size());
-  extractIdx =
-      newForOp.getBody()->getArgument(newOperandIndex + asyncLoads.size() + 1);
-
-  // Create two counters for the insert and extract indices to avoid creating
-  // long liverange.
-  builder.setInsertionPoint(asyncLoads.front().loadOp);
-  insertIdx = builder.create<arith::AddIOp>(loc, insertIdx, one);
-  Value cndIns = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
-                                               insertIdx, numBuffersVal);
-  insertIdx = builder.create<arith::SelectOp>(loc, cndIns, insertIdx, zero);
-
-  extractIdx = builder.create<arith::AddIOp>(loc, extractIdx, one);
-  Value cndExt = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
-                                               extractIdx, numBuffersVal);
-  extractIdx = builder.create<arith::SelectOp>(loc, cndExt, extractIdx, zero);
-
-  if (needsMbarrierPhase) {
-    phase = newForOp.getBody()->getArgument(newOperandIndex +
-                                            asyncLoads.size() + 2);
-    Value oneI1 = builder.create<arith::ConstantIntOp>(loc, 1, 1);
-    Value nextPhase = builder.create<arith::XOrIOp>(loc, phase, oneI1);
-    phase = builder.create<arith::SelectOp>(loc, cndExt, phase, nextPhase);
-  }
-
-  bool firstLoad = true;
-  for (AsyncLoad &asyncLoad : asyncLoads) {
-    createAsyncLoad(forOp, asyncLoad.loadOp, asyncLoad.alloc, insertIdx,
-                    extractIdx, phase);
-    firstLoad = false;
-  }
-  // Insert a waitOp after the first async copy. This does make the assumption
-  // that the wait will be scheduled in a different stage that all the async
-  // copy but we cannot guarantee that one wait is enough otherwise.
-  for (auto &op : forOp.getBody()->without_terminator()) {
-    if (isa<ttg::InsertSliceAsyncOp>(op)) {
-      OpBuilder builder(op.getContext());
-      builder.setInsertionPointAfter(&op);
-      builder.create<ttg::AsyncWaitOp>(op.getLoc(), 0);
-      break;
-    }
-  }
-  SmallVector<Value> newYieldOperands = {insertIdx, extractIdx};
-  if (needsMbarrierPhase)
-    newYieldOperands.push_back(phase);
-  // Patch the yield with the updated counters.
-  appendToYield(forOp, newYieldOperands);
 }
 
 // Combine the current mask with the given predicate.
@@ -429,6 +382,8 @@ static Operation *predicateOp(RewriterBase &rewriter, Operation *op,
   if (isa<ttg::AsyncCommitGroupOp>(op))
     return op;
   if (isa<ttg::AsyncWaitOp>(op))
+    return op;
+  if (isa<triton::gpu::intel::PrefetchCacheOp>(op))
     return op;
   if (auto insertOp = dyn_cast<ttg::InsertSliceAsyncOp>(op)) {
     rewriter.setInsertionPoint(insertOp);
@@ -461,6 +416,12 @@ static Operation *predicateOp(RewriterBase &rewriter, Operation *op,
     Value mask = getPredMask(rewriter, loadOp.getPtr().getType(),
                              loadOp.getMask(), pred);
     loadOp.getMaskMutable().assign(mask);
+    //    auto loc = loadOp.getLoc();
+    //
+    //    auto type = loadOp->getResult(0).getType();
+    //    auto f16_zero_ = rewriter.create<mlir::arith::ConstantOp>(loc, type,
+    //                                                              rewriter.getZeroAttr(type));
+    //    loadOp.getOtherMutable().assign(f16_zero_);
     return op;
   }
 
@@ -521,35 +482,32 @@ static void addOps(scf::ForOp forOp, int stage,
 // create the schedule for a matmul loop. This is ad hoc based on how we know
 // matmul loops should be pipelined and is not a generic scheduler.
 static std::vector<std::pair<Operation *, unsigned>>
-createSchedule(scf::ForOp forOp, int numStages, bool prefetchExtract) {
-  SmallVector<Operation *> insertOps;
-  SmallVector<Operation *> extractOps;
-  // Find the insert/extract ops that will go respectively in stage 0 and stage
+createSchedule(scf::ForOp forOp, int numStages) {
+  SmallVector<Operation *> prefetchOps;
+  SmallVector<Operation *> loadOps;
+  // Find the prefetch/load ops that will go respectively in stage 0 and stage
   // `numStages - 2`. All the other operations will go in stage `numStages - 1`.
   for (Operation &op : forOp.getBody()->without_terminator()) {
-    if (isa<ttg::InsertSliceAsyncOp, ttg::AsyncCommitGroupOp,
-            ttng::MBarrierArriveOp, ttng::InsertSliceAsyncV2Op>(op))
-      insertOps.emplace_back(&op);
-    if (prefetchExtract) {
-      if (isa<ttg::ExtractSliceOp, ttg::AsyncWaitOp>(op))
-        extractOps.emplace_back(&op);
-    }
+    if (isa<triton::gpu::intel::PrefetchCacheOp>(op))
+      prefetchOps.emplace_back(&op);
+    if (isa<tt::LoadOp>(op))
+      loadOps.emplace_back(&op);
   }
-  DenseSet<Operation *> insertAndDeps;
-  for (Operation *op : insertOps) {
-    addDep(op, insertAndDeps, false);
+  DenseSet<Operation *> prefetchAndDeps;
+  for (Operation *op : prefetchOps) {
+    addDep(op, prefetchAndDeps, false);
   }
 
   // Find depenencies with distance of 1.
   SmallVector<Operation *> distanceOneUsers;
-  for (Operation *op : insertAndDeps) {
+  for (Operation *op : prefetchAndDeps) {
     for (Value operand : op->getOperands()) {
       if (auto arg = operand.dyn_cast<BlockArgument>()) {
         if (arg.getArgNumber() > 0 && arg.getOwner() == op->getBlock()) {
           auto yieldOp = op->getBlock()->getTerminator();
           Value v = yieldOp->getOperand(arg.getArgNumber() - 1);
           Operation *defOp = v.getDefiningOp();
-          if (defOp && insertAndDeps.count(defOp) == 0) {
+          if (defOp) {
             distanceOneUsers.push_back(defOp);
           }
         }
@@ -559,7 +517,7 @@ createSchedule(scf::ForOp forOp, int numStages, bool prefetchExtract) {
   // Schedule loads with a distance of 1 in stage 0
   for (Operation *op : distanceOneUsers) {
     if (isa<tt::LoadOp>(op)) {
-      addDep(op, insertAndDeps, true);
+      addDep(op, prefetchAndDeps, true);
     }
   }
   // For the rest of the ops we can move then into stage 1 so that they can be
@@ -567,19 +525,28 @@ createSchedule(scf::ForOp forOp, int numStages, bool prefetchExtract) {
   DenseSet<Operation *> stage1deps;
   for (Operation *op : distanceOneUsers) {
     if (!isa<tt::LoadOp>(op)) {
-      addDep(op, stage1deps, true, &insertAndDeps);
+      addDep(op, stage1deps, true, &prefetchAndDeps);
     }
   }
 
-  DenseSet<Operation *> extractAndDeps;
-  for (Operation *op : extractOps) {
-    addDep(op, extractAndDeps, true, &insertAndDeps);
+  for (auto &opPair : stage1deps) {
+    llvm::outs() << "johnlu stage1deps:" << *opPair << "\n";
+    llvm::outs().flush();
+  }
+
+  DenseSet<Operation *> loadAndDeps;
+  for (Operation *op : loadOps) {
+    addDep(op, loadAndDeps, false, &prefetchAndDeps);
+  }
+  for (auto &opPair : loadAndDeps) {
+    llvm::outs() << "johnlu loadAndDeps:" << *opPair << "\n";
+    llvm::outs().flush();
   }
   std::vector<std::pair<Operation *, unsigned>> schedule;
   // Schedule stage `numStage - 1` first.
   addOps(forOp, numStages - 1, schedule, [&](Operation *op) {
-    return insertAndDeps.count(op) == 0 && stage1deps.count(op) == 0 &&
-           extractAndDeps.count(op) == 0;
+    return prefetchAndDeps.count(op) == 0 && stage1deps.count(op) == 0 &&
+           loadAndDeps.count(op) == 0;
   });
 
   // Schedule some dependencies with distance of 1 into stage 1 to reduce
@@ -589,12 +556,19 @@ createSchedule(scf::ForOp forOp, int numStages, bool prefetchExtract) {
 
   // Then Schedule stage 0.
   addOps(forOp, 0, schedule,
-         [&](Operation *op) { return insertAndDeps.count(op); });
+         [&](Operation *op) { return prefetchAndDeps.count(op); });
 
-  // Finally schedule the extract ops in stage `numStage - 2` so that they get
+  // Finally schedule the load ops in stage `numStage - 2` so that they get
   // pre-fetched and play well with pretech pass.
   addOps(forOp, numStages - 2, schedule,
-         [&](Operation *op) { return extractAndDeps.count(op); });
+         [&](Operation *op) { return loadAndDeps.count(op); });
+
+  for (auto &opPair : schedule) {
+    llvm::outs() << "johnlu stage:" << opPair.second << " def:" << *opPair.first
+                 << "\n";
+    llvm::outs().flush();
+  }
+
   return schedule;
 }
 
@@ -603,24 +577,27 @@ bool mlir::triton::gpu::intel::preProcessLoopAndGetSchedule(
   // 1. First collect "interesting" operations with a stage where to schedule
   // them. This gives a coarse scheduling for the loop.
   SmallVector<LoadDotOperand> loads;
-  bool hasMMAV3 = false;
-  collectOpsToPipeline(forOp, loads, hasMMAV3);
+  collectOpsToPipeline(forOp, loads);
   if (loads.empty())
     return false;
-  bool hasAsynCp = llvm::any_of(loads, [](LoadDotOperand &load) {
-    return !isLoadFromTensorPtr(load.load);
-  });
   // 2. Convert the loads into async loads and create the allocs.
   llvm::outs() << "johnlu here I want to change it to prefetch"
                << "\n";
   llvm::outs().flush();
-  createAsynOps(forOp, loads, numStages, hasMMAV3);
+  createPrefetchOps(forOp, loads, numStages);
 
+  llvm::outs() << "johnlu loop with prefetch:\n" << forOp << "\n";
+  llvm::outs().flush();
+  llvm::outs() << "johnlu here to create the schedule for loop"
+               << "\n";
+  llvm::outs().flush();
   // 3. Create the final schedule for the kernel loop. This will dictate the
   // stages and order of operations to the pipeline expander.
   std::vector<std::pair<Operation *, unsigned>> schedule =
-      createSchedule(forOp, numStages, /*prefetchExtract=*/!hasMMAV3);
+      createSchedule(forOp, numStages);
 
+  llvm::outs() << "johnlu here schedule:" << schedule.size() << "\n";
+  llvm::outs().flush();
   // 4. Fill out the pipeline options.
   options.getScheduleFn =
       [schedule](scf::ForOp forOp,
@@ -638,12 +615,6 @@ bool mlir::triton::gpu::intel::preProcessLoopAndGetSchedule(
         return setWaitNum(op, part, iteration, numLoadsInStage);
       };
 
-  if (hasAsynCp) {
-    // Insert a wait 0 after the loop
-    OpBuilder builder(forOp);
-    builder.setInsertionPointAfter(forOp);
-    builder.create<ttg::AsyncWaitOp>(forOp.getLoc(), 0);
-  }
   return true;
 }
 

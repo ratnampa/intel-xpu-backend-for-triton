@@ -223,8 +223,8 @@ void LoopPipelinerInternal::emitPrologue(RewriterBase &rewriter) {
   }
   auto yield = cast<scf::YieldOp>(forOp.getBody()->getTerminator());
   Location loc = forOp.getLoc();
+  SmallVector<Value> predicates(maxStage);
   for (int64_t i = 0; i < maxStage; i++) {
-    Value predicate;
     if (dynamicLoop) {
       Type t = ub.getType();
       // pred = ub > lb + (i * step)
@@ -234,8 +234,8 @@ void LoopPipelinerInternal::emitPrologue(RewriterBase &rewriter) {
               loc, step,
               rewriter.create<arith::ConstantOp>(
                   loc, rewriter.getIntegerAttr(t, i))));
-      predicate = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
-                                                 iv, ub);
+      predicates[i] = rewriter.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::slt, iv, ub);
     }
 
     // special handling for induction variable as the increment is implicit.
@@ -259,8 +259,9 @@ void LoopPipelinerInternal::emitPrologue(RewriterBase &rewriter) {
               newOperand->set(replacement);
             }
           });
-      if (predicate) {
-        newOp = predicateFn(rewriter, newOp, predicate);
+      int predicateIdx = i - stages[op];
+      if (predicates[predicateIdx]) {
+        newOp = predicateFn(rewriter, newOp, predicates[predicateIdx]);
         assert(newOp && "failed to predicate op.");
       }
       if (annotateFn)
@@ -654,12 +655,10 @@ void LoopPipelinerInternal::setValueMapping(Value key, Value el, int64_t idx) {
 FailureOr<ForOp> mlir::triton::gpu::intel::pipelineForLoop(
     RewriterBase &rewriter, ForOp forOp,
     const triton::PipeliningOption &options, bool *modifiedIR) {
-  llvm::outs() << "the origin forop" << forOp << "\n";
-  llvm::outs() << "the origin mod" << forOp->getParentOfType<ModuleOp>()
-               << "\n";
-  llvm::outs().flush();
   if (modifiedIR)
     *modifiedIR = false;
+  //  ::llvm::DebugFlag = true;
+  //  ::llvm::setCurrentDebugType("triton-loop-pipelining");
   LoopPipelinerInternal pipeliner;
   if (!pipeliner.initializeLoopInfo(forOp, options))
     return failure();
@@ -667,8 +666,16 @@ FailureOr<ForOp> mlir::triton::gpu::intel::pipelineForLoop(
   if (modifiedIR)
     *modifiedIR = true;
 
+  auto mod = forOp->getParentOfType<ModuleOp>();
+
+  llvm::outs() << "the origin forop\n" << forOp << "\n";
+  llvm::outs() << "the origin mod" << mod << "\n";
+  llvm::outs().flush();
   // 1. Emit prologue.
   pipeliner.emitPrologue(rewriter);
+  llvm::outs() << "the after 1. Emit prologue. forop\n" << forOp << "\n";
+  llvm::outs() << "the origin 1. Emit prologue. mod" << mod << "\n";
+  llvm::outs().flush();
 
   // 2. Track values used across stages. When a value cross stages it will
   // need to be passed as loop iteration arguments.
@@ -686,9 +693,18 @@ FailureOr<ForOp> mlir::triton::gpu::intel::pipelineForLoop(
       pipeliner.createKernelLoop(crossStageValues, rewriter, loopArgMap);
   // Create the kernel block, order ops based on user choice and remap
   // operands.
+
+  llvm::outs() << "johnlu new for op created. newForOp:\n" << newForOp << "\n";
+  llvm::outs().flush();
   if (failed(pipeliner.createKernel(newForOp, crossStageValues, loopArgMap,
                                     rewriter)))
     return failure();
+
+  llvm::outs() << "the after 3. Create the new kernel loop. newForOp\n"
+               << newForOp << "\n";
+  llvm::outs() << "the origin 3. Create the new kernel loop. mod" << mod
+               << "\n";
+  llvm::outs().flush();
 
   llvm::SmallVector<Value> returnValues =
       newForOp.getResults().take_front(forOp->getNumResults());
@@ -702,6 +718,9 @@ FailureOr<ForOp> mlir::triton::gpu::intel::pipelineForLoop(
     rewriter.replaceOp(forOp, returnValues);
   else
     rewriter.eraseOp(forOp);
+
+  llvm::outs() << "the origin 5. Erase the original loop. mod" << mod << "\n";
+  llvm::outs().flush();
 
   return newForOp;
 }

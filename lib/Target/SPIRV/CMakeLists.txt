@@ -28,10 +28,10 @@ add_mlir_translation_library(TritonSPIRV
 
 #add_custom_command(TARGET LLVMSPIRVLib PRE_BUILD COMMAND git apply somepatch.patch)
 #MESSAGE(STATUS  "johnlu SPIRVToLLVMTranslator_SOURCE_DIR ${SPIRVToLLVMTranslator_SOURCE_DIR}")
-execute_process(
-        COMMAND ${GIT_EXECUTABLE} checkout .
-        WORKING_DIRECTORY ${SPIRVToLLVMTranslator_SOURCE_DIR}
-        COMMAND_ERROR_IS_FATAL ANY)
+#execute_process(
+#        COMMAND ${GIT_EXECUTABLE} checkout .
+#        WORKING_DIRECTORY ${SPIRVToLLVMTranslator_SOURCE_DIR}
+#        COMMAND_ERROR_IS_FATAL ANY)
 
 #execute_process(
 #        COMMAND ${GIT_EXECUTABLE} apply --whitespace=fix /home/chengjun/workspace/CLionProject/triton-torch-xpu/third_party/intel_xpu_backend/lib/Target/SPIRV/freeze_insn_workaround.patch

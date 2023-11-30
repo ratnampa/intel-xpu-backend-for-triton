@@ -30,6 +30,8 @@
 #include "TypeConverter.h"
 
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "triton/Conversion/TritonGPUToSPIRV/VCIntrinsicHelper.h"
+#include "triton/Dialect/TritonGPU/Transforms/Utility.h"
 
 #include "llvm/Support/Debug.h"
 
@@ -358,6 +360,57 @@ public:
   }
 };
 
+struct PrefetchOpSPIRVConversion : public ConvertTritonGPUOpToSPIRVPattern<
+                                       triton::gpu::intel::PrefetchCacheOp> {
+  using ConvertTritonGPUOpToSPIRVPattern<
+      triton::gpu::intel::PrefetchCacheOp>::ConvertTritonGPUOpToSPIRVPattern;
+
+  LogicalResult
+  matchAndRewrite(triton::gpu::intel::PrefetchCacheOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    int threadsPerWarp = triton::gpu::TritonGPUDialect::getNumWarps(mod);
+
+    mlir::triton::intel::IntrinsicBuilder builder(threadsPerWarp, rewriter);
+    //    llvm::outs() << "johnlu lower prefetch:" << op << "\n";
+    auto operandTy = op.getPtr().getType();
+    if (!mlir::triton::isTensorPointerType(operandTy)) {
+#if 0
+      auto tensorTy = operandTy.cast<RankedTensorType>();
+      auto ty =
+          tensorTy.getElementType().cast<triton::PointerType>().getPointeeType();
+//      llvm::outs() << "johnlu ptrType prefetch:" << ty << "\n";
+      auto llvmPtrTy = LLVM::LLVMPointerType::get(
+          typeConverter->convertType(ty), 1);
+//      llvm::outs() << "johnlu ptrType prefetch llvmPtrTy: " << llvmPtrTy << "\n";
+//      llvm::outs().flush();
+      mlir::triton::intel::GenISA_Prefetch prefetchOp(&builder, llvmPtrTy, ty.getIntOrFloatBitWidth());
+
+      // original values
+      Value ptr = op.getPtr();
+      Value spirvPtr = adaptor.getPtr();
+      // Get the SPIRV values for pointers
+      auto ptrElems = getTypeConverter()->unpackLLElements(
+          loc, spirvPtr, rewriter, ptr.getType());
+
+      unsigned numElems = mlir::triton::gpu::getTotalElemsPerThread(ptr.getType());
+//      unsigned vec = getVectorSize(ptr);
+      unsigned vec = 1;
+      for (size_t vecStart = 0; vecStart < numElems; vecStart += vec) {
+        prefetchOp(rewriter, loc, bitcast(ptrElems[vecStart], spirv::PointerType::get(i8_ty, spirv::StorageClass::CrossWorkgroup)), vec);
+      }
+#endif
+      // Safe to remove the op since it doesn't have any return value.
+      rewriter.eraseOp(op);
+
+      return success();
+    }
+
+    return failure();
+  }
+};
+
 class ConvertTritonGPUToSPIRV
     : public ConvertTritonGPUToSPIRVBase<ConvertTritonGPUToSPIRV> {
 
@@ -466,6 +519,9 @@ public:
     if (axisInfoAnalysis.getNumFunctions() > 1) {
       indexCacheInfo = {nullptr, nullptr, nullptr};
     }
+
+    patterns.add<PrefetchOpSPIRVConversion>(spirvTypeConverter, context, 10);
+
     // Normal conversions
     populateTritonGPUToSPIRVPatterns(spirvTypeConverter, context, patterns,
                                      numWarps, axisInfoAnalysis, allocation,

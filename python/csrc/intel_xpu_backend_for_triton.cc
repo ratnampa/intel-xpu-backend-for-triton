@@ -232,7 +232,8 @@ void init_triton_translation(py::module &m) {
                  /*shouldPrintAfterPass=*/print_always,
                  /*printModuleScope=*/true,
                  /*printAfterOnlyOnChange=*/false,
-                 /*printAfterOnlyOnFailure*/ true, llvm::dbgs(), printingFlags);
+                 /*printAfterOnlyOnFailure*/ false, llvm::dbgs(),
+                 printingFlags);
            })
       .def("run",
            [](mlir::PassManager &self, mlir::ModuleOp &mod) {

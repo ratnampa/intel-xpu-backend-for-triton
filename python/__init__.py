@@ -68,7 +68,6 @@ def ttir_to_ttgir(mod, num_warps, threads_per_warp, num_ctas, arch):
     mod = _triton.parse_mlir_module(str(mod), context)
     mod.context = context
     pm = _triton.pass_manager(mod.context)
-    pm.enable_debug()
     pm.add_convert_triton_to_tritongpu_pass(num_warps, threads_per_warp, num_ctas, arch)
     pm.run(mod)
     return mod
@@ -82,11 +81,15 @@ def optimize_ttgir(mod, num_stages, arch):
     pm.add_tritongpu_remove_layout_conversions_pass()
     pm.add_triton_intel_gpu_accelerate_matmul_pass(arch)
     pm.add_tritongpu_remove_layout_conversions_pass()
+    if False:
+        pm.add_tritongpu_optimize_epilogue_pass()
     pm.add_tritongpu_optimize_dot_operands_pass()
-    pm.add_tritongpu_pipeline_pass(num_stages)
-    # pm.add_triton_intel_gpu_pipe_line_pass(num_stages)
+    pm.add_cse_pass()
+    # pm.add_tritongpu_pipeline_pass(num_stages)
+    pm.add_triton_intel_gpu_pipe_line_pass(4)
+    # pm.add_tritongpu_materialize_load_store_pass(num_warps, capability)
     pm.add_tritongpu_prefetch_pass()
-    pm.add_tritongpu_optimize_dot_operands_pass()
+    # pm.add_tritongpu_optimize_dot_operands_pass()
     pm.add_tritongpu_remove_layout_conversions_pass()
     pm.add_tritongpu_decompose_conversions_pass()
     # pm.add_triton_intel_gpu_decompose_conversions_pass()
@@ -94,6 +97,11 @@ def optimize_ttgir(mod, num_stages, arch):
     pm.add_tritongpu_reorder_instructions_pass()
     pm.add_cse_pass()
     pm.add_symbol_dce_pass()
+    # if capability // 10 >= 9:
+    #     pm.add_tritongpu_fence_insertion_pass()
+    # pm.add_tritongpu_ws_fixup_missing_attrs_pass()
+    # pm.add_tritongpu_optimize_thread_locality_pass()
+    pm.add_canonicalizer_pass()
     pm.run(mod)
     # new passes
 

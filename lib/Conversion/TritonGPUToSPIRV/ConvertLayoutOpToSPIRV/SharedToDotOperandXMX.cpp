@@ -2,6 +2,8 @@
 #include "../Utility.h"
 #include "triton/Dialect/TritonIntelGPU/IR/Dialect.h"
 
+#define DEBUG_PRINT 0
+
 using namespace mlir;
 
 using ValueTable = std::map<std::pair<unsigned, unsigned>, Value>;
@@ -291,16 +293,18 @@ Value JointMatrixMatmulLoader::operator()(
   Value offsetInner = mul(i32_val(repInner), repKDimStride);
   Value offset = add(offsetOutter, offsetInner);
 
-#if 0
+#if DEBUG_PRINT
 #if 1
   auto printFuncTy = mlir::FunctionType::get(
-      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, f16_ty}, TypeRange());
+      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, i32_ty, f16_ty},
+      TypeRange());
 
   NamedAttrList attributes;
-  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libname",
+                 StringAttr::get(rewriter.getContext(), "libdevice"));
   attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
-  auto linkageTypeAttr =
-      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageTypeAttr = rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(
+      spirv::LinkageType::Import);
   auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
       "print_scalar", linkageTypeAttr);
   attributes.set("linkage_attributes", linkageAttr);
@@ -309,13 +313,17 @@ Value JointMatrixMatmulLoader::operator()(
 #else
 
   auto printFuncTy = mlir::FunctionType::get(
-      rewriter.getContext(), {i32_ty, i32_ty, i32_ty, ptr_ty(f16_ty, spirv::StorageClass::Workgroup), f16_ty}, TypeRange());
+      rewriter.getContext(),
+      {i32_ty, i32_ty, i32_ty, ptr_ty(f16_ty, spirv::StorageClass::Workgroup),
+       f16_ty},
+      TypeRange());
 
   NamedAttrList attributes;
-  attributes.set("libname", StringAttr::get(rewriter.getContext(), "libdevice"));
+  attributes.set("libname",
+                 StringAttr::get(rewriter.getContext(), "libdevice"));
   attributes.set("libpath", StringAttr::get(rewriter.getContext(), ""));
-  auto linkageTypeAttr =
-      rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
+  auto linkageTypeAttr = rewriter.getAttr<::mlir::spirv::LinkageTypeAttr>(
+      spirv::LinkageType::Import);
   auto linkageAttr = rewriter.getAttr<::mlir::spirv::LinkageAttributesAttr>(
       "print_scalar2", linkageTypeAttr);
   attributes.set("linkage_attributes", linkageAttr);
@@ -328,7 +336,7 @@ Value JointMatrixMatmulLoader::operator()(
   for (int i = 0; i < elemNum; i++) {
     Value readPtr = gep(ptrs[i], offset);
     Value val = rewriter.create<spirv::LoadOp>(loc, readPtr);
-#if 0
+#if DEBUG_PRINT
     if (kDim == 1)
       rewriter.create<spirv::FunctionCallOp>(
           loc, TypeRange(), "print_scalar",

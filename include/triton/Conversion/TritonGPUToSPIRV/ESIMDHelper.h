@@ -5,7 +5,6 @@
 #ifndef TRITON_ESIMDHELPER_H
 #define TRITON_ESIMDHELPER_H
 
-#include "Utility.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 
