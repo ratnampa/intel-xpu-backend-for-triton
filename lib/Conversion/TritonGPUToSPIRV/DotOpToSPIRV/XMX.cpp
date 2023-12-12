@@ -12,7 +12,6 @@ using namespace mlir::triton;
 using namespace mlir::triton::intel;
 
 using ::mlir::triton::gpu::DotOperandEncodingAttr;
-using ::mlir::triton::gpu::MmaEncodingAttr;
 
 using ValueTableV2 = std::map<std::pair<unsigned, unsigned>, Value>;
 

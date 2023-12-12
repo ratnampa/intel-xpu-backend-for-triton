@@ -17,9 +17,9 @@ def TritonIntelGPUAccelerateMatmul : Pass<"tritonintelgpu-accelerate-matmul", "m
                            "mlir::triton::TritonDialect"];
 
   let options = [
-    Option<"computeCapability", "compute-capability",
-            "std::map<std::string, int>", /*default*/"std::map<std::string, int>{}",
-            "device compute capability">
+    Option<"deviceArch", "device architecture",
+            "mlir::triton::intel::DeviceArch", /*default*/" mlir::triton::intel::DeviceArch::UNKNOWN",
+            "device architecture">
   ];
 }
 

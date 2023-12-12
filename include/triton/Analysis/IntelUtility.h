@@ -1,7 +1,3 @@
-//
-// Created by chengjun on 8/7/23.
-//
-
 #ifndef TRITON_INTELUTILITY_H
 #define TRITON_INTELUTILITY_H
 
@@ -29,9 +25,6 @@ struct IntelXMXCapability {
   uint32_t executionSize;
   uint32_t opsChanBitWidths;
 };
-
-DeviceArch
-computeCapabilityToXMXArch(const std::map<std::string, int> &computeCapability);
 
 bool supportXMX(Value value, DeviceArch arch);
 

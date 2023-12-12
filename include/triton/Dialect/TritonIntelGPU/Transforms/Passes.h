@@ -2,10 +2,12 @@
 #define TRITON_DIALECT_TRITON_INTEL_GPU_TRANSFORMS_PASSES_H_
 
 #include "mlir/Pass/Pass.h"
+#include "triton/Analysis/IntelUtility.h"
+#include <any>
 
 namespace mlir {
 std::unique_ptr<Pass> createTritonIntelGPUAccelerateMatmulPass(
-    std::map<std::string, int> computeCapability = {});
+    const std::map<std::string, std::any> &computeCapability = {});
 
 std::unique_ptr<Pass> createTritonIntelGPUDecomposeConversionsPass(
     std::map<std::string, int> computeCapability = {});

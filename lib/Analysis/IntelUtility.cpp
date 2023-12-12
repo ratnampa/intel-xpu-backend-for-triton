@@ -30,18 +30,6 @@ IntelXMXCapability getXMXCapability(DeviceArch arch) {
   return caps[(uint32_t)arch];
 }
 
-DeviceArch computeCapabilityToXMXArch(
-    const std::map<std::string, int> &computeCapability) {
-  if (computeCapability.find("ATS") != computeCapability.end()) {
-    return DeviceArch::ATS;
-  } else if (computeCapability.find("PVC") != computeCapability.end()) {
-    return DeviceArch::PVC;
-  } else {
-    return DeviceArch::UNKNOWN;
-    ;
-  }
-}
-
 bool supportXMX(Value value, DeviceArch arch) {
   if (arch == DeviceArch::UNKNOWN)
     return false;

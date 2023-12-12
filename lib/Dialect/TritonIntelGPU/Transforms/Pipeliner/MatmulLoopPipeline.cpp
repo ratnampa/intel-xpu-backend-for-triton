@@ -699,6 +699,7 @@ void mlir::triton::gpu::intel::asyncLaunchDots(scf::ForOp forOp) {
   for (Operation &op : *loop) {
     if (auto dotOp = dyn_cast<tt::DotOp>(&op)) {
       auto resTy = dotOp.getResult().getType().dyn_cast<RankedTensorType>();
+#if 0
       if (auto resEnc = resTy.getEncoding().dyn_cast<ttg::MmaEncodingAttr>()) {
         if (resEnc && resEnc.isHopper()) {
           auto dot = dotOp.getResult();
@@ -736,6 +737,7 @@ void mlir::triton::gpu::intel::asyncLaunchDots(scf::ForOp forOp) {
           }
         }
       }
+#endif
     }
   }
 

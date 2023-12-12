@@ -50,13 +50,11 @@ SmallVector<unsigned, 2> getWarpsPerTile(triton::DotOp dotOp,
 }
 
 class BlockedToMMA : public mlir::RewritePattern {
-  std::map<std::string, int> computeCapability;
 
 public:
-  BlockedToMMA(mlir::MLIRContext *context,
-               std::map<std::string, int> computeCapability)
+  BlockedToMMA(mlir::MLIRContext *context, DeviceArch arch)
       : mlir::RewritePattern(triton::DotOp::getOperationName(), 2, context),
-        computeCapability(computeCapability) {}
+        arch(arch) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op,
@@ -70,7 +68,6 @@ public:
       return failure();
 
     // for FMA, should retain the blocked layout.
-    DeviceArch arch = computeCapabilityToXMXArch(computeCapability);
     if (!supportXMX(dotOp, arch))
       return failure();
 
@@ -92,12 +89,7 @@ public:
 
     auto warpsPerTile = getWarpsPerTile(dotOp, xmxCap, retShape, numWarps);
 
-    int threadsPerWarp = 32;
-    if (computeCapability.find("threads_per_warp") != computeCapability.end()) {
-      auto iter = computeCapability.find("threads_per_warp");
-      threadsPerWarp = iter->second;
-    }
-
+    int threadsPerWarp = triton::gpu::TritonGPUDialect::getThreadsPerWarp(mod);
     triton::gpu::intel::IntelMmaEncodingAttr mmaEnc =
         triton::gpu::intel::IntelMmaEncodingAttr::get(
             oldRetType.getContext(), xmxCap.repeatCount, xmxCap.systolicDepth,
@@ -131,6 +123,9 @@ public:
         op, oldRetType, newDot.getResult());
     return success();
   }
+
+private:
+  DeviceArch arch;
 };
 
 } // namespace
@@ -143,16 +138,15 @@ class TritonIntelGPUAccelerateMatmulPass
           TritonIntelGPUAccelerateMatmulPass> {
 public:
   TritonIntelGPUAccelerateMatmulPass() = default;
-  TritonIntelGPUAccelerateMatmulPass(
-      std::map<std::string, int> computeCapability) {
-    this->computeCapability = std::move(computeCapability);
+  TritonIntelGPUAccelerateMatmulPass(DeviceArch arch) {
+    this->deviceArch = arch;
   }
   void runOnOperation() override {
     MLIRContext *context = &getContext();
     ModuleOp m = getOperation();
 
     mlir::RewritePatternSet patterns(context);
-    patterns.add<::BlockedToMMA>(context, computeCapability);
+    patterns.add<::BlockedToMMA>(context, deviceArch);
     if (applyPatternsAndFoldGreedily(m, std::move(patterns)).failed()) {
       signalPassFailure();
     }
@@ -160,7 +154,14 @@ public:
 };
 
 std::unique_ptr<Pass> mlir::createTritonIntelGPUAccelerateMatmulPass(
-    std::map<std::string, int> computeCapability) {
-  return std::make_unique<TritonIntelGPUAccelerateMatmulPass>(
-      computeCapability);
+    const std::map<std::string, std::any> &computeCapability) {
+  auto arch = DeviceArch::UNKNOWN;
+  auto devId = computeCapability.find("dev_id");
+  if (devId != computeCapability.end()) {
+    //    llvm::outs() << "johnlu devid: " << std::any_cast<int>(devId->second)
+    //    << "\n"; llvm::outs().flush();
+    arch = DeviceArch::ATS;
+  }
+
+  return std::make_unique<TritonIntelGPUAccelerateMatmulPass>(arch);
 }

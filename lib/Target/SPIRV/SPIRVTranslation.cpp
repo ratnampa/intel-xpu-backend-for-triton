@@ -113,6 +113,16 @@ LogicalResult llvmToSPIRV(llvm::Module &module, raw_ostream &output) {
   }
 
   output << spirvIR;
+#if 0
+  std::string spirvDisassemble;
+  llvm::raw_string_ostream disassemble(spirvDisassemble);
+  if (!failed(disassembleSPIRV((uint32_t *)spirvIR.c_str(),
+                               spirvIR.length() / sizeof(uint32_t),
+                               disassemble)))
+    llvm::dbgs() << "SPIRV IR:\n" << spirvDisassemble << "\n";
+
+  output << spirvDisassemble;
+#endif
   output.flush();
 
   return mlir::success();
@@ -626,8 +636,6 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
   llvm::LLVMContext context;
   auto llvmModule = spirvToLLVM(binary.data(), binary.size(), context);
 
-  //  llvm::outs() << "johnlu llvmModule: " << *llvmModule << "\n";
-  //  llvm::outs().flush();
   // Link external libraries before perform optimizations.
   // This allows the optimizers to inline and perform
   // analyses on the used library functions, and eliminate any unused functions
@@ -651,9 +659,9 @@ static LogicalResult translateTritonSPIRVToSPIRVIR(ModuleOp module,
   return mlir::success();
 }
 
-std::string
-translateTritonGPUToSPIRVIR(mlir::ModuleOp module,
-                            std::map<std::string, int> computeCapability) {
+std::string translateTritonGPUToSPIRVIR(
+    mlir::ModuleOp module,
+    const std::map<std::string, std::any> &computeCapability) {
   mlir::PassManager pm(module->getContext());
   mlir::registerPassManagerCLOptions();
   if (failed(applyPassManagerCLOptions(pm))) {
@@ -674,7 +682,7 @@ translateTritonGPUToSPIRVIR(mlir::ModuleOp module,
 
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(createConvertTritonGPUToSPIRVPass(computeCapability));
-  pm.addPass(createConvertTritonIntelGPUToSPIRVPass(computeCapability));
+  //  pm.addPass(createConvertTritonIntelGPUToSPIRVPass(computeCapability));
   //  pm.addPass(mlir::arith::createConvertArithToSPIRVPass());
   // Canonicalize to eliminate the remaining UnrealizedConversionCastOp
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());

@@ -176,7 +176,7 @@ py::tuple spirv_to_sycl_kernel(sycl::device &device, uint32_t *binary_ptr,
     }
   }
   sycl::kernel *k = new sycl::kernel(*ptr);
-  py::capsule kernel_capsulle(k, [](void *f) {
+  py::capsule kernel_capsulle(k, "triton xpu kernel", [](void *f) {
     auto kk = static_cast<sycl::kernel *>(f);
     delete kk;
   });
@@ -231,17 +231,20 @@ PYBIND11_MODULE(sycl_utils, m) {
             device->get_info<sycl::info::device::max_num_sub_groups>();
         auto sub_group_sizes =
             device->get_info<sycl::info::device::sub_group_sizes>();
+        auto dev_id =
+            device->get_info<sycl::ext::intel::info::device::device_id>();
         auto dev_name = device->get_info<sycl::info::device::name>();
 
-        py::dict properties = py::dict(
-            "max_shared_mem"_a = max_shared_mem,
-            "support_fp64"_a = support_fp64,
-            "eu_count_per_ss"_a = eu_count_per_ss,
-            "threads_per_eu"_a = threads_per_eu,
-            "max_clock_frequency"_a = max_clock_frequency,
-            "max_work_group_size"_a = max_work_group_size,
-            "max_num_sub_groups"_a = max_num_sub_groups,
-            "sub_group_sizes"_a = sub_group_sizes, "dev_name"_a = dev_name);
+        py::dict properties =
+            py::dict("max_shared_mem"_a = max_shared_mem,
+                     "support_fp64"_a = support_fp64,
+                     "eu_count_per_ss"_a = eu_count_per_ss,
+                     "threads_per_eu"_a = threads_per_eu,
+                     "max_clock_frequency"_a = max_clock_frequency,
+                     "max_work_group_size"_a = max_work_group_size,
+                     "max_num_sub_groups"_a = max_num_sub_groups,
+                     "sub_group_sizes"_a = sub_group_sizes,
+                     "dev_name"_a = dev_name, "dev_id"_a = dev_id);
         return properties;
       },
       "Get the properties for a given device",
