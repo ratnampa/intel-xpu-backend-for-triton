@@ -1,2 +1,0 @@
-add_subdirectory(TritonGPUToSPIRV)
-add_subdirectory(IntelGPUToSPIRV)

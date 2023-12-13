@@ -3,7 +3,8 @@
 if(TRITON_BUILD_PYTHON_MODULE)
     message(STATUS "Adding Intel XPU Backend Python module")
     set(PYTHON_SRC_PATH ${CMAKE_CURRENT_SOURCE_DIR}/csrc)
-    set(PYTHON_SRC ${PYTHON_SRC_PATH}/main.cc ${PYTHON_SRC_PATH}/intel_xpu_backend_for_triton.cc)
+    # TODO: export the C++ interface thru the pybind11
+    set(PYTHON_SRC ${PYTHON_SRC_PATH}/main.cc)
     include_directories("." ${PYTHON_SRC_PATH})
     include_directories(../include)
 
@@ -26,10 +27,6 @@ if(TRITON_BUILD_PYTHON_MODULE)
             TritonAnalysis
             TritonTransforms
             TritonGPUTransforms
-            TritonIntelGPUTransforms
-            TritonSPIRV
-            TritonGPUToSPIRV
-            TritonIntelGPUToSPIRV
             ${dialect_libs}
             ${conversion_libs}
 
@@ -46,7 +43,6 @@ if(TRITON_BUILD_PYTHON_MODULE)
             TritonGPUTransforms
             ${dialect_libs}
             ${conversion_libs}
-            TritonIntelAnalysis
             )
     target_link_libraries(intel_xpu_backend_for_triton PRIVATE ${LLVM_LIBRARIES})
     target_link_libraries(intel_xpu_backend_for_triton PRIVATE ${INTEL_EXTENSION_LIBRARIES})

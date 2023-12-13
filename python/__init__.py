@@ -212,6 +212,7 @@ static void set_scalar_arg(
     }}
 }}
 
+
 static void sycl_kernel_launch(int gridX, int gridY, int gridZ, int num_warps, int threads_per_warp, int shared_memory, sycl::queue& stream, sycl::kernel& kernel_ptr{', ' + arg_decls if len(arg_decls) > 0 else ''}) {{
   std::string kernel_name = kernel_ptr.get_info<sycl::info::kernel::function_name>();
 #ifdef TRITON_XPU_PROFILE
