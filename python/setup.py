@@ -240,7 +240,7 @@ class CMakeBuild(build_ext):
         if not user_home:
             raise RuntimeError("Could not find user home directory")
         triton_cache_path = os.path.join(user_home, ".triton")
-        llvm_spirv_path = os.path.join(user_home, "packages/llvm-spirv")
+        llvm_spirv_path = os.path.join(get_base_dir(),  os.pardir, "packages/llvm-spirv")
         # lit is used by the test suite
         thirdparty_cmake_args = get_thirdparty_packages(triton_cache_path)
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.path)))
