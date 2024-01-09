@@ -340,8 +340,17 @@ class SpirvUtils(object):
             module_desc.pInputModule = (uint8_t*) PyBytes_AsString(py_bytes);
             ze_module_handle_t module;
             // std::cout << "SPIRV binary size: " << module_desc.inputSize << std::endl;
-            ZE_CHECK(zeModuleCreate(context, device, &module_desc, &module, nullptr));
+            ze_module_build_log_handle_t buildlog = nullptr;
+            ZE_CHECK(zeModuleCreate(context, device, &module_desc, &module, &buildlog));
 
+#if 0
+            size_t logSize = 0;
+            zeModuleBuildLogGetString(buildlog, &logSize, nullptr);
+            std::string strLog(logSize, ' ');
+            zeModuleBuildLogGetString(buildlog, &logSize, strLog.data());
+            std::cout << "L0 module build log: " << strLog << std::endl;
+#endif 
+            
             // std::cout << "loadBinary zeModuleCreated" << std::endl;
             ze_kernel_desc_t kernel_desc = {};
             kernel_desc.pKernelName = name;
