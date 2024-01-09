@@ -13,7 +13,8 @@ export https_proxy="http://proxy-us.intel.com:912"
 export ftp_proxy="http://proxy-us.intel.com:912"
 export socks_proxy="http://proxy-us.intel.com:1080"
 
-CMAKE=/usr/bin/cmake
+#CMAKE=/usr/bin/cmake
+CMAKE=cmake
 export PACKAGES_DIR=$BASE/packages
 export SPIRV_TOOLS=$PACKAGES_DIR/spirv-tools
 export LLVM_PROJ=$BASE/llvm
@@ -64,8 +65,8 @@ fi
 ############################################################################
 ## Configure and build the llvm project.
 
-C_COMPILER=/usr/bin/gcc
-CXX_COMPILER=/usr/bin/g++
+#C_COMPILER=/usr/bin/gcc
+#CXX_COMPILER=/usr/bin/g++
 
 if [ ! -d "$LLVM_PROJ_BUILD" ]
 then
@@ -86,8 +87,9 @@ function build_llvm {
     -DLLVM_INSTALL_UTILS=true \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DCMAKE_INSTALL_PREFIX=$PACKAGES_DIR/llvm \
-    -DCMAKE_C_COMPILER=$C_COMPILER \
-    -DCMAKE_CXX_COMPILER=$CXX_COMPILER ..
+    #-DCMAKE_C_COMPILER=$C_COMPILER \
+    #-DCMAKE_CXX_COMPILER=$CXX_COMPILER \
+    ..
 
   echo "****** Building $LLVM_PROJ ******"
   ninja
@@ -103,6 +105,44 @@ build_llvm
 # Install libGenISAIntrinsics.a
 
 cp $LLVM_PROJ/mlir/lib/Target/LLVMIR/Dialect/GENX/libGenISAIntrinsics.a $PACKAGES_DIR/llvm/lib
+
+############################################################################
+# Clone the SPIRV-LLVM translator fork if it does not exists.
+
+export SPIRV_LLVM_TRANSLATOR_PROJ_BUILD=$SPIRV_LLVM_TRANSLATOR_PROJ/build
+
+if [ ! -d "$SPIRV_LLVM_TRANSLATOR_PROJ" ]; then
+  echo "****** Cloning $SPIRV_LLVM_TRANSLATOR_PROJ ******"
+  cd $BASE
+  git clone https://github.com/KhronosGroup/SPIRV-LLVM-Translator.git
+fi
+
+############################################################################
+## Configure and build the SPIRV-LLVM translator project.
+
+if [ ! -d "$SPIRV_LLVM_TRANSLATOR_PROJ_BUILD" ]
+then
+  mkdir $SPIRV_LLVM_TRANSLATOR_PROJ_BUILD
+fi
+
+function build_spirv_translator {
+  echo "**** Configuring $SPIRV_LLVM_TRANSLATOR_PROJ ****"
+
+  cd $SPIRV_LLVM_TRANSLATOR_PROJ_BUILD
+  git checkout adf1f524ac82f3206536ef6fc6fbc289a900e5d6
+  PKG_CONFIG_PATH=$SPIRV_TOOLS/lib/pkgconfig/ $CMAKE -G Ninja ..\
+    -DLLVM_DIR=$PACKAGES_DIR/llvm/lib/cmake/llvm \
+    -DLLVM_SPIRV_BUILD_EXTERNAL=YES \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_INSTALL_PREFIX=$PACKAGES_DIR/llvm-spirv ..
+
+  echo "**** Building $SPIRV_LLVM_TRANSLATOR_PROJ ****"
+  ninja
+  check_rc
+  ninja install
+  check_rc
+}
+build_spirv_translator
 
 ############################################################################
 # Clone the Triton project fork if it does not exists.

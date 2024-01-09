@@ -47,6 +47,7 @@ export http_proxy="http://proxy-us.intel.com:912"
 export https_proxy="http://proxy-us.intel.com:912"
 export ftp_proxy="http://proxy-us.intel.com:912"
 export socks_proxy="http://proxy-us.intel.com:1080"
+export no_proxy="developer.intel.com"
 
 export TRITON_PROJ=$BASE/intel-xpu-backend-for-triton
 export TRITON_PROJ_BUILD=$TRITON_PROJ/python/build
@@ -100,6 +101,9 @@ function run_core_tests {
   if [ ! -d "${CORE_TEST_DIR}" ]; then
     echo "Not found '${CORE_TEST_DIR}'. Build Triton please" ; exit 3
   fi
+  # Conda defines CXX var and triton/common/build.py has a bug
+  # with usage of undefined var icpx when this var is set
+  unset CXX
   cd $CORE_TEST_DIR
   TRITON_DISABLE_LINE_INFO=1 python3 -m pytest --verbose --device xpu --ignore=test_line_info.py --ignore=test_subprocess.py
   if [ $? -ne 0 ]; then
