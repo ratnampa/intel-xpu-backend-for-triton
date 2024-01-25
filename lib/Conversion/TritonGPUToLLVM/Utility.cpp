@@ -450,5 +450,90 @@ Value addStringToModule(Location loc, ConversionPatternRewriter &rewriter,
   return stringStart;
 }
 
+static LLVM::LLVMFuncOp
+getSpirvPrintfDeclaration(ConversionPatternRewriter &rewriter) {
+  auto moduleOp = rewriter.getBlock()->getParent()->getParentOfType<ModuleOp>();
+  StringRef funcName("_Z18__spirv_ocl_printf");
+  Operation *funcOp = moduleOp.lookupSymbol(funcName);
+  if (funcOp)
+    return cast<LLVM::LLVMFuncOp>(*funcOp);
+
+  MLIRContext *context = rewriter.getContext();
+  auto ptrTy = LLVM::LLVMPointerType::get(
+      context, GENX::GENXMemorySpace::kUniformConstant);
+  SmallVector<Type> argsType{ptrTy};
+  auto retType = i32_ty;
+  auto funcType =
+      LLVM::LLVMFunctionType::get(retType, argsType, /*isVarArg*/ true);
+
+  ConversionPatternRewriter::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPointToStart(moduleOp.getBody());
+
+  auto printFunc = rewriter.create<LLVM::LLVMFuncOp>(
+      UnknownLoc::get(context), funcName, funcType, LLVM::Linkage::External,
+      /*dsoLocal*/ false, LLVM::CConv::SPIR_FUNC, /*comdat=*/SymbolRefAttr{});
+  printFunc->setAttr("nounwind", rewriter.getUnitAttr());
+
+  return printFunc;
+}
+
+static std::pair<Type, Value> promoteValue(ConversionPatternRewriter &rewriter,
+                                           Value value) {
+  auto *context = rewriter.getContext();
+  auto type = value.getType();
+  Value newOp = value;
+  Type newType = type;
+  auto loc = UnknownLoc::get(context);
+
+  bool bUnsigned = type.isUnsignedInteger();
+  if (type.isIntOrIndex() && type.getIntOrFloatBitWidth() < 32) {
+    if (bUnsigned) {
+      newType = ui32_ty;
+      newOp = zext(newType, value);
+    } else {
+      newType = i32_ty;
+      newOp = sext(newType, value);
+    }
+  } else if (type.isBF16() || type.isF16() || type.isF32()) {
+    newType = f64_ty;
+    newOp = fpext(newType, value);
+  }
+
+  return {newType, newOp};
+}
+
+static void KernelPrintf(Value msg, ValueRange args,
+                         ConversionPatternRewriter &rewriter) {
+  auto *ctx = rewriter.getContext();
+  Type ptr = ptr_ty(ctx);
+  auto moduleOp = rewriter.getBlock()->getParent()->getParentOfType<ModuleOp>();
+  auto funcOp = getSpirvPrintfDeclaration(rewriter);
+  auto loc = UnknownLoc::get(ctx);
+
+  SmallVector<Value> operands;
+  operands.push_back(msg);
+  for (auto arg : args) {
+    Type newType;
+    Value newArg;
+    //    std::tie(newType, newArg) = promoteValue(rewriter, arg);
+    //    operands.push_back(newArg);
+    operands.push_back(arg);
+  }
+  call(funcOp, operands);
+}
+
+// Returns a Value for the format string, which you can reuse.
+Value KernelPrintf(ConversionPatternRewriter &rewriter, StringRef msg,
+                   ValueRange args) {
+  assert(!msg.empty() && "printf with empty string not supported");
+  llvm::SmallString<64> msgNewline(msg);
+  msgNewline.push_back('\n');
+  Value msgValue = LLVM::addStringToModule(
+      UnknownLoc::get(rewriter.getContext()), rewriter, "printfFormat_",
+      msgNewline, /*AddressSpace*/ GENX::GENXMemorySpace::kUniformConstant);
+  KernelPrintf(msgValue, args, rewriter);
+  return msgValue;
+}
+
 } // namespace LLVM
 } // namespace mlir

@@ -139,6 +139,9 @@ using namespace mlir::triton;
 #define i32_arr_attr(...) rewriter.getI32ArrayAttr({__VA_ARGS__})
 #define i64_arr_attr(...) rewriter.getI64ArrayAttr({__VA_ARGS__})
 
+// debug utils
+#define KERNEL_PRINTF(fmt, ...) LLVM::KernelPrintf(rewriter, fmt, __VA_ARGS__)
+
 namespace mlir {
 namespace triton {
 
@@ -471,6 +474,9 @@ static Value getSharedMemoryBase(Location loc,
       gep(ptrTy, i8_ty, LLVM::getStackPointer(rewriter, func, target), offVal);
   return base;
 }
+
+Value KernelPrintf(ConversionPatternRewriter &rewriter, StringRef msg,
+                   ValueRange args);
 
 } // namespace LLVM
 
