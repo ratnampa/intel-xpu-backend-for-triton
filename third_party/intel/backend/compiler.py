@@ -171,7 +171,7 @@ class XPUBackend(BaseBackend):
         if options.extern_libs:
             for name, path in options.extern_libs:
                 llvm.link_extern_lib(llvm_mod, path)
-        llvm.optimize_module(llvm_mod, llvm.OPTIMIZE_O3)
+        llvm.optimize_module(llvm_mod, llvm.OPTIMIZE_O0)
         # Get some metadata
         metadata["shared"] = src.get_int_attr("triton_gpu.shared")
         ret = str(llvm_mod)
