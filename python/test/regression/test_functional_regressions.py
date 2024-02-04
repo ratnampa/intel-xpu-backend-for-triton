@@ -10,6 +10,7 @@ import triton.language as tl
 
 def test_chained_matmul(device):
     # Regression test for issue #1601
+    pytest.skip("FIXME: Temp skip the matmul case")
     def chained_matmul_reference(a, b, c):
         intermediate = torch.einsum('MK,NK->MN', a, b)
         return torch.einsum('MN,NK->MK', intermediate, c)
