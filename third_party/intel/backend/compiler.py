@@ -36,7 +36,7 @@ class XPUOptions:
     num_ctas: int = 1
     num_stages: int = 2
     cluster_dims: tuple = (1, 1, 1)
-    threads_per_warp: int = 32
+    threads_per_warp: int = 16
     optimize_epilogue: bool = False
     enable_fp_fusion: bool = True
     allow_fp8e4nv: bool = False
@@ -110,7 +110,12 @@ class XPUBackend(BaseBackend):
         intel.passes.ttnvgpuir.add_plan_cta(pm, cluster_info)
         passes.ttgpuir.add_remove_layout_conversions(pm)
         passes.ttgpuir.add_optimize_thread_locality(pm)
-        passes.ttgpuir.add_accelerate_matmul(pm, capability)
+        arch = intel.DEVICE_ARCH.UNKNOWN.value
+        if capability == intel.DEVICE_ARCH.ATS.value:
+            arch = intel.DEVICE_ARCH.ATS
+        elif capability == intel.DEVICE_ARCH.PVC.value:
+            arch = intel.DEVICE_ARCH.PVC
+        intel.passes.ttgpuir.add_accelerate_matmul(pm, arch)
         passes.ttgpuir.add_remove_layout_conversions(pm)
         if opt.optimize_epilogue:
             passes.ttgpuir.add_optimize_epilogue(pm)
