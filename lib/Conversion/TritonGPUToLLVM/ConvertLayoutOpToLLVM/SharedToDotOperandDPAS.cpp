@@ -85,14 +85,19 @@ DpasMatmulLoader<opIdx>::computeLdsMatOffs(Value warpId, Value laneId,
   unsigned threadsPerWarp = getThreadsPerWarp();
 
   Value laneRowIndex, laneColIndex;
-  unsigned repRowsPerInst, rowsPerWarp;
+  unsigned repRowsPerInst, rowsPerWarp, repOpsPerRow;
   switch (opIdx) {
   case 0: {
-    rowsPerWarp = threadsPerWarp / systolicDepth;
+    SmallVector<unsigned> shapeA = dpasLayout.getShapeA();
+    // Unlike the operand B, to pack the value to i16 for scalar bit width <=16.
+    unsigned packedOpsPerLane = opsPerChannel == 4 ? 2 : 1;
+    unsigned packedColNum = shapeA[1] / packedOpsPerLane;
+    rowsPerWarp = threadsPerWarp / packedColNum;
     repRowsPerInst = repeatCount / rowsPerWarp;
-    laneRowIndex = udiv(laneId, i32_val(systolicDepth));
-    laneColIndex = urem(laneId, i32_val(systolicDepth));
-    laneColIndex = mul(laneColIndex, i32_val(opsPerChannel));
+    laneRowIndex = udiv(laneId, i32_val(packedColNum));
+    laneColIndex = urem(laneId, i32_val(packedColNum));
+    laneColIndex = mul(laneColIndex, i32_val(packedOpsPerLane));
+    repOpsPerRow = packedOpsPerLane;
   } break;
   case 1: {
     rowsPerWarp = threadsPerWarp / executionSize;
@@ -101,6 +106,7 @@ DpasMatmulLoader<opIdx>::computeLdsMatOffs(Value warpId, Value laneId,
     laneRowIndex = udiv(laneId, i32_val(executionSize));
     laneRowIndex = mul(laneRowIndex, i32_val(opsPerChannel));
     laneColIndex = urem(laneId, i32_val(executionSize));
+    repOpsPerRow = opsPerChannel;
   } break;
   }
 
@@ -122,7 +128,7 @@ DpasMatmulLoader<opIdx>::computeLdsMatOffs(Value warpId, Value laneId,
 
   for (int rep = 0; rep < repRowsPerInst; ++rep) {
     Value repRowIndex = mul(i32_val(rep), rowsPerWarpVal);
-    for (unsigned opsIdx = 0; opsIdx < opsPerChannel; ++opsIdx) {
+    for (unsigned opsIdx = 0; opsIdx < repOpsPerRow; ++opsIdx) {
       // inner index base
       Value jBase = laneColIndex;
       // outer index base
@@ -262,7 +268,8 @@ getLoadMatrixFn(Value tensor, const SharedMemoryObject &smemObj,
     unsigned threadsPerWarp = product<unsigned>(getThreadsPerWarp(dpasLayout));
     auto matTy = LLVM::LLVMStructType::getLiteral(
         eltTy.getContext(),
-        SmallVector<Type>(totalElem / threadsPerWarp, eltTy));
+        SmallVector<Type>(totalElem / threadsPerWarp,
+                          typeConverter->convertType(eltTy)));
 
     vals[{a, b}] = loader.loadMatrix(a, b, ptrs, matTy, smemTy, cSwizzleOffset);
   };
@@ -282,8 +289,7 @@ Value loadOperand(ConversionPatternRewriter &rewriter, Location loc,
 
   auto tensorTy = tensor.getType().cast<RankedTensorType>();
   const ArrayRef<int64_t> tensorShape = tensorTy.getShape();
-  auto sharedLayout = tensorTy.getEncoding().cast<SharedEncodingAttr>();
-  const ArrayRef<unsigned> order = sharedLayout.getOrder();
+  SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
 
   SmallVector<int64_t> elemsPerInstr;
   if constexpr (opIdx == 0) {

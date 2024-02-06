@@ -77,11 +77,10 @@ struct DotOpConversion : public ConvertTritonGPUOpToLLVMPattern<triton::DotOp> {
           "Unsupported MMA kind found when converting DotOp to LLVM.");
     }
 
-    DpasEncodingAttr dpasLayout = D.getType()
-                                      .cast<RankedTensorType>()
-                                      .getEncoding()
-                                      .dyn_cast<DpasEncodingAttr>();
-    if (!isOuter && dpasLayout && supportDPAS(op)) {
+    if (!isOuter && D.getType()
+                        .cast<RankedTensorType>()
+                        .getEncoding()
+                        .isa<DpasEncodingAttr>()) {
       return convertDPAS(op, adaptor, getTypeConverter(), rewriter);
     }
 
