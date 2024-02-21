@@ -15,11 +15,11 @@ bool supportDPAS(DotOp op, DeviceArch arch) {
       op.getResult().getType().cast<RankedTensorType>().getElementType();
 
   // Skip the dot op with known issue.
-  if (aElemTy.isF32() && bElemTy.isF32()) {
-    // The FP32-FP32-FP32 data type result
-    // incorrect:https://github.com/intel/intel-xpu-backend-for-triton/issues/402
-    return false;
-  }
+//  if (aElemTy.isF32() && bElemTy.isF32()) {
+//    // The FP32-FP32-FP32 data type result
+//    // incorrect:https://github.com/intel/intel-xpu-backend-for-triton/issues/402
+//    return false;
+//  }
   if (dElemTy.isF16()) {
     // The FP16-FP16-FP16 data type result
     // incorrect:https://github.com/intel/intel-xpu-backend-for-triton/issues/400
