@@ -846,8 +846,10 @@ void backwardRematerialization(ConvertLayoutOp convertOp) {
   // we don't handle conversions to DotOperandEncodingAttr
   // this is a heuristic to accommodate fused attention
   RankedTensorType targetType = convertOp.getType();
-  if (targetType.getEncoding().isa<DotOperandEncodingAttr>())
-    return;
+//  if (targetType.getEncoding().isa<DotOperandEncodingAttr>())
+//    return;
+//  if (targetType.getEncoding().isa<DotOperandEncodingAttr>())
+//    return;
 
   // 1. Take a backward slice of all the tensor dependencies that can be
   // rematerialized.

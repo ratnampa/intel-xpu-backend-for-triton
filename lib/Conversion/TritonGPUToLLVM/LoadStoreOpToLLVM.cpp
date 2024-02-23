@@ -4,6 +4,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Dialect/LLVMIR/GENXDialect.h"
 
 #include "PatternTritonGPUOpToLLVM.h"
 #include "Utility.h"
@@ -142,6 +143,83 @@ struct LoadOpConversion
                                                         benefit),
         LoadStoreConversionBase(axisAnalysisPass) {}
 
+  LogicalResult rewriteLoadOpBlock2D(triton::LoadOp loadOp, OpAdaptor adaptor,
+                                  ConversionPatternRewriter &rewriter) const {
+    auto ptr = loadOp->getOperand(0);
+
+    // Get info from previous results
+//    assert(rewritedInfo.count(ptr));
+//    auto info = rewritedInfo[ptr];
+
+    // Load/store with tensor pointers implicitly will check the bound while
+    // accessing memory, so we should set `mask` and `other` (according to the
+    // padding). Also note that load with tensor pointers do not have `mask` and
+    // `other` while building IR from Python AST
+    std::optional<ArrayRef<int>> boundaryCheck;
+    assert(!loadOp.getMask() && !loadOp.getOther());
+    boundaryCheck = loadOp.getBoundaryCheck();
+
+    Type resultTy = loadOp.getType();
+    unsigned numElems = getTotalElemsPerThread(resultTy);
+    auto getMakeTensorPointerOp = [](Operation* op) -> Operation* {
+      do {
+        if (auto makeTensorPtrOp = dyn_cast<triton::MakeTensorPtrOp>(op)) {
+          return op;
+        } else if (auto advanceOp = dyn_cast<triton::AdvanceOp>(op)) {
+          op = advanceOp.getOperand(0).getDefiningOp();
+        } else {
+          llvm::outs() << "johnlu op:" << *op << "\n";
+          llvm::outs().flush();
+          llvm_unreachable("johnlu lower 2d load failed.");
+        }/*else if (op->getDialect()->getNamespace() == "scf" ||
+                   op->getDialect()->getNamespace() == "cf") {
+          if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+            return rewriteIfOp(builder, ifOp, eraser);
+          }
+          if (!needRewrite(op))
+            return op;
+
+          if (auto forOp = dyn_cast<scf::ForOp>(op)) {
+            return rewriteForOp(builder, forOp, eraser);
+          } else if (auto yieldOp = dyn_cast<scf::YieldOp>(op)) {
+            return rewriteYieldOp(builder, yieldOp, eraser);
+          } else {
+            llvm_unreachable("Currently we only support tensor pointer usages "
+                             "inside a `scf::ForOp` or `scf::IfOp`, others such as "
+                             "`scf::WhileOp`, `cf::BranchOp` or `cf::CondBranchOp` "
+                             "are not supported yet");
+          }*/
+
+      } while(true);
+    };
+    llvm::outs() << "johnlu load result type:" << resultTy << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu numElems:" << numElems << "\n";
+    llvm::outs().flush();
+    auto makeTensorOp = getMakeTensorPointerOp(ptr.getDefiningOp());
+//    Type valueElemTy =
+//        typeConverter->convertType(getElementTypeOrSelf(resultTy));
+//    unsigned vec = getVectorSize(ptr);
+//    unsigned numElems = getTotalElemsPerThread(ptr.getType());
+//    if (llMask)
+//      vec = std::min<size_t>(vec, getMaskAlignment(mask));
+
+    // Generate new `ptr`, `mask` and `other`
+//    auto newPtr = info.generatePtr(builder, op->getLoc());
+//    auto newMask = info.generateMask(builder, op->getLoc(), boundaryCheck);
+//    Value newOther;
+//    if (auto loadOp = dyn_cast<triton::LoadOp>(op))
+//      newOther = info.generateOther(builder, op->getLoc(), loadOp.getPadding());
+//
+//    // Create a new operation
+//    auto newResult = rewriter.create<GENX::Matrix2DBlockLoadOp>(
+//        op.getLoc(), newPtr, newMask, newOther, loadOp.getCache(),
+//        loadOp.getEvict(), loadOp.getIsVolatile());
+//    op->getResult(0).replaceAllUsesWith(newResult);
+
+    return success();
+  }
+
   LogicalResult
   matchAndRewrite(triton::LoadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -154,10 +232,13 @@ struct LoadOpConversion
     Value mask = op.getMask();
     Value other = op.getOther();
 
+    if (isTensorPointerType(ptr.getType())) {
+      return rewriteLoadOpBlock2D(op, adaptor, rewriter);
+    }
     // adaptor values
-    assert(!isTensorPointerType(ptr.getType()) &&
-           "Cannot convert load with a tensor pointer into LLVM; "
-           "this case should be transformed to normal load before lowering");
+//    assert(!isTensorPointerType(ptr.getType()) &&
+//           "Cannot convert load with a tensor pointer into LLVM; "
+//           "this case should be transformed to normal load before lowering");
     Value llPtr = adaptor.getPtr();
     Value llMask = adaptor.getMask();
     Value llOther = adaptor.getOther();

@@ -73,6 +73,20 @@ class XPUBackend(BaseBackend):
         args = {k: opts[k] for k in XPUOptions.__dataclass_fields__.keys() if k in opts}
         args["allow_fp8e4nv"] = True
         args["max_num_imprecise_acc_default"] = 2**30 if self.capability == 90 else 0
+
+        capability = self.target[2]
+        threads_per_warp = args['threads_per_warp'] if 'threads_per_warp' in args else 16
+        sub_group_sizes = capability['subgroup_sizes']
+        assert threads_per_warp in sub_group_sizes, "Device '{}' does not support threads_per_warp {}".format(
+            capability['dev_name'],
+            threads_per_warp)  # noqa: E501
+
+        max_work_group_size = capability['max_group_size']
+        num_warps = args['num_warps'] if 'num_warps' in args else max_work_group_size // threads_per_warp
+
+        args['num_warps'] = num_warps if num_warps is not None else max_work_group_size // threads_per_warp
+        args['threads_per_warp'] = threads_per_warp
+
         return XPUOptions(**args)
 
     def load_dialects(self, ctx):
@@ -83,7 +97,7 @@ class XPUBackend(BaseBackend):
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         passes.common.add_inliner(pm)
-        passes.ttir.add_rewrite_tensor_pointer(pm)
+        # passes.ttir.add_rewrite_tensor_pointer(pm)
         passes.ttir.add_combine(pm)
         passes.common.add_canonicalizer(pm)
         passes.ttir.add_reorder_broadcast(pm)
@@ -121,10 +135,11 @@ class XPUBackend(BaseBackend):
             passes.ttgpuir.add_optimize_epilogue(pm)
         passes.ttgpuir.add_optimize_dot_operands(pm)
         passes.common.add_cse(pm)
-        if capability // 10 >= 8:
-            passes.ttgpuir.add_pipeline(pm, opt.num_stages, opt.num_warps, opt.num_ctas, capability)
-        if capability // 10 <= 8:
-            passes.ttgpuir.add_prefetch(pm)
+        intel.passes.ttgpuir.add_tritonintelgpu_pipe_line_pass(pm, opt.num_stages)
+        # if capability // 10 >= 8:
+        #     passes.ttgpuir.add_pipeline(pm, opt.num_stages, opt.num_warps, opt.num_ctas, capability)
+        # if capability // 10 <= 8:
+        #     passes.ttgpuir.add_prefetch(pm)
         passes.ttgpuir.add_optimize_dot_operands(pm)
         passes.ttgpuir.add_remove_layout_conversions(pm)
         passes.ttgpuir.add_reduce_data_duplication(pm)

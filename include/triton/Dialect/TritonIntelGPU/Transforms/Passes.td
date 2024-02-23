@@ -23,4 +23,34 @@ def TritonIntelGPUAccelerateMatmul : Pass<"tritonintelgpu-accelerate-matmul", "m
   ];
 }
 
+def TritonIntelGPUPipeline : Pass<"tritonintelgpu-pipeline", "mlir::ModuleOp"> {
+  let summary = "Intel GPU pipeline";
+
+  let description = [{
+    Use the cache prefetch to buffer the `LoadOp` in loops that needed at next iteration.
+  }];
+
+  let constructor = "mlir::createTritonIntelGPUPipelinePass()";
+
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::gpu::intel::TritonIntelGPUDialect",
+                           "mlir::scf::SCFDialect",
+                           "mlir::arith::ArithDialect"];
+
+  let options = [
+    Option<"numStages", "num-stages",
+           "int32_t", /*default*/"2",
+           "number of pipeline stages">,
+    //Option<"numWarps", "num-warps",
+    //       "int32_t", /*default*/"4",
+    //       "number of warps per block">,
+    //Option<"numCTAs", "num-ctas",
+    //       "int32_t", /*default*/"1",
+    //       "number of CTAs per CGA">,
+    //Option<"computeCapability", "compute-capability",
+    //            "std::map<std::string, int>", /*default*/"std::map<std::string, int>{}",
+    //            "device compute capability">
+  ];
+}
+
 #endif

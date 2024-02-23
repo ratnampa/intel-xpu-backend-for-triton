@@ -38,21 +38,21 @@ import triton.language as tl
 @triton.autotune(
     configs=[
         # FIXME: Put back the original problem size once tl.dot is lowered using DPAS instructions.
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=7,
-                      num_warps=4),
+        # triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=2),
         # PUT BACK: triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=7,
         #                        num_warps=4),
         # triton.Config({'BLOCK_SIZE_M': 256, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=7, num_warps=4, num_ctas=2),
         # triton.Config({'BLOCK_SIZE_M': 512, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=7, num_warps=4, num_ctas=4),
+        triton.Config({'BLOCK_SIZE_M': 512, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=2),
     ],
     key=['M', 'N', 'K'],
 )
 @triton.jit
 def matmul_kernel(a_ptr, b_ptr, z_ptr,  #
                   M, N, K,  #
-                  stride_am, stride_ak,  #
-                  stride_bk, stride_bn,  #
-                  stride_zm, stride_zn,  #
+                  stride_am: tl.constexpr, stride_ak: tl.constexpr,  #
+                  stride_bk: tl.constexpr, stride_bn: tl.constexpr,  #
+                  stride_zm: tl.constexpr, stride_zn: tl.constexpr,  #
                   BLOCK_SIZE_M: tl.constexpr, BLOCK_SIZE_N: tl.constexpr, BLOCK_SIZE_K: tl.constexpr,
                   GROUP_SIZE_M: tl.constexpr,  #
                   A_ORDER_0: tl.constexpr, A_ORDER_1: tl.constexpr,  #
@@ -147,8 +147,8 @@ def test_matmul():
         golden = torch.matmul(a, b)
         z = matmul(a, b, a_order, b_order)
 
-        golden = torch.nn.functional.normalize(golden)
-        z = torch.nn.functional.normalize(z)
+        golden = torch.nn.functional.normalize(golden.cpu())
+        z = torch.nn.functional.normalize(z.cpu())
         torch.set_printoptions(profile="full")
         assert_close(z, golden, rtol=1e-2, atol=1e-3, check_dtype=False)
 

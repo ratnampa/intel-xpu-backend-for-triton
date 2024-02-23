@@ -29,6 +29,9 @@ void init_triton_intel_passes_ttgpuir(py::module &&m) {
   .def("add_accelerate_matmul", [](mlir::PassManager &self, mlir::triton::gpu::intel::DeviceArch arch) {
     self.addPass(
         mlir::createTritonIntelGPUAccelerateMatmulPass(arch));
+  })
+  .def("add_tritonintelgpu_pipe_line_pass", [](mlir::PassManager &self, int numStages) {
+    self.addPass(mlir::createTritonIntelGPUPipelinePass(numStages));
   });
 }
 

@@ -393,8 +393,8 @@ class XPUDriver(DriverBase):
 
     def get_current_target(self):
         device = self.get_current_device()
-        device_arch = self.utils.get_device_properties(device)['device_arch']
-        return ("xpu", device_arch)
+        properties = self.utils.get_device_properties(device)
+        return ("xpu", properties['device_arch'], properties)
 
     @staticmethod
     def is_active():
