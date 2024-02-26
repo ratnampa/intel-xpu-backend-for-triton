@@ -123,4 +123,24 @@ def TritonIntelGPUPrefetchBlock : Pass<"tritonintelgpu-prefetch-block", "mlir::M
   ];
 }
 
+def TritonIntelGPUMaterializeBlockPointer : Pass<"tritonintelgpu-materialize-block-pointer", "mlir::ModuleOp"> {
+  let summary = "Intel GPU materialize block pointer";
+
+  let description = [{
+  }];
+
+  let constructor = "mlir::createTritonIntelGPUMaterializeBlockPointerPass()";
+
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::gpu::intel::TritonIntelGPUDialect",
+                           "mlir::scf::SCFDialect",
+                           "mlir::arith::ArithDialect"];
+
+  let options = [
+    //Option<"numStages", "num-stages",
+    //       "int32_t", /*default*/"2",
+    //       "number of pipeline stages">
+  ];
+}
+
 #endif // TRITON_INTEL_GPU_PASSES
