@@ -40,16 +40,27 @@ def TritonIntelGPUPipeline : Pass<"tritonintelgpu-pipeline", "mlir::ModuleOp"> {
   let options = [
     Option<"numStages", "num-stages",
            "int32_t", /*default*/"2",
-           "number of pipeline stages">,
-    //Option<"numWarps", "num-warps",
-    //       "int32_t", /*default*/"4",
-    //       "number of warps per block">,
-    //Option<"numCTAs", "num-ctas",
-    //       "int32_t", /*default*/"1",
-    //       "number of CTAs per CGA">,
-    //Option<"computeCapability", "compute-capability",
-    //            "std::map<std::string, int>", /*default*/"std::map<std::string, int>{}",
-    //            "device compute capability">
+           "number of pipeline stages">
+  ];
+}
+
+def TritonIntelGPUMaterializeBlockPointer : Pass<"tritonintelgpu-materialize-block-pointer", "mlir::ModuleOp"> {
+  let summary = "Intel GPU materialize block pointer";
+
+  let description = [{
+  }];
+
+  let constructor = "mlir::createTritonIntelGPUMaterializeBlockPointerPass()";
+
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::gpu::intel::TritonIntelGPUDialect",
+                           "mlir::scf::SCFDialect",
+                           "mlir::arith::ArithDialect"];
+
+  let options = [
+    //Option<"numStages", "num-stages",
+    //       "int32_t", /*default*/"2",
+    //       "number of pipeline stages">
   ];
 }
 

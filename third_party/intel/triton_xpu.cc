@@ -32,6 +32,9 @@ void init_triton_intel_passes_ttgpuir(py::module &&m) {
   })
   .def("add_tritonintelgpu_pipe_line_pass", [](mlir::PassManager &self, int numStages) {
     self.addPass(mlir::createTritonIntelGPUPipelinePass(numStages));
+  })
+  .def("add_tritonintelgpu_materialize_block_pointer", [](mlir::PassManager &self) {
+    self.addPass(mlir::createTritonIntelGPUMaterializeBlockPointerPass());
   });
 }
 

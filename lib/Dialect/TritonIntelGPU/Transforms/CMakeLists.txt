@@ -2,6 +2,7 @@ add_triton_library(TritonIntelGPUTransforms
   AccelerateMatmul.cpp
   Pipeliner/MatmulLoopPipeline.cpp
   Pipeliner/SoftwarePipeliner.cpp
+  MaterializeBlockPointer.cpp
   Utility.cpp
 
   DEPENDS

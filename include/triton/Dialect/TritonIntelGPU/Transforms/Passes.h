@@ -25,6 +25,8 @@ std::unique_ptr<Pass> createTritonIntelGPUAccelerateMatmulPass(
 std::unique_ptr<Pass> createTritonIntelGPUPipelinePass(
     int numStages = 2);
 
+std::unique_ptr<Pass> createTritonIntelGPUMaterializeBlockPointerPass();
+
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
