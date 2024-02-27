@@ -130,6 +130,215 @@ protected:
   ModuleAxisInfoAnalysis &axisAnalysisPass;
 };
 
+struct PrefetchCacheOpConversion
+    : public ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::PrefetchCacheOp> {
+  using ConvertTritonGPUOpToLLVMPattern<
+      triton::gpu::intel::PrefetchCacheOp>::ConvertTritonGPUOpToLLVMPattern;
+
+  PrefetchCacheOpConversion(TritonGPUToLLVMTypeConverter &converter,
+                     triton::Target target, PatternBenefit benefit)
+      : ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::PrefetchCacheOp>(converter, target,
+                                                                      benefit) {}
+
+  std::tuple<Value, Value, Value, Value, Value, Value, Value> getValuesFromBlockPointerStruct(Value blockPointer,
+                                                                                              ConversionPatternRewriter &rewriter) const {
+    SmallVector<Value> elems = unpackLLElements(blockPointer.getLoc(), blockPointer, rewriter);
+
+    return {elems[0], elems[1], elems[2], elems[3], elems[4], elems[5], elems[6]};
+  }
+
+  LogicalResult
+  matchAndRewrite(triton::gpu::intel::PrefetchCacheOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op->getLoc();
+    auto typeConverter = getTypeConverter();
+    auto *ctx = rewriter.getContext();
+    // TODO: do a co-operative prefetching on the dot operands.
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct Load2DOpConversion
+    : public ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Load2DOp> {
+  using ConvertTritonGPUOpToLLVMPattern<
+      triton::gpu::intel::Load2DOp>::ConvertTritonGPUOpToLLVMPattern;
+
+  Load2DOpConversion(TritonGPUToLLVMTypeConverter &converter,
+                   triton::Target target, PatternBenefit benefit)
+      : ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Load2DOp>(converter, target,
+                                                        benefit) {}
+
+  std::tuple<Value, Value, Value, Value, Value, Value, Value> getValuesFromBlockPointerStruct(Value blockPointer,
+                                                                                              ConversionPatternRewriter &rewriter) const {
+    SmallVector<Value> elems = unpackLLElements(blockPointer.getLoc(), blockPointer, rewriter);
+
+    return {elems[0], elems[1], elems[2], elems[3], elems[4], elems[5], elems[6]};
+  }
+
+  LogicalResult
+  matchAndRewrite(triton::gpu::intel::Load2DOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op->getLoc();
+    auto typeConverter = getTypeConverter();
+    auto *ctx = rewriter.getContext();
+
+    // original values
+    Value ptr = op.getPtr();
+
+    assert(isTensorPointerType(ptr.getType()) &&
+           "must be block pointer");
+
+    Type resultTy = op.getType();
+    if (auto tensorType = resultTy.dyn_cast<RankedTensorType>()) {
+      if (auto dotLayout = tensorType.getEncoding().dyn_cast<DotOperandEncodingAttr>()) {
+        if (auto dpasLayout = dotLayout.getParent().dyn_cast_or_null<DpasEncodingAttr>()) {
+
+          auto opIdx = dotLayout.getOpIdx();
+          Type eltTy = tensorType.getElementType();
+          const ArrayRef<int64_t> tensorShape = tensorType.getShape();
+          unsigned numElems = getTotalElemsPerThread(resultTy);
+          SmallVector<int64_t> numReps =
+              dpasLayout.getDPASRepetitions(tensorShape, dotLayout.getOpIdx());
+          const SmallVector<unsigned> warpsPerCTA = dpasLayout.getWarpsPerCTA();
+          SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
+          int threadsPerWarp = triton::gpu::getWarpSize(dpasLayout);
+
+          Value programId =
+              llGetPid(0, op->getLoc(),
+                       op->getParentOfType<ModuleOp>(), rewriter, target);
+
+          Value warpSize = i32_val(threadsPerWarp);
+          Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
+          Value laneId = urem(getThreadId(rewriter, loc), warpSize);
+          SmallVector<Value> multiDimWarpId =
+              mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, order);
+
+          Type laod2DGenXType;
+          int64_t elemsPerLane;
+          SmallVector<int64_t> elemsPerInstr;
+          if (opIdx == 0) {
+            auto shapeA = dpasLayout.getShapeA();
+            elemsPerInstr = {shapeA[0], shapeA[1]};
+            elemsPerLane = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
+            laod2DGenXType = LLVM::getFixedVectorType(type::i16Ty(ctx), elemsPerLane); // pack scalar to i16.
+          } else {
+            auto shapeB = dpasLayout.getShapeB();
+            elemsPerInstr = {shapeB[0], shapeB[1]};
+            elemsPerLane = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
+            laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), elemsPerLane / 2); // pack scalar to i16.
+          }
+
+          // Outer dim, A is the M, B is the N. Inner dim, the K
+          int outerDimWarpNum = std::min<int>(warpsPerCTA[opIdx], ceil(tensorShape[opIdx], elemsPerInstr[opIdx]));
+          Value outerDimWarpId = urem(multiDimWarpId[opIdx], i32_val(outerDimWarpNum));
+
+          Value blockPtr = adaptor.getPtr();
+          Value offsetBaseX, offsetBaseY, width, height, rowStride, colStride, base;
+          std::tie(offsetBaseY, offsetBaseX, height, width, rowStride, colStride, base) =
+              getValuesFromBlockPointerStruct(blockPtr, rewriter);
+
+          // Load the operand.
+          int64_t numRepOuter = numReps[opIdx];
+          int64_t numRepK = numReps[(opIdx == 0) ? 1 : 0];
+
+          //  if (opIdx == 1) {
+          //    llvm::outs() << "johnlu load result type:" << resultTy << "\n";
+          //    llvm::outs().flush();
+          //    llvm::outs() << "johnlu numElems:" << numElems << "\n";
+          //    llvm::outs().flush();
+          //    llvm::outs() << "johnlu threadsPerWarp:" << threadsPerWarp << "\n";
+          //    llvm::outs().flush();
+          //    llvm::outs() << "johnlu numReps[0]:" << numReps[0]
+          //                 << " numReps[1]:" << numReps[1] << "\n";
+          //    llvm::outs().flush();
+          //    llvm::outs() << "johnlu warpsPerCTA[0]:" << warpsPerCTA[0]
+          //                 << " warpsPerCTA[1]:" << warpsPerCTA[1] << "\n";
+          //    llvm::outs().flush();
+          //    llvm::outs() << "johnlu numRepOuter:" << numRepOuter
+          //                 << " numRepK:" << numRepK << "\n";
+          //    llvm::outs().flush();
+          //    llvm::outs() << "johnlu outerDimWarpNum:" << outerDimWarpNum << "\n";
+          //    llvm::outs().flush();
+          //    llvm::outs() << "johnlu ceil(tensorShape[opIdx], elemsPerInstr[opIdx]):" << ceil(tensorShape[opIdx], elemsPerInstr[opIdx]) << "\n";
+          //    llvm::outs().flush();
+          //  }
+
+
+          SmallVector<Value> rets;
+          for (int outer = 0; outer < numRepOuter; ++outer) {
+            for (int k = 0; k < numRepK; ++k) {
+              Value offsetX, offsetY;
+              if (opIdx == 0) {
+                // A
+                offsetY = add(mul(outerDimWarpId, i32_val(elemsPerInstr[opIdx])),
+                              i32_val(outer * outerDimWarpNum * elemsPerInstr[opIdx]));
+                offsetX = i32_val(k*elemsPerInstr[1]);
+
+                //                if (k == 1)
+                //                  KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
+                //                                ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
+              } else {
+                // B
+                offsetX = add(mul(outerDimWarpId, i32_val(elemsPerInstr[opIdx])),
+                              i32_val(outer * outerDimWarpNum * elemsPerInstr[opIdx]));
+                offsetY = i32_val(k*elemsPerInstr[0]);
+                // KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
+                //               ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
+              }
+              offsetX = add(offsetX, offsetBaseX);
+              offsetY = add(offsetY, offsetBaseY);
+#if 0
+              auto load2dOp = rewriter.create<LLVM::UndefOp>(op.getLoc(), laod2DGenXType);
+#else
+              width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
+              height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
+              rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
+              auto load2dOp = rewriter.create<GENX::Matrix2DBlockLoadOp>(
+                  op.getLoc(), laod2DGenXType, /*ptr*/ base, /*base_width*/ sub(mul(width, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1)),
+                  /*base_height*/ sub(height, i32_val(1)),
+                  /*base_pitch*/ sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1)),
+                  /*x*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetX),
+                  /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
+                  /*elem_size_in_bits*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), eltTy.getIntOrFloatBitWidth()),
+                  /*tile_width*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), elemsPerInstr[1]),
+                  /*tile_height*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), elemsPerInstr[0]),
+                  /*v_blocks*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 1),
+                  /*transpose*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
+                  /*vnni_transform*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), opIdx == 0 ? /*A vnni=false*/0 : /*B vnni=true*/1));
+#endif
+
+              Value loadVal = bitcast(load2dOp, LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
+              // if (opIdx == 0)
+              //     KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, offsetX=%d, offsetY=%d, val=%f", ValueRange{programId, warpId, laneId, offsetX, offsetY, loadVal});
+              // if (opIdx == 1)
+              //     KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, offsetX=%d, offsetY=%d, val=%f", ValueRange{programId, warpId, laneId, offsetX, offsetY, loadVal});
+              rets.push_back(loadVal);
+            }
+          }
+
+          SmallVector<Value> loadedVals;
+          for (auto& ret: rets) {
+            for (size_t i = 0; i < elemsPerLane; ++i) {
+              Value loaded = extract_element(ret, i32_val(i));
+              loadedVals.push_back(loaded);
+            }
+          }
+
+          Type llvmResultStructTy = typeConverter->convertType(op.getType());
+          Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
+                                              rewriter, llvmResultStructTy);
+          rewriter.replaceOp(op, {resultStruct});
+
+          return success();
+        }
+      }
+    }
+
+    return failure();
+  }
+};
+
 struct LoadOpConversion
     : public ConvertTritonGPUOpToLLVMPattern<triton::LoadOp>,
       public LoadStoreConversionBase {
@@ -143,83 +352,6 @@ struct LoadOpConversion
                                                         benefit),
         LoadStoreConversionBase(axisAnalysisPass) {}
 
-  LogicalResult rewriteLoadOpBlock2D(triton::LoadOp loadOp, OpAdaptor adaptor,
-                                  ConversionPatternRewriter &rewriter) const {
-    auto ptr = loadOp->getOperand(0);
-
-    // Get info from previous results
-//    assert(rewritedInfo.count(ptr));
-//    auto info = rewritedInfo[ptr];
-
-    // Load/store with tensor pointers implicitly will check the bound while
-    // accessing memory, so we should set `mask` and `other` (according to the
-    // padding). Also note that load with tensor pointers do not have `mask` and
-    // `other` while building IR from Python AST
-    std::optional<ArrayRef<int>> boundaryCheck;
-    assert(!loadOp.getMask() && !loadOp.getOther());
-    boundaryCheck = loadOp.getBoundaryCheck();
-
-    Type resultTy = loadOp.getType();
-    unsigned numElems = getTotalElemsPerThread(resultTy);
-    auto getMakeTensorPointerOp = [](Operation* op) -> Operation* {
-      do {
-        if (auto makeTensorPtrOp = dyn_cast<triton::MakeTensorPtrOp>(op)) {
-          return op;
-        } else if (auto advanceOp = dyn_cast<triton::AdvanceOp>(op)) {
-          op = advanceOp.getOperand(0).getDefiningOp();
-        } else {
-          llvm::outs() << "johnlu op:" << *op << "\n";
-          llvm::outs().flush();
-          llvm_unreachable("johnlu lower 2d load failed.");
-        }/*else if (op->getDialect()->getNamespace() == "scf" ||
-                   op->getDialect()->getNamespace() == "cf") {
-          if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
-            return rewriteIfOp(builder, ifOp, eraser);
-          }
-          if (!needRewrite(op))
-            return op;
-
-          if (auto forOp = dyn_cast<scf::ForOp>(op)) {
-            return rewriteForOp(builder, forOp, eraser);
-          } else if (auto yieldOp = dyn_cast<scf::YieldOp>(op)) {
-            return rewriteYieldOp(builder, yieldOp, eraser);
-          } else {
-            llvm_unreachable("Currently we only support tensor pointer usages "
-                             "inside a `scf::ForOp` or `scf::IfOp`, others such as "
-                             "`scf::WhileOp`, `cf::BranchOp` or `cf::CondBranchOp` "
-                             "are not supported yet");
-          }*/
-
-      } while(true);
-    };
-    llvm::outs() << "johnlu load result type:" << resultTy << "\n";
-    llvm::outs().flush();
-    llvm::outs() << "johnlu numElems:" << numElems << "\n";
-    llvm::outs().flush();
-    auto makeTensorOp = getMakeTensorPointerOp(ptr.getDefiningOp());
-//    Type valueElemTy =
-//        typeConverter->convertType(getElementTypeOrSelf(resultTy));
-//    unsigned vec = getVectorSize(ptr);
-//    unsigned numElems = getTotalElemsPerThread(ptr.getType());
-//    if (llMask)
-//      vec = std::min<size_t>(vec, getMaskAlignment(mask));
-
-    // Generate new `ptr`, `mask` and `other`
-//    auto newPtr = info.generatePtr(builder, op->getLoc());
-//    auto newMask = info.generateMask(builder, op->getLoc(), boundaryCheck);
-//    Value newOther;
-//    if (auto loadOp = dyn_cast<triton::LoadOp>(op))
-//      newOther = info.generateOther(builder, op->getLoc(), loadOp.getPadding());
-//
-//    // Create a new operation
-//    auto newResult = rewriter.create<GENX::Matrix2DBlockLoadOp>(
-//        op.getLoc(), newPtr, newMask, newOther, loadOp.getCache(),
-//        loadOp.getEvict(), loadOp.getIsVolatile());
-//    op->getResult(0).replaceAllUsesWith(newResult);
-
-    return success();
-  }
-
   LogicalResult
   matchAndRewrite(triton::LoadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -232,13 +364,10 @@ struct LoadOpConversion
     Value mask = op.getMask();
     Value other = op.getOther();
 
-    if (isTensorPointerType(ptr.getType())) {
-      return rewriteLoadOpBlock2D(op, adaptor, rewriter);
-    }
     // adaptor values
-//    assert(!isTensorPointerType(ptr.getType()) &&
-//           "Cannot convert load with a tensor pointer into LLVM; "
-//           "this case should be transformed to normal load before lowering");
+    assert(!isTensorPointerType(ptr.getType()) &&
+           "Cannot convert load with a tensor pointer into LLVM; "
+           "this case should be transformed to normal load before lowering");
     Value llPtr = adaptor.getPtr();
     Value llMask = adaptor.getMask();
     Value llOther = adaptor.getOther();
@@ -1462,6 +1591,8 @@ void mlir::triton::populateLoadStoreOpToLLVMPatterns(
     PatternBenefit benefit) {
   patterns.add<LoadOpConversion>(typeConverter, axisInfoAnalysis, target,
                                  benefit);
+  patterns.add<Load2DOpConversion>(typeConverter, target, benefit);
+  patterns.add<PrefetchCacheOpConversion>(typeConverter, target, benefit);
   patterns.add<StoreOpConversion>(typeConverter, axisInfoAnalysis, target,
                                   benefit);
   patterns.add<AtomicCASOpConversion>(typeConverter, axisInfoAnalysis, target,
