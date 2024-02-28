@@ -429,19 +429,19 @@ createSchedule(scf::ForOp forOp, int numStages) {
     //    }
   }
 
-  for (auto &opPair : stage1deps) {
-    llvm::outs() << "johnlu stage1deps:" << *opPair << "\n";
-    llvm::outs().flush();
-  }
+//  for (auto &opPair : stage1deps) {
+//    llvm::outs() << "johnlu stage1deps:" << *opPair << "\n";
+//    llvm::outs().flush();
+//  }
 
   DenseSet<Operation *> loadAndDeps;
   for (Operation *op : loadOps) {
     addDep(op, loadAndDeps, false, &prefetchAndDeps);
   }
-  for (auto &opPair : loadAndDeps) {
-    llvm::outs() << "johnlu loadAndDeps:" << *opPair << "\n";
-    llvm::outs().flush();
-  }
+//  for (auto &opPair : loadAndDeps) {
+//    llvm::outs() << "johnlu loadAndDeps:" << *opPair << "\n";
+//    llvm::outs().flush();
+//  }
   std::vector<std::pair<Operation *, unsigned>> schedule;
 
   // Schedule some dependencies with distance of 1 into stage 1 to reduce
@@ -464,11 +464,11 @@ createSchedule(scf::ForOp forOp, int numStages) {
            loadAndDeps.count(op) == 0;
   });
 
-  for (auto &opPair : schedule) {
-    llvm::outs() << "johnlu stage:" << opPair.second << " def:" << *opPair.first
-                 << "\n";
-    llvm::outs().flush();
-  }
+//  for (auto &opPair : schedule) {
+//    llvm::outs() << "johnlu stage:" << opPair.second << " def:" << *opPair.first
+//                 << "\n";
+//    llvm::outs().flush();
+//  }
 
   return schedule;
 }
@@ -482,23 +482,23 @@ bool mlir::triton::preProcessLoopAndGetScheduleIntel(
   if (loads.empty())
     return false;
   // 2. Convert the loads into async loads and create the allocs.
-  llvm::outs() << "johnlu here I want to change it to prefetch"
-               << "\n";
-  llvm::outs().flush();
+//  llvm::outs() << "johnlu here I want to change it to prefetch"
+//               << "\n";
+//  llvm::outs().flush();
   createPrefetchOps(forOp, loads, numStages);
 
-  llvm::outs() << "johnlu loop with prefetch:\n" << forOp << "\n";
-  llvm::outs().flush();
-  llvm::outs() << "johnlu here to create the schedule for loop"
-               << "\n";
-  llvm::outs().flush();
+//  llvm::outs() << "johnlu loop with prefetch:\n" << forOp << "\n";
+//  llvm::outs().flush();
+//  llvm::outs() << "johnlu here to create the schedule for loop"
+//               << "\n";
+//  llvm::outs().flush();
   // 3. Create the final schedule for the kernel loop. This will dictate the
   // stages and order of operations to the pipeline expander.
   std::vector<std::pair<Operation *, unsigned>> schedule =
       createSchedule(forOp, numStages);
 
-  llvm::outs() << "johnlu here schedule:" << schedule.size() << "\n";
-  llvm::outs().flush();
+//  llvm::outs() << "johnlu here schedule:" << schedule.size() << "\n";
+//  llvm::outs().flush();
   // 4. Fill out the pipeline options.
   options.getScheduleFn =
       [schedule](scf::ForOp forOp,
