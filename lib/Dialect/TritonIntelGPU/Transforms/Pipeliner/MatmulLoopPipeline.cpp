@@ -1,5 +1,5 @@
-#include "/home/chengjun/workspace/CLionProject/triton-xpu-fork/lib/Dialect/TritonGPU/Transforms/Pipeliner/PipelineExpander.h"
-#include "/home/chengjun/workspace/CLionProject/triton-xpu-fork/lib/Dialect/TritonGPU/Transforms/Pipeliner/Schedule.h"
+#include "../../../TritonGPU/Transforms/Pipeliner/PipelineExpander.h"
+#include "../../../TritonGPU/Transforms/Pipeliner/Schedule.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/TypeUtilities.h"
