@@ -18,7 +18,7 @@ def test_kernel(kernel, kernel_dir):
 
 
 def main():
-    kernel_dir = '/home/guizili/liyang/triton/third_party/intel_xpu_backend/benchmark/inductor_kernels'
+    kernel_dir = '/home/liyang/liyang/intel-triton/benchmark/inductor_kernels'
 
     data = []
     kernel_list = sorted(list(os.listdir(kernel_dir)))
@@ -30,7 +30,7 @@ def main():
     header = ['kernel', 'time', 'throughput', 'bandwidth']
     perf_df = pd.DataFrame(data, columns=header)
 
-    output_file = '/home/guizili/liyang/triton/third_party/intel_xpu_backend/benchmark/inductor_kernels/cuda_perf_data.csv'
+    output_file = '/home/liyang/liyang/intel-triton/benchmark/scrips/xpu_perf_data.csv'
     perf_df.to_csv(output_file, index=False)
 
 

@@ -21,10 +21,11 @@ def collect_data(file):
 
 
 def main():
-    work_dir = '/home/sdp/liyang/triton/third_party/intel_xpu_backend/benchmark/'
-    xpu_df = collect_data(os.path.join(work_dir, 'perf_data_xpu.txt'))
-    cuda_df = collect_data(os.path.join(work_dir, 'perf_data_cuda.txt'))
-    res_df = xpu_df.merge(cuda_df, on='kernel')
+    work_dir = '/home/liyang/liyang/intel-triton/benchmark/scripts'
+    xpu_df = collect_data(os.path.join(work_dir, 'perf_data_xpu_llvm.txt'))
+    # cuda_df = collect_data(os.path.join(work_dir, 'perf_data_cuda.txt'))
+    # res_df = xpu_df.merge(cuda_df, on='kernel')
+    res_df = xpu_df
     print(res_df)
     res_df.to_csv('inductor_triton_kernel_perf.csv', index=False)
 
