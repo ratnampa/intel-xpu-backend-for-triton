@@ -1,3 +1,4 @@
+add_subdirectory(GenISAIntrinsics)
 # add_subdirectory(codegen)
 add_subdirectory(Analysis)
 add_subdirectory(Conversion)

@@ -5,6 +5,7 @@
 #include "mlir/IR/TypeUtilities.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Dialect/LLVMIR/GENXDialect.h"
+#include "GenIntrinsicHelper.h"
 
 #include "PatternTritonGPUOpToLLVM.h"
 #include "Utility.h"
@@ -147,13 +148,144 @@ struct PrefetchCacheOpConversion
     return {elems[0], elems[1], elems[2], elems[3], elems[4], elems[5], elems[6]};
   }
 
+
+  static std::tuple<SmallVector<unsigned, 2>, SmallVector<unsigned, 2>> getWarpsPerTile(Type eltTy, const ArrayRef<int64_t> shape, int numWarps) {
+    //  The cache line is 64 bytes.
+    //  Block_width times array_size should not exceed 64 bytes. The maximum bytes number of col is 64.
+    //  Block_height 1-32. The maximum row size is 32.
+    //  The maximum bytes for each 2D prefetching could be 32*64= 2048 bytes.
+    uint32_t bytesPerElt = eltTy.getIntOrFloatBitWidth() / 8;
+    uint32_t maxBytesNum = 2048;
+    uint32_t bytesPerCol = std::min<uint32_t>(shape[1] * bytesPerElt, maxBytesNum);
+    bytesPerCol = mlir::ceil<uint32_t>(shape[1] * bytesPerElt, 64) * 64;
+    uint32_t rowNum = maxBytesNum / bytesPerCol;
+    SmallVector<unsigned, 2> shapePerWarp = {rowNum, bytesPerCol / (8*bytesPerElt)};
+    uint32_t rowColRatio =
+        mlir::ceil<uint32_t>(shapePerWarp[0], shapePerWarp[1]);
+    uint32_t colRowRatio =
+        mlir::ceil<uint32_t>(shapePerWarp[1], shapePerWarp[0]);
+
+    SmallVector<unsigned, 2> ret = {1, 1};
+    do {
+      if (ret[0] * ret[1] >= numWarps)
+        break;
+      if (shape[0] / (shapePerWarp[0] * rowColRatio) / ret[0] >=
+          shape[1] / (shapePerWarp[1] * colRowRatio) / ret[1]) {
+        if (ret[0] < shape[0] / shapePerWarp[0]) {
+          ret[0] *= 2;
+        } else
+          ret[1] *= 2;
+      } else {
+        ret[1] *= 2;
+      }
+    } while (true);
+    return {ret, shapePerWarp};
+  }
+
   LogicalResult
   matchAndRewrite(triton::gpu::intel::PrefetchCacheOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
     auto typeConverter = getTypeConverter();
     auto *ctx = rewriter.getContext();
-    // TODO: do a co-operative prefetching on the dot operands.
+
+    // original values
+    Value ptr = op.getPtr();
+    Type ptrTy = ptr.getType();
+
+    assert(isTensorPointerType(ptrTy) && "must be block pointer");
+
+    auto ptrType = ptrTy.cast<PointerType>();
+    auto tensorTy = ptrType.getPointeeType().cast<RankedTensorType>();
+    Type eltTy = tensorTy.getElementType();
+    const ArrayRef<int64_t> tensorShape = tensorTy.getShape();
+    auto mod = rewriter.getBlock()->getParent()->getParentOfType<ModuleOp>();
+    auto numWarps = triton::gpu::TritonGPUDialect::getNumWarps(mod);
+
+    SmallVector<unsigned, 2> warpsPerCTA, shapePerWarp;
+    std::tie(warpsPerCTA, shapePerWarp)  = getWarpsPerTile(eltTy, tensorShape, numWarps);
+
+    SmallVector<int64_t> numReps = {mlir::ceil<int64_t>(tensorShape[0], shapePerWarp[0] * warpsPerCTA[0]),
+                                    mlir::ceil<int64_t>(tensorShape[1], shapePerWarp[1] * warpsPerCTA[1])};
+
+    uint32_t bytesPerCol = shapePerWarp[1] * eltTy.getIntOrFloatBitWidth() / 8;
+    uint32_t elemSizeInBits = bytesPerCol >= 4 ? 32 : bytesPerCol * 8;
+    uint32_t tileWidthInElem = std::min<uint32_t>(16, mlir::ceil<uint32_t>(bytesPerCol, 4));
+    uint32_t tileHeightInElem = shapePerWarp[0];
+#if 0
+    llvm::outs() << "johnlu prefetch tensorTy: " << tensorTy << ", eleTy:" << eltTy << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu prefetch shape: " << tensorShape[0] << "," << tensorShape[1] << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu numWarps:" << numWarps << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu prefetch warpsPerCTA: " << warpsPerCTA[0] << "," << warpsPerCTA[1] << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu prefetch prefetchShape: " << shapePerWarp[0] << "," << shapePerWarp[1] << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu prefetch numReps: " << numReps[0] << "," << numReps[1] << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu prefetch bytesPerCol: " << bytesPerCol << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu prefetch elemSizeInBits: " << elemSizeInBits << "\n";
+    llvm::outs().flush();
+    llvm::outs() << "johnlu prefetch tileHeight: " << tileHeightInElem << ", tileWeight:" << tileWidthInElem << "\n";
+    llvm::outs().flush();
+#endif
+    Value warpSize = getModuleWarpSize(rewriter, loc);
+    Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
+    SmallVector<Value> multiDimWarpId =
+        mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, {1, 0});
+
+    Value blockPtr = adaptor.getPtr();
+    Value offsetBaseX, offsetBaseY, width, height, rowStride, colStride, base;
+    std::tie(offsetBaseY, offsetBaseX, height, width, rowStride, colStride, base) =
+        getValuesFromBlockPointerStruct(blockPtr, rewriter);
+
+    base = gep(base.getType(), eltTy, base, offsetBaseX);
+    offsetBaseY = rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetBaseY);
+    rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
+    Value rowOffset = mul(offsetBaseY, rowStride);
+    base = gep(base.getType(), eltTy, base, rowOffset);
+
+    width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
+    width = sub(mul(width, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+
+    height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
+    height = sub(height, i32_val(1));
+
+    rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
+    rowStride = sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+
+    multiDimWarpId[1] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[1]);
+    multiDimWarpId[0] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[0]);
+
+    mlir::triton::intel::GenISA_Prefetch prefetchOp(rewriter);
+    for (int row = 0; row < numReps[0]; ++row) {
+      for (int col = 0; col < numReps[1]; ++col) {
+        Value offsetX, offsetY;
+        offsetX = add(mul(multiDimWarpId[1], i32_val(shapePerWarp[1])), i32_val(col*warpsPerCTA[1]*shapePerWarp[1]));
+        offsetY = add(mul(multiDimWarpId[0], i32_val(shapePerWarp[0])), i32_val(col*warpsPerCTA[0]*shapePerWarp[0]));
+//        offsetX = add(offsetX, offsetBaseX);
+//        offsetY = add(offsetY, offsetBaseY);
+        prefetchOp(rewriter,  op.getLoc(),
+                   /*ptr*/ ptrtoint(i64_ty, base),
+                   /*base_width*/ width,
+                   /*base_height*/ height,
+                   /*base_pitch*/ rowStride,
+                   /*x*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetX),
+                   /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
+                   /*elem_size_in_bits*/ i32_val(elemSizeInBits),
+                   /*tile_width*/ i32_val(tileWidthInElem - 1),
+                   /*tile_height*/ i32_val(tileHeightInElem - 1),
+                   /*v_blocks*/ i32_val(1),
+                   /*transpose*/ int_val(1, 0),
+                   /*vnni_transform*/ int_val(1, 0),
+                   /*cache_opt*/ i32_val(/*both L1 and L3*/4));
+
+      }
+    }
+
     rewriter.eraseOp(op);
     return success();
   }

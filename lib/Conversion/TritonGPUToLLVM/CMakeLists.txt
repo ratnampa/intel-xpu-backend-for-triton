@@ -31,6 +31,7 @@ add_triton_library(TritonGPUToLLVM
     ClusterOpsToLLVM.cpp
     PTXAsmFormat.cpp
     AllocateSharedMemory.cpp
+    GenIntrinsicHelper.cpp
 
     DEPENDS
     TritonGPUConversionPassIncGen
@@ -52,4 +53,6 @@ add_triton_library(TritonGPUToLLVM
     TritonIntelGPUTransforms
     TritonNvidiaGPUTransforms
     NVGPUIR
+    GenISAIntrinsics
+    MLIRTargetLLVMIRImport
 )

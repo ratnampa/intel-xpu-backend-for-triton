@@ -60,19 +60,19 @@ if(NOT MLIR_DIR)
 endif()
 
 # GenISAIntrinsics
-if (NOT TARGET GenISAIntrinsics)
-  if (EXISTS "${GenISAIntrinsics_LIB_DIR}/libGenISAIntrinsics.a")
-    set(GenISAIntrinsics_LDFLAGS "-L${GenISAIntrinsics_LIB_DIR}")
-  elseif (EXISTS "${LLVM_LIBRARY_DIR}/libGenISAIntrinsics.a")
-    set(GenISAIntrinsics_LDFLAGS "-L${LLVM_LIBRARY_DIR}")
-  else()
-    message(FATAL_ERROR "Can't find libGenISAIntrinsics.a at ${LLVM_LIBRARY_DIR}. Please install it into that directory, or provide explicit path with -DGenISAIntrinsics_LIB_DIR=")
-  endif()
-endif()
-set(GenISAIntrinsics_LIBRARY
-  libGenISAIntrinsics.a
-)
-message(STATUS "GenISAIntrinsics_LDFLAGS: ${GenISAIntrinsics_LDFLAGS}")
+#if (NOT TARGET GenISAIntrinsics)
+#  if (EXISTS "${GenISAIntrinsics_LIB_DIR}/libGenISAIntrinsics.a")
+#    set(GenISAIntrinsics_LDFLAGS "-L${GenISAIntrinsics_LIB_DIR}")
+#  elseif (EXISTS "${LLVM_LIBRARY_DIR}/libGenISAIntrinsics.a")
+#    set(GenISAIntrinsics_LDFLAGS "-L${LLVM_LIBRARY_DIR}")
+#  else()
+#    message(FATAL_ERROR "Can't find libGenISAIntrinsics.a at ${LLVM_LIBRARY_DIR}. Please install it into that directory, or provide explicit path with -DGenISAIntrinsics_LIB_DIR=")
+#  endif()
+#endif()
+#set(GenISAIntrinsics_LIBRARY
+#  libGenISAIntrinsics.a
+#)
+#message(STATUS "GenISAIntrinsics_LDFLAGS: ${GenISAIntrinsics_LDFLAGS}")
 
 # MLIR
 find_package(MLIR REQUIRED CONFIG PATHS ${MLIR_DIR})
@@ -256,7 +256,8 @@ if(TRITON_BUILD_PYTHON_MODULE)
   else()
     target_link_libraries(triton PRIVATE z)
   endif()
-  target_link_options(triton PRIVATE ${LLVM_LDFLAGS} ${GenISAIntrinsics_LDFLAGS})
+#  target_link_options(triton PRIVATE ${LLVM_LDFLAGS} ${GenISAIntrinsics_LDFLAGS})
+  target_link_options(triton PRIVATE ${LLVM_LDFLAGS})
 endif()
 
 if(UNIX AND NOT APPLE)
