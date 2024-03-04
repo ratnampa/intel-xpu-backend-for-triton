@@ -70,7 +70,7 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,  #
     a_tile_ptr = tl.make_block_ptr(base=a_ptr, shape=(M, K), strides=(stride_am, stride_ak),
                                    offsets=(block_offset_m, 0), block_shape=(BLOCK_SIZE_M, BLOCK_SIZE_K), order=(1, 0))
     b_tile_ptr = tl.make_block_ptr(base=b_ptr, shape=(K, N), strides=(stride_bk, stride_bn),
-                                   offsets=(0, block_offset_n), block_shape=(BLOCK_SIZE_K, BLOCK_SIZE_N), order=(0, 1))
+                                   offsets=(0, block_offset_n), block_shape=(BLOCK_SIZE_K, BLOCK_SIZE_N), order=(1, 0))
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
 
     for k in range(0, K, BLOCK_SIZE_K):
@@ -108,8 +108,9 @@ def matmul(a, b):
     return c
 
 
-a = torch.randn((512, 512), device='xpu', dtype=torch.float16)
-b = torch.randn((512, 512), device='xpu', dtype=torch.float16).T
+a = torch.randn((2048, 512), device='xpu', dtype=torch.float16)
+# b = torch.randn((512, 512), device='xpu', dtype=torch.float16).T
+b = torch.randn((512, 512), device='xpu', dtype=torch.float16)
 c = matmul(a, b)
 c = torch.nn.functional.normalize(c)
 
@@ -125,10 +126,10 @@ assert_close(c, golden, rtol=1e-2, atol=1e-3, check_dtype=False)
         x_names=['M', 'N', 'K'],
         x_vals=[
             [2048, 512, 512],
-            [2048, 1024, 1024],
-            [2048, 2048, 2048],
-            [2048, 4096, 4096],
-            [2048, 8192, 8192],
+            # [2048, 1024, 1024],
+            # [2048, 2048, 2048],
+            # [2048, 4096, 4096],
+            # [2048, 8192, 8192],
         ],  # different possible values for `x_name`
         line_arg='provider',
         # argument name whose value corresponds to a different line in the plot
@@ -145,7 +146,8 @@ assert_close(c, golden, rtol=1e-2, atol=1e-3, check_dtype=False)
     ))
 def benchmark(M, N, K, provider):
     a = torch.randn((M, K), device='xpu', dtype=torch.float16)
-    b = torch.randn((N, K), device='xpu', dtype=torch.float16).T
+    # b = torch.randn((N, K), device='xpu', dtype=torch.float16).T
+    b = torch.randn((N, K), device='xpu', dtype=torch.float16)
     quantiles = [0.5, 0.2, 0.8]
     if provider == 'cublas':
         ms, min_ms, max_ms = triton.testing.do_bench(lambda: torch.matmul(a, b), rep=100, quantiles=quantiles,
