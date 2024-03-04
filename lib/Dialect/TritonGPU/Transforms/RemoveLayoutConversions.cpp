@@ -410,18 +410,22 @@ void LayoutPropagation::rewriteRegion(Region &region) {
         rewriteConditionOp(conditionOp);
       } else if (reduceToScalar(&op)) {
         rewriteReduceToScalar(&op);
-      } else if (auto storeOp = dyn_cast<StoreOp>(&op)) {
-        auto ptr = storeOp.getPtr();
-        if (isTensorPointerType(ptr.getType())) {
-          auto value = storeOp.getValue();
-          auto it = layouts.find(value);
-          if (it != layouts.end()) {
-            Attribute encoding = *(it->second.encodings.begin());
-            Value newOperand = getValueAs(value, encoding);
-            storeOp.setOperand(1, newOperand);
+      } else {
+
+        if (auto storeOp = dyn_cast<StoreOp>(&op)) {
+          auto ptr = storeOp.getPtr();
+          if (isTensorPointerType(ptr.getType())) {
+            auto value = storeOp.getValue();
+            auto it = layouts.find(value);
+            if (it != layouts.end()) {
+              Attribute encoding = *(it->second.encodings.begin());
+              Value newOperand = getValueAs(value, encoding);
+              storeOp.setOperand(1, newOperand);
+              continue;
+            }
           }
         }
-      } else {
+
         // If we don't need to rewrite the op we still need to remap the
         // operands.
         for (OpOperand &operand : op.getOpOperands()) {
