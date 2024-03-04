@@ -291,6 +291,146 @@ struct PrefetchCacheOpConversion
   }
 };
 
+struct Store2DOpConversion
+    : public ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Store2DOp> {
+  using ConvertTritonGPUOpToLLVMPattern<
+      triton::gpu::intel::Store2DOp>::ConvertTritonGPUOpToLLVMPattern;
+
+  Store2DOpConversion(TritonGPUToLLVMTypeConverter &converter,
+                     triton::Target target, PatternBenefit benefit)
+      : ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Store2DOp>(converter, target,
+                                                                      benefit) {}
+
+  std::tuple<Value, Value, Value, Value, Value, Value, Value> getValuesFromBlockPointerStruct(Value blockPointer,
+                                                                                              ConversionPatternRewriter &rewriter) const {
+    SmallVector<Value> elems = unpackLLElements(blockPointer.getLoc(), blockPointer, rewriter);
+
+    return {elems[0], elems[1], elems[2], elems[3], elems[4], elems[5], elems[6]};
+  }
+
+  LogicalResult
+  matchAndRewrite(triton::gpu::intel::Store2DOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op->getLoc();
+    auto typeConverter = getTypeConverter();
+    auto *ctx = rewriter.getContext();
+
+    // original values
+    Value ptr = op.getPtr();
+
+    assert(isTensorPointerType(ptr.getType()) &&
+           "must be block pointer");
+
+    Type valueTy = op.getValue().getType();
+    if (auto tensorType = valueTy.dyn_cast<RankedTensorType>()) {
+      if (auto dpasLayout = tensorType.getEncoding().dyn_cast_or_null<DpasEncodingAttr>()) {
+        Type eltTy = tensorType.getElementType();
+        const ArrayRef<int64_t> tensorShape = tensorType.getShape();
+        unsigned numElems = getTotalElemsPerThread(tensorType);
+        auto elemsPerInstr = dpasLayout.getShapeC();
+        const SmallVector<unsigned> warpsPerCTA = dpasLayout.getWarpsPerCTA();
+        SmallVector<int64_t> numReps{std::max<int64_t>(1, mlir::ceil<unsigned>(tensorShape[0], elemsPerInstr[0] * warpsPerCTA[0])),
+                                     std::max<int64_t>(1, mlir::ceil<unsigned>(tensorShape[1], elemsPerInstr[1] * warpsPerCTA[1]))};
+        SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
+        int threadsPerWarp = triton::gpu::getWarpSize(dpasLayout);
+
+        Value programId =
+            llGetPid(0, op->getLoc(),
+                     op->getParentOfType<ModuleOp>(), rewriter, target);
+
+        Value warpSize = i32_val(threadsPerWarp);
+        Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
+        Value laneId = urem(getThreadId(rewriter, loc), warpSize);
+        SmallVector<Value> multiDimWarpId =
+            mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, order);
+
+        int64_t elemsPerLane = product<unsigned>(elemsPerInstr) / threadsPerWarp;
+        Type store2DGenXType = LLVM::getFixedVectorType(IntegerType::get(ctx, eltTy.getIntOrFloatBitWidth()), elemsPerLane); // make it opaque type.
+
+        Value blockPtr = adaptor.getPtr();
+        Value offsetBaseX, offsetBaseY, width, height, rowStride, colStride, base;
+        std::tie(offsetBaseY, offsetBaseX, height, width, rowStride, colStride, base) =
+            getValuesFromBlockPointerStruct(blockPtr, rewriter);
+
+//        llvm::outs() << "johnlu load tensorType:" << tensorType << "\n";
+//        llvm::outs().flush();
+//        llvm::outs() << "johnlu numElems:" << numElems << "\n";
+//        llvm::outs().flush();
+//        llvm::outs() << "johnlu elemsPerLane:" << elemsPerLane << "\n";
+//        llvm::outs().flush();
+//        llvm::outs() << "johnlu threadsPerWarp:" << threadsPerWarp << "\n";
+//        llvm::outs().flush();
+//        llvm::outs() << "johnlu numReps[0]:" << numReps[0]
+//                     << " numReps[1]:" << numReps[1] << "\n";
+//        llvm::outs().flush();
+//        llvm::outs() << "johnlu warpsPerCTA[0]:" << warpsPerCTA[0]
+//                     << " warpsPerCTA[1]:" << warpsPerCTA[1] << "\n";
+//        llvm::outs().flush();
+//        llvm::outs() << "johnlu numRep M:" << numReps[0]
+//                     << " numRep N:" << numReps[1] << "\n";
+//        llvm::outs().flush();
+
+        auto vals = unpackLLElements(loc, adaptor.getValue(), rewriter);
+        SmallVector<Value> storededVals;
+        for (auto& val : vals) {
+          Value stored = rewriter.create<LLVM::UndefOp>(loc,
+                                                        LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
+          for (size_t i = 0; i < elemsPerLane; ++i) {
+            stored = insert_element(stored, val, i32_val(i));
+          }
+          storededVals.push_back(bitcast(stored, store2DGenXType));
+        }
+
+        width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
+        height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
+        rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
+        // encoded as bytes size - 1.
+        Value base_width = sub(mul(width, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+        // encoded as rows size - 1.
+        Value base_height = sub(height, i32_val(1));
+        // encoded as bytes size - 1.
+        Value base_pitch = sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+        for (int m = 0; m < numReps[0]; ++m) {
+          for (int n = 0; n < numReps[1]; ++n) {
+            Value offsetX, offsetY;
+            offsetY = add(mul(multiDimWarpId[0], i32_val(elemsPerInstr[0])),
+                          i32_val(m * numReps[0] * elemsPerInstr[0]));
+            offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
+                          i32_val(n * numReps[1] * elemsPerInstr[1]));
+
+//            if (n == 1)
+//              KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
+//                            ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
+            offsetX = add(offsetX, offsetBaseX);
+            offsetY = add(offsetY, offsetBaseY);
+#if 1
+            rewriter.create<GENX::Matrix2DBlockStoreOp>(
+                op.getLoc(),
+                /*ptr*/ base,
+                /*base_width*/ base_width,
+                /*base_height*/ base_height,
+                /*base_pitch*/ base_pitch,
+                /*x*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetX),
+                /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
+                /*elem_size_in_bits*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), eltTy.getIntOrFloatBitWidth()),
+                /*tile_width*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), elemsPerInstr[1]),
+                /*tile_height*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), elemsPerInstr[0]),
+                /*v_blocks*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 1),
+                /*transpose*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
+                /*vnni_transform*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
+                /*stored_val*/ storededVals[m * numReps[1] + n]);
+#endif
+          }
+        }
+        rewriter.eraseOp(op);
+        return success();
+      }
+    }
+
+    return failure();
+  }
+};
+
 struct Load2DOpConversion
     : public ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Load2DOp> {
   using ConvertTritonGPUOpToLLVMPattern<
@@ -1724,6 +1864,7 @@ void mlir::triton::populateLoadStoreOpToLLVMPatterns(
   patterns.add<LoadOpConversion>(typeConverter, axisInfoAnalysis, target,
                                  benefit);
   patterns.add<Load2DOpConversion>(typeConverter, target, benefit);
+  patterns.add<Store2DOpConversion>(typeConverter, target, benefit);
   patterns.add<PrefetchCacheOpConversion>(typeConverter, target, benefit);
   patterns.add<StoreOpConversion>(typeConverter, axisInfoAnalysis, target,
                                   benefit);
