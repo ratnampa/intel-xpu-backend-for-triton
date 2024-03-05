@@ -509,7 +509,7 @@ struct Load2DOpConversion
             // pack scalar to i32.
             auto opsPerChannel = dpasLayout.getOpsPerChannel();
             elemsPerLane = elemsPerLane / opsPerChannel;
-            laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), opsPerChannel);
+            laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), elemsPerLane);
           }
 
           // Outer dim, A is the M, B is the N. Inner dim, the K
@@ -609,7 +609,9 @@ struct Load2DOpConversion
           }
 
           Type llvmResultStructTy = typeConverter->convertType(op.getType());
-          Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
+//          Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
+//                                              rewriter, llvmResultStructTy);
+          Value resultStruct = packLLElements(loc, typeConverter, rets,
                                               rewriter, llvmResultStructTy);
           rewriter.replaceOp(op, {resultStruct});
 
