@@ -167,6 +167,38 @@ public:
       loadOp.erase();
     }
 
+    SmallVector<mlir::triton::StoreOp> storeOpWorkList;
+    getOperation()->walk([&](mlir::triton::StoreOp op) {
+      auto ptr = op.getPtr();
+      if (auto makeTensorOp = dyn_cast<tt::MakeTensorPtrOp>(ptr.getDefiningOp())) {
+        auto ptrType = makeTensorOp.getType().cast<triton::PointerType>();
+        auto tensorType = ptrType.getPointeeType().cast<RankedTensorType>();
+
+        auto base = makeTensorOp.getBase();
+        auto shape = makeTensorOp.getShape();
+        auto strides = makeTensorOp.getStrides();
+        auto offsets = makeTensorOp.getOffsets();
+        auto tensorShape = tensorType.getShape();
+
+        auto fastChangeStride = strides.back();
+        if (auto stride = dyn_cast<arith::ConstantOp>(fastChangeStride.getDefiningOp())) {
+          if (auto strideInt = stride.getValue().dyn_cast<IntegerAttr>()) {
+            if (strideInt.getInt() == 1) {
+              storeOpWorkList.push_back(op);
+            }
+          }
+        }
+      }
+    });
+
+
+    for (auto& storeOp: storeOpWorkList) {
+      OpBuilder builder(storeOp);
+      auto newResult = builder.create<ttig::Store2DOp>(
+          storeOp.getLoc(), storeOp.getPtr(), storeOp.getValue(), storeOp.getCache(),
+          storeOp.getEvict());
+      storeOp.erase();
+    }
   }
 
 private:

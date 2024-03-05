@@ -75,6 +75,10 @@ void Load2DOp::getEffects(
                          SideEffects::DefaultResource::get());
 }
 
+void Store2DOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                          MLIRContext *context) {
+}
+
 } // namespace intel
 } // namespace gpu
 } // namespace triton

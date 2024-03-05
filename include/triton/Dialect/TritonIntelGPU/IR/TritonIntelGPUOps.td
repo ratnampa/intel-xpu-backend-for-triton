@@ -10,6 +10,11 @@ include "triton/Dialect/TritonIntelGPU/IR/TritonIntelGPUDialect.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
+//
+// Interfaces
+//
+def GlobalMemory : Resource<"::mlir::triton::GlobalMemory">;
+
 class TTIG_Op<string mnemonic, list<Trait> traits = []> :
     Op<TritonIntelGPU_Dialect, mnemonic, traits>;
 
@@ -54,7 +59,7 @@ def TTIG_Load2DOp : TTIG_Op<"load_2d",
                        TypesMatchWith<"infer ptr type from result type",
                                       "result", "ptr", "$_self",
                                       "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">]> {
-    let summary = "";
+    let summary = "intel load 2d";
 
     let arguments = (ins AnyTypeOf<[TT_TensorPtr]>:$ptr,
                          OptionalAttr<TT_PaddingOptionAttr>:$padding,
@@ -89,8 +94,30 @@ def TTIG_Load2DOp : TTIG_Op<"load_2d",
         //               "triton::EvictionPolicy":$evict, "bool":$isVolatile)>
     ];
 
-    // Format: `tt.load operands attrs : optional(type(ptr)) -> type(result)`
     let assemblyFormat = "$ptr attr-dict `:` type($ptr) `->` type($result)";
+
+    let hasCanonicalizer = 1;
+}
+
+def TTIG_Store2DOp : TTIG_Op<"store_2d",
+                       [SameLoadStoreOperandsShape,
+                        SameLoadStoreOperandsEncoding,
+                        MemoryEffects<[MemWrite<GlobalMemory>]>,
+                        TypesMatchWith<"infer ptr type from value type",
+                                       "value", "ptr", "$_self",
+                                       "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">]> {
+    let summary = "intel store 2d";
+
+    let arguments = (ins AnyTypeOf<[TT_TensorPtr]>:$ptr, TT_Type:$value,
+                         DefaultValuedAttr<TT_CacheModifierAttr, "triton::CacheModifier::NONE">:$cache,
+                         DefaultValuedAttr<TT_EvictionPolicyAttr, "triton::EvictionPolicy::NORMAL">:$evict);
+
+    let builders = [
+        // A tensor of pointers or a pointer to a scalar
+        // OpBuilder<(ins "Value":$ptr, "Value":$value, "triton::CacheModifier":$cache, "triton::EvictionPolicy":$evict)>
+    ];
+
+    let assemblyFormat = "operands attr-dict `:` type($ptr) `->` type($value)";
 
     let hasCanonicalizer = 1;
 }
