@@ -78,6 +78,27 @@ Type TritonGPUToLLVMTypeConverter::getElementTypeForStruct(
   if (!dotOpLayout)
     return elemTy;
 
+  if (auto dpasParent = dotOpLayout.getParent().dyn_cast<DpasEncodingAttr>()) {
+    if (dotOpLayout.getOpIdx() == 0) {
+      // For A operand, pack the bits size <=16 scalar to opaque i16 and bits size = 32 to opaque i32.
+      unsigned opsPerChannel = dpasParent.getOpsPerChannel();
+      switch(opsPerChannel) {
+        case 4:
+          elemTy = type::i32Ty(ctx);
+          break;
+        case 2:
+        case 1:
+          elemTy = type::i16Ty(ctx);
+          break;
+        default:
+          assert(false && "unexpected ops per channel");
+      };
+    } else {
+      // For B operand, pack the all scalar to opaque i32.
+      elemTy = type::i32Ty(ctx);
+    }
+  }
+
   auto mmaParent = dotOpLayout.getParent().dyn_cast<NvidiaMmaEncodingAttr>();
   if (!mmaParent || mmaParent.isHopper())
     return elemTy;

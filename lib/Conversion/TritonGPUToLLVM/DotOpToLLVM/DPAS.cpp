@@ -256,17 +256,16 @@ private:
 
     int offset{};
     ValueTable vals;
-    size_t totalElems = elems.size();
-    size_t numElemsPerOperand = totalElems / (dim0 * dim1);
-    VectorType dotOpTy = vec_ty(elemTy, numElemsPerOperand);
+    VectorType dpasOpTy = cast<VectorType>(dotOperandType);
+    size_t numElemsPerOperand = dpasOpTy.getNumElements();
 
     for (int i = 0; i < dim0; ++i) {
       for (int j = 0; j < dim1; ++j) {
-        Value matVal = rewriter.create<LLVM::UndefOp>(loc, dotOpTy);
+        Value matVal = rewriter.create<LLVM::UndefOp>(loc, dpasOpTy);
         for (int k = 0; k < numElemsPerOperand; ++k) {
-          matVal = insert_element(dotOpTy, matVal, elems[offset++], i32_val(k));
+          matVal = insert_element(matVal, elems[offset++], i32_val(k));
         }
-        vals[{i, j}] = bitcast(matVal, dotOperandType);
+        vals[{i, j}] = matVal;
       }
     }
     return vals;

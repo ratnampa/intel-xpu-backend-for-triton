@@ -401,9 +401,9 @@ struct Store2DOpConversion
             offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
                           i32_val(n * numReps[1] * elemsPerInstr[1]));
 
-            KERNEL_PRINTF("A pid=%d, sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d, value=%f",
-                          ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY,
-                                     storedUnPackVals[m * numReps[1] + n]});
+//            KERNEL_PRINTF("A pid=%d, sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d, value=%f",
+//                          ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY,
+//                                     storedUnPackVals[m * numReps[1] + n]});
             offsetX = add(offsetX, offsetBaseX);
             offsetY = add(offsetY, offsetBaseY);
 #if 1
@@ -496,12 +496,20 @@ struct Load2DOpConversion
             auto shapeA = dpasLayout.getShapeA();
             elemsPerInstr = {shapeA[0], shapeA[1]};
             elemsPerLane = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
-            laod2DGenXType = LLVM::getFixedVectorType(type::i16Ty(ctx), elemsPerLane); // pack scalar to i16.
+
+            // pack scalar to i16.
+            auto opsPerChannel = dpasLayout.getOpsPerChannel();
+            elemsPerLane = opsPerChannel == 4 ? elemsPerLane / 2 : elemsPerLane;
+            laod2DGenXType = LLVM::getFixedVectorType(type::i16Ty(ctx), elemsPerLane);
           } else {
             auto shapeB = dpasLayout.getShapeB();
             elemsPerInstr = {shapeB[0], shapeB[1]};
             elemsPerLane = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
-            laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), elemsPerLane / 2); // pack scalar to i16.
+
+            // pack scalar to i32.
+            auto opsPerChannel = dpasLayout.getOpsPerChannel();
+            elemsPerLane = elemsPerLane / opsPerChannel;
+            laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), opsPerChannel);
           }
 
           // Outer dim, A is the M, B is the N. Inner dim, the K
@@ -583,12 +591,12 @@ struct Load2DOpConversion
                   /*vnni_transform*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), opIdx == 0 ? /*A vnni=false*/0 : /*B vnni=true*/1));
 #endif
 
-              Value loadVal = bitcast(load2dOp, LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
+//              Value loadVal = bitcast(load2dOp, LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
               // if (opIdx == 0)
               //     KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, offsetX=%d, offsetY=%d, val=%f", ValueRange{programId, warpId, laneId, offsetX, offsetY, loadVal});
               // if (opIdx == 1)
               //     KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, offsetX=%d, offsetY=%d, val=%f", ValueRange{programId, warpId, laneId, offsetX, offsetY, loadVal});
-              rets.push_back(loadVal);
+              rets.push_back(load2dOp);
             }
           }
 
