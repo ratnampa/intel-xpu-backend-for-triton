@@ -268,6 +268,7 @@ struct PrefetchCacheOpConversion
         offsetY = add(mul(multiDimWarpId[0], i32_val(shapePerWarp[0])), i32_val(col*warpsPerCTA[0]*shapePerWarp[0]));
 //        offsetX = add(offsetX, offsetBaseX);
 //        offsetY = add(offsetY, offsetBaseY);
+#if 1
         prefetchOp(rewriter,  op.getLoc(),
                    /*ptr*/ ptrtoint(i64_ty, base),
                    /*base_width*/ width,
@@ -282,6 +283,7 @@ struct PrefetchCacheOpConversion
                    /*transpose*/ int_val(1, 0),
                    /*vnni_transform*/ int_val(1, 0),
                    /*cache_opt*/ i32_val(/*both L1 and L3*/4));
+#endif
 
       }
     }
@@ -371,13 +373,14 @@ struct Store2DOpConversion
 //        llvm::outs().flush();
 
         auto vals = unpackLLElements(loc, adaptor.getValue(), rewriter);
-        SmallVector<Value> storededVals;
+        SmallVector<Value> storededVals, storedUnPackVals;
         for (auto& val : vals) {
           Value stored = rewriter.create<LLVM::UndefOp>(loc,
                                                         LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
           for (size_t i = 0; i < elemsPerLane; ++i) {
             stored = insert_element(stored, val, i32_val(i));
           }
+          storedUnPackVals.push_back(stored);
           storededVals.push_back(bitcast(stored, store2DGenXType));
         }
 
@@ -398,9 +401,9 @@ struct Store2DOpConversion
             offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
                           i32_val(n * numReps[1] * elemsPerInstr[1]));
 
-//            if (n == 1)
-//              KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
-//                            ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
+            KERNEL_PRINTF("A pid=%d, sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d, value=%f",
+                          ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY,
+                                     storedUnPackVals[m * numReps[1] + n]});
             offsetX = add(offsetX, offsetBaseX);
             offsetY = add(offsetY, offsetBaseY);
 #if 1
