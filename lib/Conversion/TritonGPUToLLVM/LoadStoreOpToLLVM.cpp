@@ -373,16 +373,6 @@ struct Store2DOpConversion
 //        llvm::outs().flush();
 
         auto vals = unpackLLElements(loc, adaptor.getValue(), rewriter);
-        SmallVector<Value> storededVals, storedUnPackVals;
-        for (auto& val : vals) {
-          Value stored = rewriter.create<LLVM::UndefOp>(loc,
-                                                        LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
-          for (size_t i = 0; i < elemsPerLane; ++i) {
-            stored = insert_element(stored, val, i32_val(i));
-          }
-          storedUnPackVals.push_back(stored);
-          storededVals.push_back(bitcast(stored, store2DGenXType));
-        }
 
         width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
         height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
@@ -393,6 +383,7 @@ struct Store2DOpConversion
         Value base_height = sub(height, i32_val(1));
         // encoded as bytes size - 1.
         Value base_pitch = sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+        unsigned valOffset = 0;
         for (int m = 0; m < numReps[0]; ++m) {
           for (int n = 0; n < numReps[1]; ++n) {
             Value offsetX, offsetY;
@@ -401,9 +392,14 @@ struct Store2DOpConversion
             offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
                           i32_val(n * numReps[1] * elemsPerInstr[1]));
 
+            Value storeVal = rewriter.create<LLVM::UndefOp>(loc,
+                                                          LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
+            for (size_t i = 0; i < elemsPerLane; ++i) {
+              storeVal = insert_element(storeVal, vals[valOffset++], i32_val(i));
+            }
 //            KERNEL_PRINTF("A pid=%d, sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d, value=%f",
 //                          ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY,
-//                                     storedUnPackVals[m * numReps[1] + n]});
+//                                     storeVal});
             offsetX = add(offsetX, offsetBaseX);
             offsetY = add(offsetY, offsetBaseY);
 #if 1
@@ -421,7 +417,7 @@ struct Store2DOpConversion
                 /*v_blocks*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 1),
                 /*transpose*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
                 /*vnni_transform*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
-                /*stored_val*/ storededVals[m * numReps[1] + n]);
+                /*stored_val*/ bitcast(storeVal, store2DGenXType));
 #endif
           }
         }
