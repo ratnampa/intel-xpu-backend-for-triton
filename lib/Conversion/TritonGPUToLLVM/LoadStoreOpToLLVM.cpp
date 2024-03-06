@@ -193,25 +193,25 @@ struct PrefetchCacheOpConversion
     Value ptr = op.getPtr();
     Type ptrTy = ptr.getType();
 
-    assert(isTensorPointerType(ptrTy) && "must be block pointer");
+    // only to materialize the prefetch op with block pointer for now.
+    if (isTensorPointerType(ptrTy)) {
+      auto ptrType = ptrTy.cast<PointerType>();
+      auto tensorTy = ptrType.getPointeeType().cast<RankedTensorType>();
+      Type eltTy = tensorTy.getElementType();
+      const ArrayRef<int64_t> tensorShape = tensorTy.getShape();
+      auto mod = rewriter.getBlock()->getParent()->getParentOfType<ModuleOp>();
+      auto numWarps = triton::gpu::TritonGPUDialect::getNumWarps(mod);
 
-    auto ptrType = ptrTy.cast<PointerType>();
-    auto tensorTy = ptrType.getPointeeType().cast<RankedTensorType>();
-    Type eltTy = tensorTy.getElementType();
-    const ArrayRef<int64_t> tensorShape = tensorTy.getShape();
-    auto mod = rewriter.getBlock()->getParent()->getParentOfType<ModuleOp>();
-    auto numWarps = triton::gpu::TritonGPUDialect::getNumWarps(mod);
+      SmallVector<unsigned, 2> warpsPerCTA, shapePerWarp;
+      std::tie(warpsPerCTA, shapePerWarp)  = getWarpsPerTile(eltTy, tensorShape, numWarps);
 
-    SmallVector<unsigned, 2> warpsPerCTA, shapePerWarp;
-    std::tie(warpsPerCTA, shapePerWarp)  = getWarpsPerTile(eltTy, tensorShape, numWarps);
+      SmallVector<int64_t> numReps = {mlir::ceil<int64_t>(tensorShape[0], shapePerWarp[0] * warpsPerCTA[0]),
+                                      mlir::ceil<int64_t>(tensorShape[1], shapePerWarp[1] * warpsPerCTA[1])};
 
-    SmallVector<int64_t> numReps = {mlir::ceil<int64_t>(tensorShape[0], shapePerWarp[0] * warpsPerCTA[0]),
-                                    mlir::ceil<int64_t>(tensorShape[1], shapePerWarp[1] * warpsPerCTA[1])};
-
-    uint32_t bytesPerCol = shapePerWarp[1] * eltTy.getIntOrFloatBitWidth() / 8;
-    uint32_t elemSizeInBits = bytesPerCol >= 4 ? 32 : bytesPerCol * 8;
-    uint32_t tileWidthInElem = std::min<uint32_t>(16, mlir::ceil<uint32_t>(bytesPerCol, 4));
-    uint32_t tileHeightInElem = shapePerWarp[0];
+      uint32_t bytesPerCol = shapePerWarp[1] * eltTy.getIntOrFloatBitWidth() / 8;
+      uint32_t elemSizeInBits = bytesPerCol >= 4 ? 32 : bytesPerCol * 8;
+      uint32_t tileWidthInElem = std::min<uint32_t>(16, mlir::ceil<uint32_t>(bytesPerCol, 4));
+      uint32_t tileHeightInElem = shapePerWarp[0];
 #if 0
     llvm::outs() << "johnlu prefetch tensorTy: " << tensorTy << ", eleTy:" << eltTy << "\n";
     llvm::outs().flush();
@@ -232,59 +232,60 @@ struct PrefetchCacheOpConversion
     llvm::outs() << "johnlu prefetch tileHeight: " << tileHeightInElem << ", tileWeight:" << tileWidthInElem << "\n";
     llvm::outs().flush();
 #endif
-    Value warpSize = getModuleWarpSize(rewriter, loc);
-    Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
-    SmallVector<Value> multiDimWarpId =
-        mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, {1, 0});
+      Value warpSize = getModuleWarpSize(rewriter, loc);
+      Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
+      SmallVector<Value> multiDimWarpId =
+          mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, {1, 0});
 
-    Value blockPtr = adaptor.getPtr();
-    Value offsetBaseX, offsetBaseY, width, height, rowStride, colStride, base;
-    std::tie(offsetBaseY, offsetBaseX, height, width, rowStride, colStride, base) =
-        getValuesFromBlockPointerStruct(blockPtr, rewriter);
+      Value blockPtr = adaptor.getPtr();
+      Value offsetBaseX, offsetBaseY, width, height, rowStride, colStride, base;
+      std::tie(offsetBaseY, offsetBaseX, height, width, rowStride, colStride, base) =
+          getValuesFromBlockPointerStruct(blockPtr, rewriter);
 
-    base = gep(base.getType(), eltTy, base, offsetBaseX);
-    offsetBaseY = rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetBaseY);
-    rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
-    Value rowOffset = mul(offsetBaseY, rowStride);
-    base = gep(base.getType(), eltTy, base, rowOffset);
+      base = gep(base.getType(), eltTy, base, offsetBaseX);
+      offsetBaseY = rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetBaseY);
+      rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
+      Value rowOffset = mul(offsetBaseY, rowStride);
+      base = gep(base.getType(), eltTy, base, rowOffset);
 
-    width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
-    width = sub(mul(width, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+      width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
+      width = sub(mul(width, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
 
-    height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
-    height = sub(height, i32_val(1));
+      height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
+      height = sub(height, i32_val(1));
 
-    rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
-    rowStride = sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+      rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
+      rowStride = sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
 
-    multiDimWarpId[1] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[1]);
-    multiDimWarpId[0] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[0]);
+      multiDimWarpId[1] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[1]);
+      multiDimWarpId[0] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[0]);
 
-    mlir::triton::intel::GenISA_Prefetch prefetchOp(rewriter);
-    for (int row = 0; row < numReps[0]; ++row) {
-      for (int col = 0; col < numReps[1]; ++col) {
-        Value offsetX, offsetY;
-        offsetX = add(mul(multiDimWarpId[1], i32_val(shapePerWarp[1])), i32_val(col*warpsPerCTA[1]*shapePerWarp[1]));
-        offsetY = add(mul(multiDimWarpId[0], i32_val(shapePerWarp[0])), i32_val(col*warpsPerCTA[0]*shapePerWarp[0]));
+      mlir::triton::intel::GenISA_Prefetch prefetchOp(rewriter);
+      for (int row = 0; row < numReps[0]; ++row) {
+        for (int col = 0; col < numReps[1]; ++col) {
+          Value offsetX, offsetY;
+          offsetX = add(mul(multiDimWarpId[1], i32_val(shapePerWarp[1])), i32_val(col*warpsPerCTA[1]*shapePerWarp[1]));
+          offsetY = add(mul(multiDimWarpId[0], i32_val(shapePerWarp[0])), i32_val(col*warpsPerCTA[0]*shapePerWarp[0]));
 //        offsetX = add(offsetX, offsetBaseX);
 //        offsetY = add(offsetY, offsetBaseY);
 #if 1
-        prefetchOp(rewriter,  op.getLoc(),
-                   /*ptr*/ ptrtoint(i64_ty, base),
-                   /*base_width*/ width,
-                   /*base_height*/ height,
-                   /*base_pitch*/ rowStride,
-                   /*x*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetX),
-                   /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
-                   /*elem_size_in_bits*/ i32_val(elemSizeInBits),
-                   /*tile_width*/ i32_val(tileWidthInElem - 1),
-                   /*tile_height*/ i32_val(tileHeightInElem - 1),
-                   /*v_blocks*/ i32_val(1),
-                   /*transpose*/ int_val(1, 0),
-                   /*vnni_transform*/ int_val(1, 0),
-                   /*cache_opt*/ i32_val(/*both L1 and L3*/4));
+          prefetchOp(rewriter,  op.getLoc(),
+                     /*ptr*/ ptrtoint(i64_ty, base),
+                     /*base_width*/ width,
+                     /*base_height*/ height,
+                     /*base_pitch*/ rowStride,
+                     /*x*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetX),
+                     /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
+                     /*elem_size_in_bits*/ i32_val(elemSizeInBits),
+                     /*tile_width*/ i32_val(tileWidthInElem - 1),
+                     /*tile_height*/ i32_val(tileHeightInElem - 1),
+                     /*v_blocks*/ i32_val(1),
+                     /*transpose*/ int_val(1, 0),
+                     /*vnni_transform*/ int_val(1, 0),
+                     /*cache_opt*/ i32_val(/*both L1 and L3*/4));
 #endif
 
+        }
       }
     }
 
