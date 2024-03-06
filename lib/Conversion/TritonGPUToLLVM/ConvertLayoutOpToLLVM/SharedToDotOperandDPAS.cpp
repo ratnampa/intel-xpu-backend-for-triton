@@ -49,7 +49,7 @@ public:
                                        Value cSwizzleOffset);
   // Load the matrix value.
   Value loadMatrix(int repOuter, int repInner, const ArrayRef<Value> ptrs,
-                   LLVM::LLVMStructType structTy, Type smemTy,
+                   VectorType structTy, Type smemTy,
                    Value cSwizzleOffset) const;
 
 private:
@@ -162,25 +162,22 @@ DpasMatmulLoader<opIdx>::computeLdsMatOffs(Value warpId, Value laneId,
 template <unsigned opIdx>
 Value DpasMatmulLoader<opIdx>::loadMatrix(int repOuter, int repInner,
                                           const ArrayRef<Value> ptrs,
-                                          LLVM::LLVMStructType structTy,
+                                          VectorType structTy,
                                           Type smemTy,
                                           Value cSwizzleOffset) const {
-  Type elemTy = structTy.getBody()[0];
-  assert(
-      llvm::any_of(structTy.getBody(), [&](Type ty) { return ty == elemTy; }) &&
-      "The struct should have the same element types.");
+  Type elemTy = structTy.getElementType();
 
   Value offsetOuter = mul(i32_val(repOuter), repNonKDimStride);
   Value offsetInner = mul(i32_val(repInner), repKDimStride);
   Value offset = add(offsetOuter, offsetInner);
 
   Value llvmStruct = rewriter.create<LLVM::UndefOp>(loc, structTy);
-  size_t elemNum = structTy.getBody().size();
+  size_t elemNum = structTy.getNumElements();
   for (int i = 0; i < elemNum; i++) {
     Value readPtr =
         gep(ptr_ty(rewriter.getContext(), 3), smemTy, ptrs[i], offset);
     Value val = rewriter.create<LLVM::LoadOp>(loc, elemTy, readPtr);
-    llvmStruct = insert_val(structTy, llvmStruct, val, i);
+    llvmStruct = insert_element(llvmStruct, val, i32_val(i));
   }
 
   return llvmStruct;
@@ -193,11 +190,10 @@ Value composeValuesToDotOperandLayoutStruct(
   std::vector<Value> elems;
   for (int m = 0; m < n0; ++m) {
     for (int k = 0; k < n1; ++k) {
-      Value matVal = vals.at({m, k});
-      auto matType = matVal.getType().cast<LLVM::LLVMStructType>();
-      Type valTy = matType.getBody()[0];
-      for (int i = 0; i < matType.getBody().size(); ++i) {
-        auto val = extract_val(valTy, matVal, i);
+      Value dotOperand = vals.at({m, k});
+      auto dotOpType = dotOperand.getType().cast<VectorType>();
+      for (int i = 0; i < dotOpType.getNumElements(); ++i) {
+        auto val = extract_element(dotOperand, i32_val(i));
         elems.push_back(val);
       }
     }
@@ -266,12 +262,42 @@ getLoadMatrixFn(Value tensor, const SharedMemoryObject &smemObj,
     // Load from shared memory.
     int64_t totalElem = product<int64_t>(instrShape);
     unsigned threadsPerWarp = product<unsigned>(getThreadsPerWarp(dpasLayout));
-    auto matTy = LLVM::LLVMStructType::getLiteral(
-        eltTy.getContext(),
-        SmallVector<Type>(totalElem / threadsPerWarp,
-                          typeConverter->convertType(eltTy)));
+    Type elemTy;
+    unsigned elemNum;
+    if constexpr (opIdx == 0) {
+      // For A operand, pack the bits size <=16 scalar to opaque i16 and bits size = 32 to opaque i32.
+      unsigned bitsWidth = eltTy.getIntOrFloatBitWidth();
+      switch(bitsWidth) {
+      case 8:
+        elemTy = type::i32Ty(eltTy.getContext());
+        elemNum = (totalElem / threadsPerWarp) / 2;
+        break;
+      case 16:
+        elemTy = type::i16Ty(eltTy.getContext());
+        elemNum = (totalElem / threadsPerWarp);
+        break;
+      case 32:
+        elemTy = type::i32Ty(eltTy.getContext());
+        elemNum = (totalElem / threadsPerWarp);
+        break;
+      default:
+        assert(false && "unexpected scalar type for dpas operand A");
+      };
 
-    vals[{a, b}] = loader.loadMatrix(a, b, ptrs, matTy, smemTy, cSwizzleOffset);
+    } else {
+      unsigned opsPerChannel = dpasLayout.getOpsPerChannel();
+      elemNum = (totalElem / threadsPerWarp) / opsPerChannel;
+      // For B operand, pack the all scalar to opaque i32.
+      elemTy = type::i32Ty(eltTy.getContext());
+    }
+    auto packedVals = vec_ty(elemTy, elemNum);
+
+    auto matTy = vec_ty(typeConverter->convertType(eltTy), totalElem / threadsPerWarp);
+
+    auto loadVals = loader.loadMatrix(a, b, ptrs, matTy, smemTy, cSwizzleOffset);
+
+    // packed the loaded vals;
+    vals[{a, b}] = bitcast(loadVals, packedVals);
   };
 
   return load;
