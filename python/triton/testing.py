@@ -276,6 +276,8 @@ class Mark:
 
         import matplotlib.pyplot as plt
         import pandas as pd
+        pd.set_option('display.max_columns', None)
+        pd.set_option('expand_frame_repr', False)
         y_mean = bench.line_names
         y_min = [f'{x}-min' for x in bench.line_names]
         y_max = [f'{x}-max' for x in bench.line_names]
