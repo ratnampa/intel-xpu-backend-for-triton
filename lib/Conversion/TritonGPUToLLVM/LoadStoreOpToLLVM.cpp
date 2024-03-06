@@ -606,9 +606,7 @@ struct Load2DOpConversion
           }
 
           Type llvmResultStructTy = typeConverter->convertType(op.getType());
-//          Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
-//                                              rewriter, llvmResultStructTy);
-          Value resultStruct = packLLElements(loc, typeConverter, rets,
+          Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
                                               rewriter, llvmResultStructTy);
           rewriter.replaceOp(op, {resultStruct});
 
