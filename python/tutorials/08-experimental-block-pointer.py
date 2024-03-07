@@ -356,11 +356,11 @@ def matmul(a, b, triton_kernel):
         line_arg='provider',
         # argument name whose value corresponds to a different line in the plot
         # possible values for `line_arg``
-        line_vals=['onednn', 'triton', 'triton_2d_load', 'triton_blk_ptr'],
-        # line_vals=['onednn', 'triton_blk_ptr'],
+        # line_vals=['onednn', 'triton', 'triton_2d_load', 'triton_blk_ptr'],
+        line_vals=['onednn', 'triton_blk_ptr'],
         # label name for the lines
-        line_names=["oneDNN", "Triton native", "Triton 2D load", "Triton 2D load/store"],
-        # line_names=["oneDNN", "Triton 2D load/store"],
+        # line_names=["oneDNN", "Triton native", "Triton 2D load", "Triton 2D load/store"],
+        line_names=["oneDNN", "Triton 2D load/store"],
         # line styles
         styles=[('green', '-'), ('green', '--'), ('blue', '-'), ('blue', '--')],
         ylabel="TFLOPS",  # label name for the y-axis
