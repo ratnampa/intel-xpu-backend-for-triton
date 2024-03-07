@@ -78,8 +78,8 @@ SmallVector<unsigned, 2> getWarpsPerTile(tt::DotOp dotOp,
   do {
     if (ret[0] * ret[1] >= numWarps)
       break;
-    if (shape[0] / (shapePerWarp[0] * rowColRatio) / ret[0] >=
-        shape[1] / (shapePerWarp[1] * colRowRatio) / ret[1]) {
+    if (shape[0] / (shapePerWarp[0] * colRowRatio) / ret[0] >=
+        shape[1] / (shapePerWarp[1] * rowColRatio) / ret[1]) {
       if (ret[0] < shape[0] / shapePerWarp[0]) {
         ret[0] *= 2;
       } else
