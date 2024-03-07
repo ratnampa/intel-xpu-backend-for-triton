@@ -152,9 +152,17 @@ public:
     ValueTable hb = getValuesFromDotOperandLayoutStruct(
         loadedB, repN, repK,
         typeConverter->convertType(BTensorTy.getElementType()), bTy);
-    ValueTable fc = getValuesFromDotOperandLayoutStruct(
-        loadedC, repM, repN,
-        typeConverter->convertType(CTensorTy.getElementType()), cTy);
+//    ValueTable fc = getValuesFromDotOperandLayoutStruct(
+//        loadedC, repM, repN,
+//        typeConverter->convertType(CTensorTy.getElementType()), cTy);
+    auto vecC = unpackLLElements(loc, loadedC, rewriter);
+    ValueTable fc;
+    unsigned index = 0;
+    for (int i = 0; i < repM; ++i) {
+      for (int j = 0; j < repN; ++j) {
+        fc[{i, j}] = vecC[index++];
+      }
+    }
 
     Type resElemTy = DTensorTy.getElementType();
 
@@ -232,20 +240,21 @@ private:
     for (int m = 0; m < dim0; ++m)
       for (int k = 0; k < dim1; ++k) {
         auto matVal = vals.at({m, k});
-        auto vecType = matVal.getType().cast<mlir::VectorType>();
-        auto valTy = vecType.getElementType();
-        for (int i = 0; i < vecType.getNumElements(); ++i) {
-          auto val = extract_element(valTy, matVal, i32_val(i));
-
-          elems.push_back(val);
-        }
+//        auto vecType = matVal.getType().cast<mlir::VectorType>();
+//        auto valTy = vecType.getElementType();
+//        for (int i = 0; i < vecType.getNumElements(); ++i) {
+//          auto val = extract_element(valTy, matVal, i32_val(i));
+//
+//          elems.push_back(val);
+//        }
+        elems.push_back(matVal);
       }
 
     assert(!elems.empty() &&
            "unexpected empty result in composing the DPAS result.");
 
     Type structTy = LLVM::LLVMStructType::getLiteral(
-        ctx, SmallVector<Type>(elems.size(), elemTy));
+        ctx, SmallVector<Type>(elems.size(), elems[0].getType()));
     return packLLElements(loc, typeConverter, elems, rewriter, structTy);
   }
 

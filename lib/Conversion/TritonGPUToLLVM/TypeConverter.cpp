@@ -74,6 +74,12 @@ Type TritonGPUToLLVMTypeConverter::getElementTypeForStruct(
   auto ctx = type.getContext();
   Attribute layout = type.getEncoding();
   Type elemTy = convertType(type.getElementType());
+
+  if (auto mmaLayout = layout.dyn_cast<DpasEncodingAttr>()) {
+    auto elemsPerThread = product<unsigned>(mmaLayout.getSizePerThread());
+    return vec_ty(elemTy, elemsPerThread);
+  }
+
   auto dotOpLayout = layout.dyn_cast<DotOperandEncodingAttr>();
   if (!dotOpLayout)
     return elemTy;
@@ -125,6 +131,13 @@ Type TritonGPUToLLVMTypeConverter::convertTritonTensorType(
     for (auto i = 0; i < rank * 2; i++) {
       types.push_back(IntegerType::get(ctx, 32));
     }
+    return LLVM::LLVMStructType::getLiteral(ctx, types);
+  }
+
+  if (auto mmaLayout = layout.dyn_cast<DpasEncodingAttr>()) {
+    unsigned numElementsPerThread = getTotalElemsPerThread(type);
+    auto elemsPerThread = product<unsigned>(mmaLayout.getSizePerThread());
+    SmallVector<Type, 4> types(numElementsPerThread / elemsPerThread, eltType);
     return LLVM::LLVMStructType::getLiteral(ctx, types);
   }
 

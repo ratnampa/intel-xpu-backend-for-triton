@@ -44,8 +44,19 @@ struct SplatOpConversion
         vec = insert_element(vecType, vec, intCst, int_val(32, i));
       constVal = vec;
     }
-    auto llSrc = bitcast(constVal, srcType);
+
     size_t elemsPerThread = getTotalElemsPerThread(tensorTy);
+    Value llSrc;
+    if (VectorType vecTy = srcType.dyn_cast<VectorType>()) {
+      Value vec = undef(vecTy);
+      for (unsigned i = 0; i < vecTy.getNumElements(); ++i)
+        vec = insert_element(vec, constVal, int_val(32, i));
+      llSrc = vec;
+      elemsPerThread = elemsPerThread / vecTy.getNumElements();
+    } else {
+      llSrc = bitcast(constVal, srcType);
+    }
+
     llvm::SmallVector<Value> elems(elemsPerThread, llSrc);
     return packLLElements(loc, typeConverter, elems, rewriter, resType);
   }

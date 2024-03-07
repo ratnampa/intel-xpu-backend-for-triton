@@ -414,11 +414,12 @@ struct Store2DOpConversion
             offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
                           i32_val(n * numReps[1] * elemsPerInstr[1]));
 
-            Value storeVal = rewriter.create<LLVM::UndefOp>(loc,
-                                                          LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
-            for (size_t i = 0; i < elemsPerLane; ++i) {
-              storeVal = insert_element(storeVal, vals[valOffset++], i32_val(i));
-            }
+//            Value storeVal = rewriter.create<LLVM::UndefOp>(loc,
+//                                                          LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
+//            for (size_t i = 0; i < elemsPerLane; ++i) {
+//              storeVal = insert_element(storeVal, vals[valOffset++], i32_val(i));
+//            }
+            Value storeVal = vals[valOffset++];
 //            KERNEL_PRINTF("A pid=%d, sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d, value=%f",
 //                          ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY,
 //                                     storeVal});

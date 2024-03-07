@@ -1547,6 +1547,9 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto resultTy = op.getType();
     Location loc = op->getLoc();
+    auto typeConverter = this->getTypeConverter();
+    auto structType =
+        typeConverter->convertType(resultTy).template dyn_cast<LLVM::LLVMStructType>();
     // element type
     auto resultElementTy = getElementTypeOrSelf(resultTy);
     Type elemTy = this->getTypeConverter()->convertType(resultElementTy);
@@ -1554,6 +1557,18 @@ public:
     for (auto operand : adaptor.getOperands()) {
       auto argTy = op->getOperand(0).getType();
       auto subOperands = unpackLLElements(loc, operand, rewriter);
+      if (structType) {
+        auto elementTypes = structType.getBody();
+        if (VectorType vecTy = elementTypes[0].template dyn_cast<VectorType>()) {
+          SmallVector<Value> elems;
+          unsigned index = 0;
+          for (auto& ops : subOperands) {
+            for (unsigned i = 0; i < vecTy.getNumElements(); ++i)
+              elems.push_back(extract_element(ops, int_val(32, i)));
+          }
+          subOperands = elems;
+        }
+      }
       subOperands = unpackI32(subOperands, argTy, rewriter, loc,
                               this->getTypeConverter());
       allOperands.resize(subOperands.size());
@@ -1583,8 +1598,24 @@ public:
     resultVals = maybeDeduplicate(op, resultVals);
     resultVals =
         packI32(resultVals, resultTy, rewriter, loc, this->getTypeConverter());
+
+    if (structType) {
+      auto elementTypes = structType.getBody();
+      if (VectorType vecTy = elementTypes[0].template dyn_cast<VectorType>()) {
+        SmallVector<Value> elems;
+        unsigned index = 0;
+        for (auto& ty : elementTypes) {
+          Value vec = undef(ty);
+          for (unsigned i = 0; i < vecTy.getNumElements(); ++i)
+            vec = insert_element(vec, resultVals[index++], int_val(32, i));
+          elems.push_back(vec);
+        }
+        resultVals = elems;
+      }
+    }
+
     Value view = packLLElements(loc, this->getTypeConverter(), resultVals,
-                                rewriter, resultTy);
+                            rewriter, resultTy);
     rewriter.replaceOp(op, view);
 
     return success();
