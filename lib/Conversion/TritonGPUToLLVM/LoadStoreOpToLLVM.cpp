@@ -152,14 +152,15 @@ struct PrefetchCacheOpConversion
   static std::tuple<SmallVector<unsigned, 2>, SmallVector<unsigned, 2>> getWarpsPerTile(Type eltTy, const ArrayRef<int64_t> shape, int numWarps) {
     //  The cache line is 64 bytes.
     //  Block_width times array_size should not exceed 64 bytes. The maximum bytes number of col is 64.
+    //  Always prefetch one cache line a time.
     //  Block_height 1-32. The maximum row size is 32.
     //  The maximum bytes for each 2D prefetching could be 32*64= 2048 bytes.
     uint32_t bytesPerElt = eltTy.getIntOrFloatBitWidth() / 8;
     uint32_t maxBytesNum = 2048;
-    uint32_t bytesPerCol = std::min<uint32_t>(shape[1] * bytesPerElt, maxBytesNum);
-    bytesPerCol = mlir::ceil<uint32_t>(shape[1] * bytesPerElt, 64) * 64;
-    uint32_t rowNum = maxBytesNum / bytesPerCol;
-    SmallVector<unsigned, 2> shapePerWarp = {rowNum, bytesPerCol / (8*bytesPerElt)};
+    uint32_t bytesPerCol = 64;
+    uint32_t rowNum = std::min<uint32_t>(shape[0], 32);
+    SmallVector<unsigned, 2> shapePerWarp = {rowNum, bytesPerCol / bytesPerElt};
+
     uint32_t rowColRatio =
         mlir::ceil<uint32_t>(shapePerWarp[0], shapePerWarp[1]);
     uint32_t colRowRatio =
@@ -169,8 +170,8 @@ struct PrefetchCacheOpConversion
     do {
       if (ret[0] * ret[1] >= numWarps)
         break;
-      if (shape[0] / (shapePerWarp[0] * rowColRatio) / ret[0] >=
-          shape[1] / (shapePerWarp[1] * colRowRatio) / ret[1]) {
+      if (shape[0] / (shapePerWarp[0] * colRowRatio) / ret[0] >=
+          shape[1] / (shapePerWarp[1] * rowColRatio) / ret[1]) {
         if (ret[0] < shape[0] / shapePerWarp[0]) {
           ret[0] *= 2;
         } else
@@ -210,7 +211,7 @@ struct PrefetchCacheOpConversion
 
       uint32_t bytesPerCol = shapePerWarp[1] * eltTy.getIntOrFloatBitWidth() / 8;
       uint32_t elemSizeInBits = bytesPerCol >= 4 ? 32 : bytesPerCol * 8;
-      uint32_t tileWidthInElem = std::min<uint32_t>(16, mlir::ceil<uint32_t>(bytesPerCol, 4));
+      uint32_t tileWidthInElem = mlir::ceil<uint32_t>(bytesPerCol * 8, elemSizeInBits);
       uint32_t tileHeightInElem = shapePerWarp[0];
 #if 0
     llvm::outs() << "johnlu prefetch tensorTy: " << tensorTy << ", eleTy:" << eltTy << "\n";
@@ -234,6 +235,7 @@ struct PrefetchCacheOpConversion
 #endif
       Value warpSize = getModuleWarpSize(rewriter, loc);
       Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
+      Value laneId = urem(getThreadId(rewriter, loc), warpSize);
       SmallVector<Value> multiDimWarpId =
           mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, {1, 0});
 
@@ -260,14 +262,33 @@ struct PrefetchCacheOpConversion
       multiDimWarpId[1] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[1]);
       multiDimWarpId[0] = rewriter.create<arith::TruncIOp>(loc, i32_ty, multiDimWarpId[0]);
 
+      Value programId =
+          llGetPid(0, op->getLoc(),
+                   op->getParentOfType<ModuleOp>(), rewriter, target);
+
       mlir::triton::intel::GenISA_Prefetch prefetchOp(rewriter);
       for (int row = 0; row < numReps[0]; ++row) {
         for (int col = 0; col < numReps[1]; ++col) {
           Value offsetX, offsetY;
-          offsetX = add(mul(multiDimWarpId[1], i32_val(shapePerWarp[1])), i32_val(col*warpsPerCTA[1]*shapePerWarp[1]));
-          offsetY = add(mul(multiDimWarpId[0], i32_val(shapePerWarp[0])), i32_val(col*warpsPerCTA[0]*shapePerWarp[0]));
-//        offsetX = add(offsetX, offsetBaseX);
-//        offsetY = add(offsetY, offsetBaseY);
+          offsetX = add(
+              // the offset of this warp.
+              mul(multiDimWarpId[1], i32_val(shapePerWarp[1])),
+              // add the replica offset with a warp stride.
+              i32_val(col*warpsPerCTA[1]*shapePerWarp[1]));
+          // Round the offset into to the tensor shape
+          offsetX = urem(offsetX, i32_val(tensorShape[0]));
+
+          offsetY = add(
+              // the offset of this warp.
+              mul(multiDimWarpId[0], i32_val(shapePerWarp[0])),
+              // add the replica offset with a warp stride.
+              i32_val(row*warpsPerCTA[0]*shapePerWarp[0]));
+          // Round the offset into to the tensor shape
+          offsetY = urem(offsetY, i32_val(tensorShape[0]));
+
+
+          // KERNEL_PRINTF("prefetch pid=%d sgid=%d, tid=%d, base=%p, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
+          //               ValueRange{programId, warpId, laneId, base, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
 #if 1
           prefetchOp(rewriter,  op.getLoc(),
                      /*ptr*/ ptrtoint(i64_ty, base),
@@ -277,8 +298,8 @@ struct PrefetchCacheOpConversion
                      /*x*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetX),
                      /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
                      /*elem_size_in_bits*/ i32_val(elemSizeInBits),
-                     /*tile_width*/ i32_val(tileWidthInElem - 1),
-                     /*tile_height*/ i32_val(tileHeightInElem - 1),
+                     /*tile_width*/ i32_val(tileWidthInElem),
+                     /*tile_height*/ i32_val(tileHeightInElem),
                      /*v_blocks*/ i32_val(1),
                      /*transpose*/ int_val(1, 0),
                      /*vnni_transform*/ int_val(1, 0),
