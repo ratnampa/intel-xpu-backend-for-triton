@@ -405,14 +405,27 @@ struct Store2DOpConversion
         Value base_height = sub(height, i32_val(1));
         // encoded as bytes size - 1.
         Value base_pitch = sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
+
+
+        // A warp stride for the replicates.
+//        SmallVector<unsigned, 2> replicaStride = {(unsigned)(numReps[0] * elemsPerInstr[0]),
+//                                                  (unsigned)(numReps[1] * elemsPerInstr[1])};
+//        SmallVector<unsigned, 2> warpStride = {(unsigned)(elemsPerInstr[0]),
+//                                               (unsigned)(elemsPerInstr[1])};
+        // A dense stride for the replicates.
+        SmallVector<unsigned, 2> replicaStride = {(unsigned)(elemsPerInstr[0]),
+                                                  (unsigned)(elemsPerInstr[1])};
+        SmallVector<unsigned, 2> warpStride = {(unsigned)(numReps[0] * elemsPerInstr[0]),
+                                               (unsigned)(numReps[1] * elemsPerInstr[1])};
+
         unsigned valOffset = 0;
         for (int m = 0; m < numReps[0]; ++m) {
           for (int n = 0; n < numReps[1]; ++n) {
             Value offsetX, offsetY;
-            offsetY = add(mul(multiDimWarpId[0], i32_val(elemsPerInstr[0])),
-                          i32_val(m * numReps[0] * elemsPerInstr[0]));
-            offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
-                          i32_val(n * numReps[1] * elemsPerInstr[1]));
+            offsetY = add(mul(multiDimWarpId[0], i32_val(warpStride[0])),
+                          i32_val(m * replicaStride[0]));
+            offsetX = add(mul(multiDimWarpId[1], i32_val(warpStride[1])),
+                          i32_val(n * replicaStride[1]));
 
 //            Value storeVal = rewriter.create<LLVM::UndefOp>(loc,
 //                                                          LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
@@ -566,6 +579,13 @@ struct Load2DOpConversion
           //    llvm::outs().flush();
           //  }
 
+          // A warp stride for the replicates.
+           unsigned repOuterStride = outerDimWarpNum * elemsPerInstr[opIdx];
+           unsigned warpOuterStride = elemsPerInstr[opIdx];
+          // A dense stride for the replicates.
+//          unsigned repOuterStride = elemsPerInstr[opIdx];
+//          unsigned warpOuterStride = elemsPerInstr[opIdx] * numRepOuter;
+          unsigned repKStride = elemsPerInstr[opIdx == 0 ? 1 : 0];
 
           SmallVector<Value> rets;
           for (int outer = 0; outer < numRepOuter; ++outer) {
@@ -573,20 +593,19 @@ struct Load2DOpConversion
               Value offsetX, offsetY;
               if (opIdx == 0) {
                 // A
-                offsetY = add(mul(outerDimWarpId, i32_val(elemsPerInstr[opIdx])),
-                              i32_val(outer * outerDimWarpNum * elemsPerInstr[opIdx]));
-                offsetX = i32_val(k*elemsPerInstr[1]);
+                offsetY = add(mul(outerDimWarpId, i32_val(warpOuterStride)),
+                              i32_val(outer * repOuterStride));
+                offsetX = i32_val(k * repKStride);
 
-                //                if (k == 1)
-                //                  KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
-                //                                ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
+//                KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
+//                              ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
               } else {
                 // B
-                offsetX = add(mul(outerDimWarpId, i32_val(elemsPerInstr[opIdx])),
-                              i32_val(outer * outerDimWarpNum * elemsPerInstr[opIdx]));
-                offsetY = i32_val(k*elemsPerInstr[0]);
-                // KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
-                //               ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
+                offsetX = add(mul(outerDimWarpId, i32_val(warpOuterStride)),
+                              i32_val(outer * repOuterStride));
+                offsetY = i32_val(k * repKStride);
+//                KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
+//                              ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
               }
               offsetX = add(offsetX, offsetBaseX);
               offsetY = add(offsetY, offsetBaseY);
