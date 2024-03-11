@@ -536,20 +536,32 @@ struct Load2DOpConversion
             elemsPerInstr = {shapeA[0], shapeA[1]};
             elemsPerLanePerDotOp = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
 
-            // use the block array length 1 to load operand A.
-            tileHeight = elemsPerInstr[0];
+
+            unsigned maxPackedOuterDimPerLoad = 32 / elemsPerInstr[0];
+            packedOuterDimPerLoad = std::min<unsigned>(maxPackedOuterDimPerLoad, numRepOuter);
+            // use the tileHeight to load multiple operand A in one time.
+            tileHeight = elemsPerInstr[0] * packedOuterDimPerLoad;
+
+            if (numRepK >= 2) {
+              // use the block array length 2 to load operand B.
+              vBlocks = 2;
+              packedKDimPerLoad *= 2;
+            } else {
+              vBlocks = 1;
+            }
 
             // pack scalar to i16.
             auto opsPerChannel = dpasLayout.getOpsPerChannel();
             opaqueElemPerLane = opsPerChannel == 4 ? elemsPerLanePerDotOp / 2 : elemsPerLanePerDotOp;
+            opaqueElemPerLane = opaqueElemPerLane * packedOuterDimPerLoad * packedKDimPerLoad;
             laod2DGenXType = LLVM::getFixedVectorType(type::i16Ty(ctx), opaqueElemPerLane);
           } else {
             auto shapeB = dpasLayout.getShapeB();
             elemsPerInstr = {shapeB[0], shapeB[1]};
             elemsPerLanePerDotOp = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
 
-            // use the block array length 2 to load operand B.
             if (numRepOuter >= 2) {
+              // use the block array length 2 to load operand B.
               vBlocks = 2;
               packedOuterDimPerLoad *= 2;
             } else {
@@ -557,6 +569,7 @@ struct Load2DOpConversion
             }
 
             if (numRepK >= 2) {
+              // use the double tileHeight to load operand B.
               tileHeight = elemsPerInstr[0] * 2;
               packedKDimPerLoad *= 2;
             } else {
@@ -565,7 +578,8 @@ struct Load2DOpConversion
 
             // pack scalar to i32.
             auto opsPerChannel = dpasLayout.getOpsPerChannel();
-            opaqueElemPerLane = (elemsPerLanePerDotOp / opsPerChannel) * packedOuterDimPerLoad * packedKDimPerLoad;
+            opaqueElemPerLane = (elemsPerLanePerDotOp / opsPerChannel);
+            opaqueElemPerLane = opaqueElemPerLane * packedOuterDimPerLoad * packedKDimPerLoad;
             laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), opaqueElemPerLane);
           }
 
