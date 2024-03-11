@@ -525,40 +525,47 @@ struct Load2DOpConversion
           int64_t numRepK = numReps[(opIdx == 0) ? 1 : 0];
           Type laod2DGenXType;
           int64_t opaqueElemPerLane;
-          unsigned elemsPerLane;
+          unsigned tileHeight;
+          unsigned elemsPerLanePerDotOp;
           unsigned vBlocks = 1;
-          unsigned packedOuterPerLoad = 1;
+          unsigned packedOuterDimPerLoad = 1;
+          unsigned packedKDimPerLoad = 1;
           SmallVector<int64_t> elemsPerInstr;
           if (opIdx == 0) {
             auto shapeA = dpasLayout.getShapeA();
             elemsPerInstr = {shapeA[0], shapeA[1]};
-            elemsPerLane = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
+            elemsPerLanePerDotOp = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
 
             // use the block array length 1 to load operand A.
-            vBlocks = 1;
-            packedOuterPerLoad = 1;
+            tileHeight = elemsPerInstr[0];
 
             // pack scalar to i16.
             auto opsPerChannel = dpasLayout.getOpsPerChannel();
-            opaqueElemPerLane = opsPerChannel == 4 ? elemsPerLane / 2 : elemsPerLane;
+            opaqueElemPerLane = opsPerChannel == 4 ? elemsPerLanePerDotOp / 2 : elemsPerLanePerDotOp;
             laod2DGenXType = LLVM::getFixedVectorType(type::i16Ty(ctx), opaqueElemPerLane);
           } else {
             auto shapeB = dpasLayout.getShapeB();
             elemsPerInstr = {shapeB[0], shapeB[1]};
-            elemsPerLane = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
+            elemsPerLanePerDotOp = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
 
             // use the block array length 2 to load operand B.
             if (numRepOuter >= 2) {
               vBlocks = 2;
-              packedOuterPerLoad = 2;
+              packedOuterDimPerLoad *= 2;
             } else {
               vBlocks = 1;
-              packedOuterPerLoad = 1;
+            }
+
+            if (numRepK >= 2) {
+              tileHeight = elemsPerInstr[0] * 2;
+              packedKDimPerLoad *= 2;
+            } else {
+              tileHeight = elemsPerInstr[0];
             }
 
             // pack scalar to i32.
             auto opsPerChannel = dpasLayout.getOpsPerChannel();
-            opaqueElemPerLane = (elemsPerLane / opsPerChannel) * vBlocks;
+            opaqueElemPerLane = (elemsPerLanePerDotOp / opsPerChannel) * packedOuterDimPerLoad * packedKDimPerLoad;
             laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), opaqueElemPerLane);
           }
 
@@ -581,54 +588,57 @@ struct Load2DOpConversion
           unsigned warpOuterStride = elemsPerInstr[opIdx] * numRepOuter;
           unsigned repKStride = elemsPerInstr[opIdx == 0 ? 1 : 0];
 
-          llvm::outs() << "johnlu load operand" << (opIdx == 1 ? "B" : "A") << " type:" << resultTy << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu tensorShape[0]:" << tensorShape[0]
-                       << " tensorShape[1]:" << tensorShape[1] << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu elemsPerInstr[0]:" << elemsPerInstr[0]
-                       << " elemsPerInstr[1]:" << elemsPerInstr[1] << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu numElems:" << numElems << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu threadsPerWarp:" << threadsPerWarp << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu warpsPerCTA[0]:" << warpsPerCTA[0]
-                       << " warpsPerCTA[1]:" << warpsPerCTA[1] << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu outerDimWarpNum:" << outerDimWarpNum << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu numReps[0]:" << numReps[0]
-                       << " numReps[1]:" << numReps[1] << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu numRepOuter:" << numRepOuter
-                       << " numRepK:" << numRepK << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu repOuterStride:" << repOuterStride << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu warpOuterStride:" << warpOuterStride << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu repKStride:" << repKStride << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu packedOuterPerLoad:" << packedOuterPerLoad << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu opaqueElemPerLane:" << opaqueElemPerLane << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu vBlocks:" << vBlocks << "\n";
-          llvm::outs().flush();
-          llvm::outs() << "johnlu laod2DGenXType:" << laod2DGenXType << "\n";
-          llvm::outs().flush();
+//          llvm::outs() << "johnlu load operand" << (opIdx == 1 ? "B" : "A") << " type:" << resultTy << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu tensorShape[0]:" << tensorShape[0]
+//                       << " tensorShape[1]:" << tensorShape[1] << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu elemsPerInstr[0]:" << elemsPerInstr[0]
+//                       << " elemsPerInstr[1]:" << elemsPerInstr[1] << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu numElems:" << numElems << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu threadsPerWarp:" << threadsPerWarp << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu warpsPerCTA[0]:" << warpsPerCTA[0]
+//                       << " warpsPerCTA[1]:" << warpsPerCTA[1] << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu outerDimWarpNum:" << outerDimWarpNum << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu numReps[0]:" << numReps[0]
+//                       << " numReps[1]:" << numReps[1] << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu numRepOuter:" << numRepOuter
+//                       << " numRepK:" << numRepK << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu repOuterStride:" << repOuterStride << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu warpOuterStride:" << warpOuterStride << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu repKStride:" << repKStride << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu packedOuterDimPerLoad:" << packedOuterDimPerLoad << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu packedKDimPerLoad:" << packedKDimPerLoad << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu opaqueElemPerLane:" << opaqueElemPerLane << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu vBlocks:" << vBlocks << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu tileHeight:" << tileHeight << "\n";
+//          llvm::outs().flush();
+//          llvm::outs() << "johnlu laod2DGenXType:" << laod2DGenXType << "\n";
+//          llvm::outs().flush();
 
           SmallVector<Value> rets;
-          for (int outer = 0; outer < numRepOuter; outer += packedOuterPerLoad) {
-            for (int k = 0; k < numRepK; ++k) {
+          for (int outer = 0; outer < numRepOuter; outer += packedOuterDimPerLoad) {
+            for (int k = 0; k < numRepK; k += packedKDimPerLoad) {
               Value offsetX, offsetY;
               if (opIdx == 0) {
                 // A
                 offsetY = add(mul(outerDimWarpId, i32_val(warpOuterStride)),
                               i32_val(outer * repOuterStride));
                 offsetX = i32_val(k * repKStride);
-
 //                KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d",
 //                              ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY});
               } else {
@@ -655,31 +665,44 @@ struct Load2DOpConversion
                   /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
                   /*elem_size_in_bits*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), eltTy.getIntOrFloatBitWidth()),
                   /*tile_width*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), elemsPerInstr[1]),
-                  /*tile_height*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), elemsPerInstr[0]),
+                  /*tile_height*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), tileHeight),
                   /*v_blocks*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), vBlocks),
                   /*transpose*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
                   /*vnni_transform*/ mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), opIdx == 0 ? /*A vnni=false*/0 : /*B vnni=true*/1));
 #endif
 
-//              for (int i = 0; i < packedOuterPerLoad; i++) {
-//                Type unboundType;
-//                if (opIdx == 0)
-//                  unboundType = LLVM::getFixedVectorType(type::i16Ty(ctx), opaqueElemPerLane / packedOuterPerLoad);
-//                else
-//                  unboundType = LLVM::getFixedVectorType(type::i32Ty(ctx), opaqueElemPerLane / packedOuterPerLoad);
-//                Value loadVal = undef(unboundType);
-//                for (int j = 0; j < opaqueElemPerLane / packedOuterPerLoad; j++) {
-//                  Value loaded = extract_element(load2dOp, i32_val(i));
-//                  loadVal  = insert_element(loadVal, loaded, i32_val(i));
+//              for (int i = 0; i < packedOuterDimPerLoad; i++) {
+//                for (int j = 0; j < packedKDimPerLoad; j++) {
+//                  Type unboundType;
+//                  if (opIdx == 0)
+//                    unboundType = LLVM::getFixedVectorType(
+//                        type::i16Ty(ctx),
+//                        opaqueElemPerLane / packedOuterDimPerLoad / packedKDimPerLoad);
+//                  else
+//                    unboundType = LLVM::getFixedVectorType(
+//                        type::i32Ty(ctx),
+//                        opaqueElemPerLane / packedOuterDimPerLoad / packedKDimPerLoad);
+//                  Value loadVal = undef(unboundType);
+//                  for (int elemIdx = 0; elemIdx < opaqueElemPerLane / packedOuterDimPerLoad / packedKDimPerLoad;
+//                       elemIdx++) {
+//                    Value loaded = extract_element(load2dOp, i32_val(i));
+//                    loadVal = insert_element(loadVal, loaded, i32_val(i));
+//                  }
+//                  Value fp16Vals =
+//                      bitcast(loadVal, LLVM::getFixedVectorType(
+//                                           typeConverter->convertType(eltTy),
+//                                           elemsPerLanePerDotOp));
+//                  if (opIdx == 0)
+//                    KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, outer=%d, k=%d, packedOutDim=%d, packedKDim+%d, val=%f",
+//                                  ValueRange{programId, warpId, laneId,
+//                                             i32_val(outer), i32_val(k),
+//                                             i32_val(i), i32_val(j), fp16Vals});
+//                  if (opIdx == 1)
+//                    KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, outer=%d, k=%d, packedOutDim=%d, packedKDim+%d, val=%f",
+//                                  ValueRange{programId, warpId, laneId,
+//                                             i32_val(outer), i32_val(k),
+//                                             i32_val(i), i32_val(j), fp16Vals});
 //                }
-//                Value fp16Vals = bitcast(
-//                    loadVal,
-//                    LLVM::getFixedVectorType(typeConverter->convertType(eltTy),
-//                                             elemsPerLane));
-//                if (opIdx == 0)
-//                  KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, outer=%d, k=%d, packed=%d, val=%f", ValueRange{programId, warpId, laneId, i32_val(outer), i32_val(k), i32_val(i), fp16Vals});
-//                if (opIdx == 1)
-//                  KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, outer=%d, k=%d, packed=%d, val=%f", ValueRange{programId, warpId, laneId, i32_val(outer), i32_val(k), i32_val(i), fp16Vals});
 //              }
               rets.push_back(load2dOp);
             }
