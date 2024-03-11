@@ -521,6 +521,8 @@ struct Load2DOpConversion
           SmallVector<Value> multiDimWarpId =
               mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, order);
 
+          int64_t numRepOuter = numReps[opIdx];
+          int64_t numRepK = numReps[(opIdx == 0) ? 1 : 0];
           Type laod2DGenXType;
           int64_t opaqueElemPerLane;
           unsigned elemsPerLane;
@@ -546,8 +548,13 @@ struct Load2DOpConversion
             elemsPerLane = product<int64_t>(elemsPerInstr) / product<unsigned>(getThreadsPerWarp(dpasLayout));
 
             // use the block array length 2 to load operand B.
-            vBlocks = 2;
-            packedOuterPerLoad = 2;
+            if (numRepOuter >= 2) {
+              vBlocks = 2;
+              packedOuterPerLoad = 2;
+            } else {
+              vBlocks = 1;
+              packedOuterPerLoad = 1;
+            }
 
             // pack scalar to i32.
             auto opsPerChannel = dpasLayout.getOpsPerChannel();
@@ -555,6 +562,7 @@ struct Load2DOpConversion
             laod2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), opaqueElemPerLane);
           }
 
+          // Load the operand.
           // Outer dim, A is the M, B is the N. Inner dim, the K
           int outerDimWarpNum = std::min<int>(warpsPerCTA[opIdx], ceil(tensorShape[opIdx], elemsPerInstr[opIdx]));
           Value outerDimWarpId = urem(multiDimWarpId[opIdx], i32_val(outerDimWarpNum));
@@ -564,9 +572,6 @@ struct Load2DOpConversion
           std::tie(offsetBaseY, offsetBaseX, height, width, rowStride, colStride, base) =
               getValuesFromBlockPointerStruct(blockPtr, rewriter);
 
-          // Load the operand.
-          int64_t numRepOuter = numReps[opIdx];
-          int64_t numRepK = numReps[(opIdx == 0) ? 1 : 0];
 
           // A warp stride for the replicates.
 //           unsigned repOuterStride = outerDimWarpNum * elemsPerInstr[opIdx];
