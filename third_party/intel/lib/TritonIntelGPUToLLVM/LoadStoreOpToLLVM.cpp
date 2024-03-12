@@ -1,3 +1,4 @@
+#include "TypeConverter.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/IR/Matchers.h"
@@ -294,148 +295,6 @@ struct LoadOpConversion
   }
 };
 
-struct Store2DOpConversion
-    : public ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Store2DOp> {
-  using ConvertTritonGPUOpToLLVMPattern<
-      triton::gpu::intel::Store2DOp>::ConvertTritonGPUOpToLLVMPattern;
-
-  Store2DOpConversion(TritonGPUToLLVMTypeConverter &converter,
-                      PatternBenefit benefit)
-      : ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Store2DOp>(
-            converter, benefit) {}
-
-  std::tuple<Value, Value, Value, Value, Value, Value, Value>
-  getValuesFromBlockPointerStruct(Value blockPointer,
-                                  ConversionPatternRewriter &rewriter) const {
-    SmallVector<Value> elems =
-        unpackLLElements(blockPointer.getLoc(), blockPointer, rewriter);
-
-    return {elems[0], elems[1], elems[2], elems[3],
-            elems[4], elems[5], elems[6]};
-  }
-
-  LogicalResult
-  matchAndRewrite(triton::gpu::intel::Store2DOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op->getLoc();
-    auto typeConverter = getTypeConverter();
-    auto *ctx = rewriter.getContext();
-
-    // original values
-    Value ptr = op.getPtr();
-
-    assert(isTensorPointerType(ptr.getType()) && "must be block pointer");
-
-    Type valueTy = op.getValue().getType();
-    if (auto tensorType = valueTy.dyn_cast<RankedTensorType>()) {
-      if (auto dpasLayout =
-              tensorType.getEncoding().dyn_cast_or_null<DpasEncodingAttr>()) {
-        Type eltTy = tensorType.getElementType();
-        const ArrayRef<int64_t> tensorShape = tensorType.getShape();
-        unsigned numElems = getTotalElemsPerThread(tensorType);
-        auto elemsPerInstr = dpasLayout.getShapeC();
-        const SmallVector<unsigned> warpsPerCTA = dpasLayout.getWarpsPerCTA();
-        SmallVector<int64_t> numReps{
-            std::max<int64_t>(
-                1, mlir::ceil<unsigned>(tensorShape[0],
-                                        elemsPerInstr[0] * warpsPerCTA[0])),
-            std::max<int64_t>(
-                1, mlir::ceil<unsigned>(tensorShape[1],
-                                        elemsPerInstr[1] * warpsPerCTA[1]))};
-        SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
-        int threadsPerWarp = triton::gpu::getWarpSize(dpasLayout);
-
-        Value programId = llGetPid(0, op->getLoc(),
-                                   op->getParentOfType<ModuleOp>(), rewriter);
-
-        Value warpSize = i32_val(threadsPerWarp);
-        Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
-        Value laneId = urem(getThreadId(rewriter, loc), warpSize);
-        SmallVector<Value> multiDimWarpId =
-            mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, order);
-
-        int64_t elemsPerLane =
-            product<unsigned>(elemsPerInstr) / threadsPerWarp;
-        Type store2DGenXType = LLVM::getFixedVectorType(
-            IntegerType::get(ctx, eltTy.getIntOrFloatBitWidth()),
-            elemsPerLane); // make it opaque type.
-
-        Value blockPtr = adaptor.getPtr();
-        Value offsetBaseX, offsetBaseY, width, height, rowStride, colStride,
-            base;
-        std::tie(offsetBaseY, offsetBaseX, height, width, rowStride, colStride,
-                 base) = getValuesFromBlockPointerStruct(blockPtr, rewriter);
-
-        auto vals = unpackLLElements(loc, adaptor.getValue(), rewriter);
-        SmallVector<Value> storededVals;
-        for (auto &val : vals) {
-          Value stored = rewriter.create<LLVM::UndefOp>(
-              loc, LLVM::getFixedVectorType(typeConverter->convertType(eltTy),
-                                            elemsPerLane));
-          for (size_t i = 0; i < elemsPerLane; ++i) {
-            stored = insert_element(stored, val, i32_val(i));
-          }
-          storededVals.push_back(bitcast(stored, store2DGenXType));
-        }
-
-        width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
-        height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
-        rowStride = rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
-        // encoded as bytes size - 1.
-        Value base_width = sub(
-            mul(width, i32_val(eltTy.getIntOrFloatBitWidth() / 8)), i32_val(1));
-        // encoded as rows size - 1.
-        Value base_height = sub(height, i32_val(1));
-        // encoded as bytes size - 1.
-        Value base_pitch =
-            sub(mul(rowStride, i32_val(eltTy.getIntOrFloatBitWidth() / 8)),
-                i32_val(1));
-        for (int m = 0; m < numReps[0]; ++m) {
-          for (int n = 0; n < numReps[1]; ++n) {
-            Value offsetX, offsetY;
-            offsetY = add(mul(multiDimWarpId[0], i32_val(elemsPerInstr[0])),
-                          i32_val(m * numReps[0] * elemsPerInstr[0]));
-            offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
-                          i32_val(n * numReps[1] * elemsPerInstr[1]));
-            offsetX = add(offsetX, offsetBaseX);
-            offsetY = add(offsetY, offsetBaseY);
-#if 1
-            rewriter.create<GENX::Matrix2DBlockStoreOp>(
-                op.getLoc(),
-                /*ptr*/ base,
-                /*base_width*/ base_width,
-                /*base_height*/ base_height,
-                /*base_pitch*/ base_pitch,
-                /*x*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetX),
-                /*y*/ rewriter.create<arith::TruncIOp>(loc, i32_ty, offsetY),
-                /*elem_size_in_bits*/
-                mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32),
-                                       eltTy.getIntOrFloatBitWidth()),
-                /*tile_width*/
-                mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32),
-                                       elemsPerInstr[1]),
-                /*tile_height*/
-                mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32),
-                                       elemsPerInstr[0]),
-                /*v_blocks*/
-                mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 32), 1),
-                /*transpose*/
-                mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
-                /*vnni_transform*/
-                mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1), 0),
-                /*stored_val*/ storededVals[m * numReps[1] + n]);
-#endif
-          }
-        }
-        rewriter.eraseOp(op);
-        return success();
-      }
-    }
-
-    return failure();
-  }
-};
-
 struct Load2DOpConversion
     : public ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Load2DOp> {
   using ConvertTritonGPUOpToLLVMPattern<
@@ -492,8 +351,8 @@ struct Load2DOpConversion
           Value warpSize = i32_val(threadsPerWarp);
           Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
           Value laneId = urem(getThreadId(rewriter, loc), warpSize);
-          SmallVector<Value> multiDimWarpId = delinearize(
-              rewriter, loc, warpId, warpsPerCTA, order);
+          SmallVector<Value> multiDimWarpId =
+              delinearize(rewriter, loc, warpId, warpsPerCTA, order);
 
           Type load2DGenXType;
           int64_t elemsPerLane;
@@ -516,7 +375,8 @@ struct Load2DOpConversion
             // pack scalar to i32.
             auto opsPerChannel = dpasLayout.getOpsPerChannel();
             elemsPerLane = elemsPerLane / opsPerChannel;
-            load2DGenXType = LLVM::getFixedVectorType(type::i32Ty(ctx), elemsPerLane);
+            load2DGenXType =
+                LLVM::getFixedVectorType(type::i32Ty(ctx), elemsPerLane);
           }
 
           // Outer dim, A is the M, B is the N. Inner dim, the K
@@ -632,11 +492,11 @@ struct Load2DOpConversion
                                          opIdx == 0 ? /*A vnni=false*/ 0
                                                     : /*B vnni=true*/ 1));
 #endif
-
               // Value loadVal =
               //     bitcast(load2dOp,
               //             LLVM::getFixedVectorType(
-              //                 typeConverter->convertType(eltTy), elemsPerLane));
+              //                 typeConverter->convertType(eltTy),
+              //                 elemsPerLane));
               // if (opIdx == 0)
               //     KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, offsetX=%d,
               //     offsetY=%d, val=%f", ValueRange{programId, warpId, laneId,
@@ -658,8 +518,10 @@ struct Load2DOpConversion
           }
 
           Type llvmResultStructTy = typeConverter->convertType(op.getType());
-//          Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
-//                                              rewriter, llvmResultStructTy);
+          //          Value resultStruct = packLLElements(loc, typeConverter,
+          //          loadedVals,
+          //                                              rewriter,
+          //                                              llvmResultStructTy);
           Value resultStruct = packLLElements(loc, typeConverter, rets,
                                               rewriter, llvmResultStructTy);
           rewriter.replaceOp(op, {resultStruct});
@@ -791,7 +653,8 @@ struct Store2DOpConversion
   using ConvertTritonGPUOpToLLVMPattern<
       triton::gpu::intel::Store2DOp>::ConvertTritonGPUOpToLLVMPattern;
 
-  Store2DOpConversion(TritonIntelGPUToLLVMTypeConverter &converter, PatternBenefit benefit)
+  Store2DOpConversion(TritonIntelGPUToLLVMTypeConverter &converter,
+                      PatternBenefit benefit)
       : ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Store2DOp>(
             converter, benefit) {}
 
@@ -880,14 +743,21 @@ struct Store2DOpConversion
             offsetX = add(mul(multiDimWarpId[1], i32_val(elemsPerInstr[1])),
                           i32_val(n * numReps[1] * elemsPerInstr[1]));
 
-            Value storeVal = rewriter.create<LLVM::UndefOp>(loc,
-                                                          LLVM::getFixedVectorType(typeConverter->convertType(eltTy), elemsPerLane));
+            Value storeVal = rewriter.create<LLVM::UndefOp>(
+                loc, LLVM::getFixedVectorType(typeConverter->convertType(eltTy),
+                                              elemsPerLane));
             for (size_t i = 0; i < elemsPerLane; ++i) {
-              storeVal = insert_element(storeVal, vals[valOffset++], i32_val(i));
+              storeVal =
+                  insert_element(storeVal, vals[valOffset++], i32_val(i));
             }
-//            KERNEL_PRINTF("A pid=%d, sgid=%d, tid=%d, height=%d, width=%d, rowStride=%d, colStride=%d offsetX=%d, offsetY=%d, baseX=%d, baseY=%d, value=%f",
-//                          ValueRange{programId, warpId, laneId, height, width, rowStride, colStride, offsetX, offsetY, offsetBaseX, offsetBaseY,
-//                                     storeVal});
+            //            KERNEL_PRINTF("A pid=%d, sgid=%d, tid=%d, height=%d,
+            //            width=%d, rowStride=%d, colStride=%d offsetX=%d,
+            //            offsetY=%d, baseX=%d, baseY=%d, value=%f",
+            //                          ValueRange{programId, warpId, laneId,
+            //                          height, width, rowStride, colStride,
+            //                          offsetX, offsetY, offsetBaseX,
+            //                          offsetBaseY,
+            //                                     storeVal});
             offsetX = add(offsetX, offsetBaseX);
             offsetY = add(offsetY, offsetBaseY);
 #if 1
