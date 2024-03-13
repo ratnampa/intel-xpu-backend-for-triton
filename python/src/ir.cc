@@ -1562,8 +1562,9 @@ void init_triton_ir(py::module &&m) {
              if (haveDump) {
                auto printingFlags = OpPrintingFlags();
                printingFlags.elideLargeElementsAttrs(16);
-               printingFlags.enableDebugInfo();
+               //  printingFlags.enableDebugInfo();
                auto printAlways = [](Pass *, Operation *) { return true; };
+               auto printNever = [](Pass *, Operation *) { return false; };
                self.enableIRPrinting(
                    /*shouldPrintBeforePass=*/printAlways,
                    /*shouldPrintAfterPass=*/printAlways,
