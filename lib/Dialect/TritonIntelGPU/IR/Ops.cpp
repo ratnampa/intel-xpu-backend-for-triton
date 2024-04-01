@@ -10,8 +10,7 @@ namespace gpu {
 namespace intel {
 
 void Load2DOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
-}
+                                           MLIRContext *context) {}
 
 static Type getLoadOpResultType(OpBuilder &builder, Type ptrType) {
   auto ptrTensorType = ptrType.dyn_cast<RankedTensorType>();
@@ -24,30 +23,17 @@ static Type getLoadOpResultType(OpBuilder &builder, Type ptrType) {
 }
 
 void Load2DOp::build(OpBuilder &builder, OperationState &state, Value ptr,
-                     CacheModifier cache, EvictionPolicy evict, bool isVolatile) {
-  return Load2DOp::build(builder, state, ptr, {}, cache, evict, isVolatile);
+                     CacheModifier cache, EvictionPolicy evict,
+                     bool isVolatile) {
+  Load2DOp::build(builder, state, ptr, /*padding=*/std::nullopt, cache, evict,
+                  isVolatile);
 }
 
 void Load2DOp::build(OpBuilder &builder, OperationState &state, Value ptr,
-                     std::optional<PaddingOption> padding,
-                     CacheModifier cache, EvictionPolicy evict, bool isVolatile) {
+                     std::optional<PaddingOption> padding, CacheModifier cache,
+                     EvictionPolicy evict, bool isVolatile) {
   // Operands
   state.addOperands(ptr);
-//  if (mask) {
-//    state.addOperands(mask);
-//    if (other) {
-//      state.addOperands(other);
-//    }
-//  }
-
-  // Attributes
-//  state.addAttribute(
-//      getOperandSegmentSizesAttrName(state.name),
-//      builder.getDenseI32ArrayAttr({1, (mask ? 1 : 0), (other ? 1 : 0)}));
-//  if (boundaryCheck.has_value()) {
-//    state.addAttribute(getBoundaryCheckAttrName(state.name),
-//                       builder.getDenseI32ArrayAttr(boundaryCheck.value()));
-//  }
   if (padding.has_value()) {
     state.addAttribute(
         getPaddingAttrName(state.name),
@@ -76,8 +62,7 @@ void Load2DOp::getEffects(
 }
 
 void Store2DOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                          MLIRContext *context) {
-}
+                                            MLIRContext *context) {}
 
 } // namespace intel
 } // namespace gpu

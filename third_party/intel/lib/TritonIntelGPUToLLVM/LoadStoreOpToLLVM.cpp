@@ -1,8 +1,8 @@
-#include "TypeConverter.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "triton/Conversion/TritonGPUToLLVM/TypeConverter.h"
 #include "triton/Tools/Sys/GetEnv.hpp"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -300,7 +300,7 @@ struct Load2DOpConversion
   using ConvertTritonGPUOpToLLVMPattern<
       triton::gpu::intel::Load2DOp>::ConvertTritonGPUOpToLLVMPattern;
 
-  Load2DOpConversion(TritonIntelGPUToLLVMTypeConverter &converter,
+  Load2DOpConversion(TritonGPUToLLVMTypeConverter &converter,
                      PatternBenefit benefit)
       : ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Load2DOp>(converter,
                                                                       benefit) {
@@ -345,8 +345,8 @@ struct Load2DOpConversion
           SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
           int threadsPerWarp = triton::gpu::getWarpSize(dpasLayout);
 
-          Value programId = llGetPid(0, op->getLoc(),
-                                     op->getParentOfType<ModuleOp>(), rewriter);
+          Value programId = LLVM::Intel::llGetPid(
+              op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), 0);
 
           Value warpSize = i32_val(threadsPerWarp);
           Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
@@ -463,7 +463,7 @@ struct Load2DOpConversion
               height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
               rowStride =
                   rewriter.create<arith::TruncIOp>(loc, i32_ty, rowStride);
-              auto load2dOp = rewriter.create<GENX::Matrix2DBlockLoadOp>(
+              auto load2dOp = rewriter.create<TritonGEN::Matrix2DBlockLoadOp>(
                   op.getLoc(), load2DGenXType, /*ptr*/ base, /*base_width*/
                   sub(mul(width, i32_val(eltTy.getIntOrFloatBitWidth() / 8)),
                       i32_val(1)),
@@ -653,7 +653,7 @@ struct Store2DOpConversion
   using ConvertTritonGPUOpToLLVMPattern<
       triton::gpu::intel::Store2DOp>::ConvertTritonGPUOpToLLVMPattern;
 
-  Store2DOpConversion(TritonIntelGPUToLLVMTypeConverter &converter,
+  Store2DOpConversion(TritonGPUToLLVMTypeConverter &converter,
                       PatternBenefit benefit)
       : ConvertTritonGPUOpToLLVMPattern<triton::gpu::intel::Store2DOp>(
             converter, benefit) {}
@@ -699,8 +699,8 @@ struct Store2DOpConversion
         SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
         int threadsPerWarp = triton::gpu::getWarpSize(dpasLayout);
 
-        Value programId = llGetPid(0, op->getLoc(),
-                                   op->getParentOfType<ModuleOp>(), rewriter);
+        Value programId = LLVM::Intel::llGetPid(
+            op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), 0);
 
         Value warpSize = i32_val(threadsPerWarp);
         Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
@@ -761,7 +761,7 @@ struct Store2DOpConversion
             offsetX = add(offsetX, offsetBaseX);
             offsetY = add(offsetY, offsetBaseY);
 #if 1
-            rewriter.create<GENX::Matrix2DBlockStoreOp>(
+            rewriter.create<TritonGEN::Matrix2DBlockStoreOp>(
                 op.getLoc(),
                 /*ptr*/ base,
                 /*base_width*/ base_width,

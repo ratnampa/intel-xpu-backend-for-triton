@@ -125,6 +125,8 @@ class XPUBackend(BaseBackend):
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         passes.ttir.add_convert_to_ttgpuir(pm, opt.num_warps, opt.threads_per_warp, opt.num_ctas, capability)
+        # intel.passes.ttgpuir.add_materialize_block_pointer(pm)
+        passes.ttir.add_rewrite_tensor_pointer(pm)
         # optimize TTGIR
         passes.ttgpuir.add_coalesce(pm)
         # TODO(Qingyi): Move PlanCTAPass to the front of CoalescePass
@@ -142,8 +144,6 @@ class XPUBackend(BaseBackend):
         passes.ttgpuir.add_remove_layout_conversions(pm)
         passes.ttgpuir.add_reduce_data_duplication(pm)
         passes.ttgpuir.add_reorder_instructions(pm)
-        intel.passes.ttgpuir.add_tritonintelgpu_materialize_block_pointer(pm)
-        passes.ttir.add_rewrite_tensor_pointer(pm)
         passes.common.add_cse(pm)
         passes.common.add_symbol_dce(pm)
         passes.common.add_canonicalizer(pm)

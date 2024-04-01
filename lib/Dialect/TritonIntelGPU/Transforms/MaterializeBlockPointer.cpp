@@ -8,7 +8,6 @@
 #include "llvm/Support/Debug.h"
 #include <numeric>
 
-
 using namespace mlir;
 namespace tt = mlir::triton;
 namespace ttg = mlir::triton::gpu;
@@ -18,7 +17,8 @@ namespace ttig = mlir::triton::gpu::intel;
 #include "triton/Dialect/TritonIntelGPU/Transforms/Passes.h.inc"
 
 static void
-getForwardSliceImpl(Operation *op, Operation *def, SetVector<Operation *> *forwardSlice, bool inclusive,
+getForwardSliceImpl(Operation *op, Operation *def,
+                    SetVector<Operation *> *forwardSlice, bool inclusive,
                     const SliceOptions::TransitiveFilter &filter = nullptr) {
   if (!op)
     return;
@@ -38,7 +38,8 @@ getForwardSliceImpl(Operation *op, Operation *def, SetVector<Operation *> *forwa
       if (initArg.getDefiningOp() == def) {
         for (Operation *iterUserOp : iterArg.getUsers()) {
           if (forwardSlice->count(iterUserOp) == 0)
-            getForwardSliceImpl(iterUserOp, iterArg.getDefiningOp(), forwardSlice, inclusive, filter);
+            getForwardSliceImpl(iterUserOp, iterArg.getDefiningOp(),
+                                forwardSlice, inclusive, filter);
         }
       }
     }
@@ -47,18 +48,20 @@ getForwardSliceImpl(Operation *op, Operation *def, SetVector<Operation *> *forwa
       for (Block &block : region)
         for (Operation &blockOp : block)
           if (forwardSlice->count(&blockOp) == 0)
-            getForwardSliceImpl(&blockOp, nullptr, forwardSlice, inclusive, filter);
+            getForwardSliceImpl(&blockOp, nullptr, forwardSlice, inclusive,
+                                filter);
   }
   for (Value result : op->getResults())
     for (Operation *userOp : result.getUsers())
       if (forwardSlice->count(userOp) == 0)
-          getForwardSliceImpl(userOp, op, forwardSlice, inclusive, filter);
+        getForwardSliceImpl(userOp, op, forwardSlice, inclusive, filter);
 
   forwardSlice->insert(op);
 }
 
 // inclusive: include the frontier in the slice.
-static void getForwardSlice(Operation *op, SetVector<Operation *> *forwardSlice, bool inclusive,
+static void getForwardSlice(Operation *op, SetVector<Operation *> *forwardSlice,
+                            bool inclusive,
                             const ForwardSliceOptions &options = {}) {
   getForwardSliceImpl(op, nullptr, forwardSlice, inclusive, options.filter);
   if (!options.inclusive) {
@@ -94,9 +97,9 @@ public:
   TensorPointerInfo(const TensorPointerInfo &other) = default;
 
   TensorPointerInfo(Value base, const SmallVector<Value> &shape,
-               const SmallVector<Value> &strides,
-               const SmallVector<Value> &offsets,
-               const ArrayRef<int64_t> &tensorShape)
+                    const SmallVector<Value> &strides,
+                    const SmallVector<Value> &offsets,
+                    const ArrayRef<int64_t> &tensorShape)
       : base(base), shape(shape), strides(strides), offsets(offsets),
         tensorShape(tensorShape) {
     assert(shape.size() == strides.size() && shape.size() == offsets.size() &&
@@ -105,7 +108,8 @@ public:
 };
 
 struct TritonIntelGPUMaterializeBlockPointerPass
-    : public TritonIntelGPUMaterializeBlockPointerBase<TritonIntelGPUMaterializeBlockPointerPass> {
+    : public TritonIntelGPUMaterializeBlockPointerBase<
+          TritonIntelGPUMaterializeBlockPointerPass> {
 
 public:
   TritonIntelGPUMaterializeBlockPointerPass() = default;
@@ -124,7 +128,8 @@ public:
       auto tensorShape = tensorType.getShape();
 
       auto fastChangeStride = strides.back();
-      if (auto stride = dyn_cast<arith::ConstantOp>(fastChangeStride.getDefiningOp())) {
+      if (auto stride =
+              dyn_cast<arith::ConstantOp>(fastChangeStride.getDefiningOp())) {
         if (auto strideInt = stride.getValue().dyn_cast<IntegerAttr>()) {
           if (strideInt.getInt() == 1) {
             makeTensorPtrWorkList.push_back(op);
@@ -135,16 +140,17 @@ public:
 
     // map from loadOp to layout information.
     DenseMap<tt::LoadOp, TensorPointerInfo> loadOpWorkSet;
-    for (auto& makeTensorOp: makeTensorPtrWorkList) {
+    for (auto &makeTensorOp : makeTensorPtrWorkList) {
       SetVector<Operation *> forwardSlice;
       auto filter = [](Operation *op) {
         // stop on the load ops.
         return !isa<tt::LoadOp>(op);
       };
       // The customized getForwardSlice from the mlir::getForwardSlice
-      ::getForwardSlice(makeTensorOp.getOperation(), &forwardSlice, true, {filter});
+      ::getForwardSlice(makeTensorOp.getOperation(), &forwardSlice, true,
+                        {filter});
 
-      for(auto& op: forwardSlice) {
+      for (auto &op : forwardSlice) {
         if (auto loadOp = dyn_cast<tt::LoadOp>(op)) {
           if (loadOpWorkSet.count(loadOp) == 0) {
             // Save information
@@ -157,12 +163,14 @@ public:
       }
     }
 
-    for (auto& iter: loadOpWorkSet) {
-      tt::LoadOp& loadOp = iter.getFirst();
+    for (auto &iter : loadOpWorkSet) {
+      tt::LoadOp &loadOp = iter.getFirst();
       OpBuilder builder(loadOp);
       auto newResult = builder.create<ttig::Load2DOp>(
-          loadOp.getLoc(), loadOp.getResult().getType(), loadOp.getPtr(), triton::PaddingOptionAttr::get(loadOp.getContext(), triton::PaddingOption::PAD_ZERO), loadOp.getCache(),
-          loadOp.getEvict(), loadOp.getIsVolatile());
+          loadOp.getLoc(), loadOp.getResult().getType(), loadOp.getPtr(),
+          triton::PaddingOptionAttr::get(loadOp.getContext(),
+                                         triton::PaddingOption::PAD_ZERO),
+          loadOp.getCache(), loadOp.getEvict(), loadOp.getIsVolatile());
       loadOp->getResult(0).replaceAllUsesWith(newResult);
       loadOp.erase();
     }
@@ -170,7 +178,8 @@ public:
     SmallVector<mlir::triton::StoreOp> storeOpWorkList;
     getOperation()->walk([&](mlir::triton::StoreOp op) {
       auto ptr = op.getPtr();
-      if (auto makeTensorOp = dyn_cast<tt::MakeTensorPtrOp>(ptr.getDefiningOp())) {
+      if (auto makeTensorOp =
+              dyn_cast<tt::MakeTensorPtrOp>(ptr.getDefiningOp())) {
         auto ptrType = makeTensorOp.getType().cast<triton::PointerType>();
         auto tensorType = ptrType.getPointeeType().cast<RankedTensorType>();
 
@@ -181,7 +190,8 @@ public:
         auto tensorShape = tensorType.getShape();
 
         auto fastChangeStride = strides.back();
-        if (auto stride = dyn_cast<arith::ConstantOp>(fastChangeStride.getDefiningOp())) {
+        if (auto stride =
+                dyn_cast<arith::ConstantOp>(fastChangeStride.getDefiningOp())) {
           if (auto strideInt = stride.getValue().dyn_cast<IntegerAttr>()) {
             if (strideInt.getInt() == 1) {
               storeOpWorkList.push_back(op);
@@ -191,12 +201,11 @@ public:
       }
     });
 
-
-    for (auto& storeOp: storeOpWorkList) {
+    for (auto &storeOp : storeOpWorkList) {
       OpBuilder builder(storeOp);
       auto newResult = builder.create<ttig::Store2DOp>(
-          storeOp.getLoc(), storeOp.getPtr(), storeOp.getValue(), storeOp.getCache(),
-          storeOp.getEvict());
+          storeOp.getLoc(), storeOp.getPtr(), storeOp.getValue(),
+          storeOp.getCache(), storeOp.getEvict());
       storeOp.erase();
     }
   }
@@ -206,8 +215,7 @@ private:
 
 } // anonymous namespace
 
-
 std::unique_ptr<Pass>
-mlir::createTritonIntelGPUMaterializeBlockPointerPass() {
+mlir::triton::gpu::intel::createTritonIntelGPUMaterializeBlockPointerPass() {
   return std::make_unique<TritonIntelGPUMaterializeBlockPointerPass>();
 }

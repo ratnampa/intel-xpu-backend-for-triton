@@ -8,6 +8,7 @@ include "triton/Dialect/TritonGPU/IR/TritonGPUTypes.td"
 include "triton/Dialect/TritonIntelGPU/IR/TritonIntelGPUAttrDefs.td"
 include "triton/Dialect/TritonIntelGPU/IR/TritonIntelGPUDialect.td"
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 //
@@ -52,14 +53,14 @@ def TTIG_PrefetchOp : TTIG_Op<"prefetch", []> {
   }];
 }
 
-def TTIG_Load2DOp : TTIG_Op<"load_2d",
-                      [SameLoadStoreOperandsAndResultShape,
-                       SameLoadStoreOperandsAndResultEncoding,
-                       DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-                       TypesMatchWith<"infer ptr type from result type",
-                                      "result", "ptr", "$_self",
-                                      "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">]> {
-    let summary = "intel load 2d";
+def TTIG_Load2DOp : TTIG_Op<"load_2d", [
+  SameLoadStoreOperandsAndResultShape,
+  SameLoadStoreOperandsAndResultEncoding,
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  TypesMatchWith<"result matches ptr type", "ptr", "result", "getPointeeType($_self)">
+]> {
+    let summary = "Intel load 2d block";
 
     let arguments = (ins AnyTypeOf<[TT_TensorPtr]>:$ptr,
                          OptionalAttr<TT_PaddingOptionAttr>:$padding,
@@ -99,14 +100,14 @@ def TTIG_Load2DOp : TTIG_Op<"load_2d",
     let hasCanonicalizer = 1;
 }
 
-def TTIG_Store2DOp : TTIG_Op<"store_2d",
-                       [SameLoadStoreOperandsShape,
-                        SameLoadStoreOperandsEncoding,
-                        MemoryEffects<[MemWrite<GlobalMemory>]>,
-                        TypesMatchWith<"infer ptr type from value type",
-                                       "value", "ptr", "$_self",
-                                       "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">]> {
-    let summary = "intel store 2d";
+def TTIG_Store2DOp : TTIG_Op<"store_2d", [
+  SameLoadStoreOperandsShape,
+  SameLoadStoreOperandsEncoding,
+  MemoryEffects<[MemWrite<GlobalMemory>]>,
+  TypesMatchWith<"value type matches ptr type", "ptr", "value",
+                 "getPointeeType($_self)">
+]> {
+    let summary = "Intel store 2d block";
 
     let arguments = (ins AnyTypeOf<[TT_TensorPtr]>:$ptr, TT_Type:$value,
                          DefaultValuedAttr<TT_CacheModifierAttr, "triton::CacheModifier::NONE">:$cache,

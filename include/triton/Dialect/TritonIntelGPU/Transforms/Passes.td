@@ -129,7 +129,7 @@ def TritonIntelGPUMaterializeBlockPointer : Pass<"tritonintelgpu-materialize-blo
   let description = [{
   }];
 
-  let constructor = "mlir::createTritonIntelGPUMaterializeBlockPointerPass()";
+  let constructor = "mlir::triton::gpu::intel::createTritonIntelGPUMaterializeBlockPointerPass()";
 
   let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
                            "mlir::triton::gpu::intel::TritonIntelGPUDialect",
