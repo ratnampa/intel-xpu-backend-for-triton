@@ -232,7 +232,7 @@ def TT_LoadOp : TT_Op<"load", [
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
   DeclareOpInterfaceMethods<InferTypeOpInterface>,
-  TypesMatchWith<"result matches ptr type", "ptr", "result", "getPointeeType($_self)">,
+  TypesMatchWith<"result matches ptr type", "result", "ptr", "$_self", "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">,
   TypesMatchWith<"mask type matches ptr type", "ptr", "mask", "getI1SameShape(getPointeeType($_self))",
                  "($_op.getOperands().size() <= 1) || std::equal_to<>()">,
   TypesMatchWith<"other matches ptr type", "ptr", "other", "getPointeeType($_self)",
