@@ -11,6 +11,78 @@
 namespace mlir {
 namespace triton {
 
+// Parser & printer for assembly forms
+ParseResult LoadOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse operands
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
+  SMLoc allOperandLoc = parser.getCurrentLocation();
+  if (parser.parseOperandList(allOperands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+    return failure();
+
+  // Operand types
+  SmallVector<Type> operandTypes;
+
+  // Parse `optional(type(ptr)) -> type(result)`
+  Type ptrType, resultType;
+  if (parser.parseType(resultType))
+    return failure();
+  if (parser.parseOptionalArrow().succeeded()) {
+    ptrType = resultType;
+    if (parser.parseType(resultType))
+      return failure();
+    operandTypes.push_back(ptrType);
+    result.addTypes(resultType);
+  } else {
+    operandTypes.push_back(getPointerTypeSameShape(resultType));
+    result.addTypes(resultType);
+  }
+
+  // Determine `mask` and `other`
+  int hasMask = 0, hasOther = 0;
+  if (allOperands.size() >= 2) {
+    operandTypes.push_back(getI1SameShape(resultType));
+    hasMask = 1;
+  }
+  if (allOperands.size() >= 3) {
+    operandTypes.push_back(resultType);
+    hasOther = 1;
+  }
+
+  if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
+                             result.operands))
+    return failure();
+
+  // Deduce `operandSegmentSizes` from the number of the operands
+  auto operandSegmentSizesAttrName =
+      LoadOp::getOperandSegmentSizesAttrName(result.name);
+  result.addAttribute(
+      operandSegmentSizesAttrName,
+      parser.getBuilder().getDenseI32ArrayAttr({1, hasMask, hasOther}));
+
+  return success();
+}
+
+void LoadOp::print(OpAsmPrinter &printer) {
+  printer << " ";
+  printer << getOperation()->getOperands();
+
+  // `operandSegmentSizes` can be deduced, so we don't print it.
+  printer.printOptionalAttrDict(getOperation()->getAttrs(),
+                                {getOperandSegmentSizesAttrName()});
+
+  // `type(ptr) -> type(result)`
+  printer << " : ";
+  // `type(ptr)` is optional during parsing, we only print for tensor pointers
+  if (isTensorPointerType(getPtr().getType())) {
+    printer.printStrippedAttrOrType(getPtr().getType());
+    printer << " -> ";
+  }
+  printer.printStrippedAttrOrType(getResult().getType());
+}
+
+
+
 void LoadOp::getEffects(
     SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
         &effects) {
@@ -83,9 +155,47 @@ void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
       padding.has_value()
           ? PaddingOptionAttr::get(builder.getContext(), padding.value())
           : PaddingOptionAttr();
-  LoadOp::build(builder, state, ptr, mask, other,
+  // Result type
+  Type resultType = getLoadOpResultType(builder, ptr.getType());
+  LoadOp::build(builder, state, resultType, ptr, mask, other,
                 builder.getDenseI32ArrayAttr(boundaryCheck), paddingAttr, cache,
                 evict, isVolatile);
+#if 0
+
+
+  // Operands
+  state.addOperands(ptr);
+  if (mask) {
+    state.addOperands(mask);
+    if (other) {
+      state.addOperands(other);
+    }
+  }
+
+  // Attributes
+  state.addAttribute(
+      getOperandSegmentSizesAttrName(state.name),
+      builder.getDenseI32ArrayAttr({1, (mask ? 1 : 0), (other ? 1 : 0)}));
+  if (boundaryCheck.has_value()) {
+    state.addAttribute(getBoundaryCheckAttrName(state.name),
+                       builder.getDenseI32ArrayAttr(boundaryCheck.value()));
+  }
+  if (padding.has_value()) {
+    state.addAttribute(
+        getPaddingAttrName(state.name),
+        PaddingOptionAttr::get(builder.getContext(), padding.value()));
+  }
+  state.addAttribute(getCacheAttrName(state.name),
+                     CacheModifierAttr::get(builder.getContext(), cache));
+  state.addAttribute(getEvictAttrName(state.name),
+                     EvictionPolicyAttr::get(builder.getContext(), evict));
+  state.addAttribute(getIsVolatileAttrName(state.name),
+                     builder.getBoolAttr(isVolatile));
+
+  // Result type
+  Type resultType = getLoadOpResultType(builder, ptr.getType());
+  state.addTypes({resultType});
+#endif
 }
 
 // load(ptr, splat(1), ...)        -> load(ptr, ...)
