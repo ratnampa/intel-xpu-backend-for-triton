@@ -231,24 +231,15 @@ def TT_LoadOp : TT_Op<"load", [
   SameLoadStoreOperandsAndResultEncoding,
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-  //DeclareOpInterfaceMethods<InferTypeOpInterface>,
-  //TypesMatchWith<"result matches ptr type", "result", "ptr", "$_self", "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">,
-  //TypesMatchWith<"result matches ptr type", "ptr", "result", "getPointeeType($_self)",
-  //              "true || std::equal_to<>()">,
-  //TypesMatchWith<"mask type matches ptr type", "ptr", "mask", "getI1SameShape(getPointeeType($_self))",
-  //               "($_op.getOperands().size() <= 1) || std::equal_to<>()">,
-  //TypesMatchWith<"other matches ptr type", "ptr", "other", "getPointeeType($_self)",
-  //               "($_op.getOperands().size() <= 2) || std::equal_to<>()">
-
-                       TypesMatchWith<"infer ptr type from result type",
-                                      "result", "ptr", "$_self",
-                                      "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">,
-                       TypesMatchWith<"infer mask type from result type or none",
-                                      "result", "mask", "getI1SameShape($_self)",
-                                      "($_op.getOperands().size() <= 1) || std::equal_to<>()">,
-                       TypesMatchWith<"infer other type from result type or none",
-                                      "result", "other", "$_self",
-                                      "($_op.getOperands().size() <= 2) || std::equal_to<>()">
+  TypesMatchWith<"infer ptr type from result type",
+                 "result", "ptr", "$_self",
+                 "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">,
+  TypesMatchWith<"infer mask type from result type or none",
+                 "result", "mask", "getI1SameShape($_self)",
+                 "($_op.getOperands().size() <= 1) || std::equal_to<>()">,
+  TypesMatchWith<"infer other type from result type or none",
+                 "result", "other", "$_self",
+                 "($_op.getOperands().size() <= 2) || std::equal_to<>()">
 ]> {
     let summary = "Load from a tensor of pointers or from a tensor pointer";
 
@@ -300,10 +291,11 @@ def TT_StoreOp : TT_Op<"store", [
   SameLoadStoreOperandsShape,
   SameLoadStoreOperandsEncoding,
   MemoryEffects<[MemWrite<GlobalMemory>]>,
-  TypesMatchWith<"value type matches ptr type", "ptr", "value",
-                 "getPointeeType($_self)">,
-  TypesMatchWith<"mask type matches ptr type", "ptr", "mask",
-                 "getI1SameShape(getPointeeType($_self))",
+  TypesMatchWith<"infer ptr type from value type",
+                 "value", "ptr", "$_self",
+                 "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">,
+  TypesMatchWith<"infer mask type from value type",
+                 "value", "mask", "getI1SameShape($_self)",
                  "($_op.getOperands().size() <= 2) || std::equal_to<>()">
 ]> {
     let summary = "Store by a tensor of pointers or by a tensor pointer";
@@ -329,17 +321,9 @@ def TT_StoreOp : TT_Op<"store", [
                        "triton::EvictionPolicy":$evict)>
     ];
 
-    // Specify cacheModifier and evictionPolicy explicitly, instead of leaving
-    // them in attr-dict, because this way their values get printed as strings,
-    // rather than as opaque integers.
-    //
-    // Note there are no commas between mask, cacheModifier, and evictionPolicy,
-    // due to limitations in MLIR's asm parser.
-    let assemblyFormat = [{
-      $ptr `,` $value (`,` $mask^)?
-      oilist(`cacheModifier` `=` $cache | `evictionPolicy` `=` $evict)
-      attr-dict `:` type($ptr)
-    }];
+    // Format: `tt.store operands attrs : optional(type(ptr)), type(val)
+    // We need an extra `optional(type(ptr))` for inferring the tensor pointer type with back compatibility
+    let hasCustomAssemblyFormat = 1;
 
     let hasCanonicalizer = 1;
 }

@@ -57,8 +57,9 @@ def TTIG_Load2DOp : TTIG_Op<"load_2d", [
   SameLoadStoreOperandsAndResultShape,
   SameLoadStoreOperandsAndResultEncoding,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-  TypesMatchWith<"result matches ptr type", "ptr", "result", "getPointeeType($_self)">
+  TypesMatchWith<"infer ptr type from result type",
+                 "result", "ptr", "$_self",
+                 "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">
 ]> {
     let summary = "Intel load 2d block";
 
@@ -104,8 +105,9 @@ def TTIG_Store2DOp : TTIG_Op<"store_2d", [
   SameLoadStoreOperandsShape,
   SameLoadStoreOperandsEncoding,
   MemoryEffects<[MemWrite<GlobalMemory>]>,
-  TypesMatchWith<"value type matches ptr type", "ptr", "value",
-                 "getPointeeType($_self)">
+  TypesMatchWith<"infer ptr type from value type",
+                 "value", "ptr", "$_self",
+                 "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">
 ]> {
     let summary = "Intel store 2d block";
 

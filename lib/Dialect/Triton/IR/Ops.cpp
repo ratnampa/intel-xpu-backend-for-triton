@@ -81,8 +81,6 @@ void LoadOp::print(OpAsmPrinter &printer) {
   printer.printStrippedAttrOrType(getResult().getType());
 }
 
-
-
 void LoadOp::getEffects(
     SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
         &effects) {
@@ -91,6 +89,59 @@ void LoadOp::getEffects(
   if (getIsVolatile())
     effects.emplace_back(MemoryEffects::Write::get(),
                          SideEffects::DefaultResource::get());
+}
+
+ParseResult StoreOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse operands
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
+  SMLoc allOperandLoc = parser.getCurrentLocation();
+  if (parser.parseOperandList(allOperands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+    return failure();
+
+  // Operand types
+  SmallVector<Type> operandTypes;
+
+  // Parse `optional(type(ptr)), type(val)`
+  // Pointer type
+  Type ptrType, valType;
+  if (parser.parseType(valType))
+    return failure();
+  if (parser.parseOptionalComma().succeeded()) {
+    ptrType = valType;
+    if (parser.parseType(valType))
+      return failure();
+    operandTypes.push_back(ptrType);
+  } else {
+    operandTypes.push_back(getPointerTypeSameShape(valType));
+  }
+
+  // Value type
+  operandTypes.push_back(valType);
+
+  // Determine `mask`
+  if (allOperands.size() >= 3)
+    operandTypes.push_back(getI1SameShape(valType));
+
+  if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
+                             result.operands))
+    return failure();
+  return success();
+}
+
+void StoreOp::print(OpAsmPrinter &printer) {
+  printer << " ";
+  printer << getOperation()->getOperands();
+  printer.printOptionalAttrDict(getOperation()->getAttrs(), /*elidedAttrs=*/{});
+
+  // `type(ptr), type(value)`
+  printer << " : ";
+  // `type(ptr)` is optional during parsing, we only print for tensor pointers
+  if (isTensorPointerType(getPtr().getType())) {
+    printer.printStrippedAttrOrType(getPtr().getType());
+    printer << ", ";
+  }
+  printer.printStrippedAttrOrType(getValue().getType());
 }
 
 } // namespace triton
