@@ -466,18 +466,6 @@ void LayoutPropagation::rewriteRegion(Region &region) {
         rewriteReduceToScalar(&op);
       } else if (auto assertOp = dyn_cast<AssertOp>(&op)) {
         rewriteAssertOp(assertOp);
-      } else if (auto storeOp = dyn_cast<StoreOp>(&op)) {
-          auto ptr = storeOp.getPtr();
-          if (isTensorPointerType(ptr.getType())) {
-            auto value = storeOp.getValue();
-            auto it = layouts.find(value);
-            if (it != layouts.end()) {
-              Attribute encoding = *(it->second.encodings.begin());
-              Value newOperand = getValueAs(value, encoding);
-              storeOp.setOperand(1, newOperand);
-              continue;
-          }
-        }
       } else {
         // If we don't need to rewrite the op we still need to remap the
         // operands.
@@ -1039,8 +1027,8 @@ void LayoutRematerialization::backwardRematerialization(
   // we don't handle conversions to DotOperandEncodingAttr
   // this is a heuristic to accommodate fused attention
   RankedTensorType targetType = convertOp.getType();
-  if (targetType.getEncoding().isa<DotOperandEncodingAttr>())
-    return;
+  //if (targetType.getEncoding().isa<DotOperandEncodingAttr>())
+  //  return;
   Value oldV = convertOp->getOperand(0);
   LDBG("check backward remat with source " << oldV << " encoding "
                                            << targetType.getEncoding());
