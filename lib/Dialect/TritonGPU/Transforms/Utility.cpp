@@ -1,6 +1,7 @@
 #include "triton/Analysis/Utility.h"
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "triton/Analysis/AxisInfo.h"
@@ -84,6 +85,13 @@ SmallVector<unsigned, 4> argSort(const SmallVector<int64_t> &arr) {
   return ret;
 }
 
+RankedTensorType getTensorType(const Value &val) {
+  auto valType = val.getType();
+  if (valType.isa<PointerType>())
+    valType = valType.cast<PointerType>().getPointeeType();
+  return valType.cast<RankedTensorType>();
+}
+
 Value getMemAccessPtr(Operation *op) {
   if (auto ld = dyn_cast<triton::LoadOp>(op))
     return ld.getPtr();
@@ -109,7 +117,7 @@ unsigned getElementBitWidth(RankedTensorType type) {
 unsigned getNumElementsPerThread(Operation *op, SmallVector<unsigned> order,
                                  ModuleAxisInfoAnalysis &axisInfoAnalysis) {
   Value val = getMemAccessPtr(op);
-  auto ty = cast<RankedTensorType>(val.getType());
+  auto ty = getTensorType(val);
   auto shapePerCTA = triton::gpu::getShapePerCTA(ty);
   AxisInfo &valInfo = *axisInfoAnalysis.getAxisInfo(val);
   unsigned elemNumBits = getElementBitWidth(ty);

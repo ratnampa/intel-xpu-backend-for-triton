@@ -24,7 +24,7 @@ struct CoalescePass : public TritonGPUCoalesceBase<CoalescePass> {
                        int numWarps, int threadsPerWarp,
                        llvm::MapVector<Operation *, Attribute> &layoutMap) {
     Value ptr = getMemAccessPtr(op);
-    auto refTensorType = cast<RankedTensorType>(ptr.getType());
+    auto refTensorType = getTensorType(ptr);
 
     LDBG("Considering op: " << *op);
     LLVM_DEBUG({
@@ -32,12 +32,22 @@ struct CoalescePass : public TritonGPUCoalesceBase<CoalescePass> {
       axisInfoAnalysis.getAxisInfo(ptr)->print(llvm::dbgs());
       llvm::dbgs() << "\n";
     });
-
-    auto contiguity = axisInfoAnalysis.getAxisInfo(ptr)->getContiguity();
-    SmallVector<unsigned> order = argSort(contiguity);
-    LDBG("order=[" << triton::join(order, ", ") << "]");
+    SmallVector<unsigned> order;
+    if (ptr.getType().isa<PointerType>()) {
+      auto makeTensorPtr = getMakeTensorPtrOp(ptr);
+      std::copy(makeTensorPtr.getOrder().begin(),
+                makeTensorPtr.getOrder().end(), std::back_inserter(order));
+    } else {
+      // Normal cases
+      auto contiguity = axisInfoAnalysis.getAxisInfo(ptr)->getContiguity();
+      order = argSort(contiguity);
+    }
 
     auto matchesShape = [&refTensorType](const Value &val) {
+      if (val.getType() == refTensorType) {
+        return true;
+      }
+
       auto rttType = dyn_cast<RankedTensorType>(val.getType());
       return rttType && rttType.getShape() == refTensorType.getShape();
     };
