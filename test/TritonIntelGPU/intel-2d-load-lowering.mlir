@@ -1,5 +1,8 @@
 // RUN: triton-opt %s -split-input-file --intel-allocate-shared-memory --convert-triton-intel-gpu-to-llvm | FileCheck %s
 
+
+// CHECK: llvm.func spir_funccc @llvm.genx.GenISA.LSC2DBlockRead.v8i32(i64, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i32) -> vector<8xi32>
+// CHECK: llvm.func spir_funccc @llvm.genx.GenISA.LSC2DBlockRead.v8i16(i64, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i32) -> vector<8xi16>
 #blocked = #triton_gpu.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 16], warpsPerCTA = [2, 4], order = [1, 0]}>
 #mma = #triton_intel_gpu.dpas<{repeatCount = 8, systolicDepth = 8, executionSize = 16, opsPerChan = 2, threadsPerWarp = 16, warpsPerCTA = [4, 2], A = [8, 16], B = [16, 16], C = [8, 16]}>
 module attributes {"triton_gpu.compute-capability" = 2 : i32, "triton_gpu.num-ctas" = 1 : i32, "triton_gpu.num-warps" = 8 : i32, "triton_gpu.threads-per-warp" = 16 : i32} {
@@ -20,7 +23,9 @@ module attributes {"triton_gpu.compute-capability" = 2 : i32, "triton_gpu.num-ct
     %6 = tt.make_tensor_ptr %arg1, [%1, %4], [%5, %c1_i64], [%c0_i32, %c0_i32] {order = array<i32: 1, 0>} : <tensor<16x64xf16, #triton_gpu.dot_op<{opIdx = 1, parent = #mma}>>>
     %7 = tt.advance %3, [%c64_i32, %c-16_i32] : <tensor<64x16xf16, #triton_gpu.dot_op<{opIdx = 0, parent = #mma}>>>
     %8 = tt.advance %7, [%c-64_i32, %c16_i32] : <tensor<64x16xf16, #triton_gpu.dot_op<{opIdx = 0, parent = #mma}>>>
+    // CHECK-COUNT-2: llvm.call @llvm.genx.GenISA.LSC2DBlockRead.v8i16({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}) : (i64, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i32) -> vector<8xi16>
     %9 = triton_intel_gpu.load_2d %8 {cache = 1 : i32, evict = 1 : i32, isVolatile = false, padding = 1 : i32} : !tt.ptr<tensor<64x16xf16, #triton_gpu.dot_op<{opIdx = 0, parent = #mma}>>> -> tensor<64x16xf16, #triton_gpu.dot_op<{opIdx = 0, parent = #mma}>>
+    // CHECK-COUNT-2: llvm.call @llvm.genx.GenISA.LSC2DBlockRead.v8i32({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}}) : (i64, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i32) -> vector<8xi32>
     %10 = triton_intel_gpu.load_2d %6 {cache = 1 : i32, evict = 1 : i32, isVolatile = false, padding = 1 : i32} : !tt.ptr<tensor<16x64xf16, #triton_gpu.dot_op<{opIdx = 1, parent = #mma}>>> -> tensor<16x64xf16, #triton_gpu.dot_op<{opIdx = 1, parent = #mma}>>
     %11 = tt.dot %9, %10, %cst, inputPrecision = tf32 : tensor<64x16xf16, #triton_gpu.dot_op<{opIdx = 0, parent = #mma}>> * tensor<16x64xf16, #triton_gpu.dot_op<{opIdx = 1, parent = #mma}>> -> tensor<64x64xf32, #mma>
     %12 = triton_gpu.convert_layout %11 : tensor<64x64xf32, #mma> -> tensor<64x64xf32, #blocked>
