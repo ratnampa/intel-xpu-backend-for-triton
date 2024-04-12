@@ -311,7 +311,8 @@ struct Load2DOpConversion
                                   ConversionPatternRewriter &rewriter) const {
     SmallVector<Value> elems =
         unpackLLElements(blockPointer.getLoc(), blockPointer, rewriter);
-
+    // Only support 2D matrix for now.
+    assert(elems.size() == 7 && "unexpected number of values unpacked from pointer of tensor");
     return {elems[0], elems[1], elems[2], elems[3],
             elems[4], elems[5], elems[6]};
   }
@@ -333,7 +334,7 @@ struct Load2DOpConversion
       if (auto dotLayout =
               tensorType.getEncoding().dyn_cast<DotOperandEncodingAttr>()) {
         if (auto dpasLayout =
-                dotLayout.getParent().dyn_cast_or_null<DpasEncodingAttr>()) {
+                dotLayout.getParent().dyn_cast<DpasEncodingAttr>()) {
 
           auto opIdx = dotLayout.getOpIdx();
           Type eltTy = tensorType.getElementType();
@@ -344,9 +345,9 @@ struct Load2DOpConversion
           const SmallVector<unsigned> warpsPerCTA = dpasLayout.getWarpsPerCTA();
           SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
           int threadsPerWarp = triton::gpu::getWarpSize(dpasLayout);
-
-          Value programId = LLVM::Intel::llGetPid(
-              op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), 0);
+//
+//          Value programId = LLVM::Intel::llGetPid(
+//              op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), 0);
 
           Value warpSize = i32_val(threadsPerWarp);
           Value warpId = udiv(getThreadId(rewriter, loc), warpSize);
@@ -456,9 +457,6 @@ struct Load2DOpConversion
               }
               offsetX = add(offsetX, offsetBaseX);
               offsetY = add(offsetY, offsetBaseY);
-#if 0
-              auto load2dOp = rewriter.create<LLVM::UndefOp>(op.getLoc(), load2DGenXType);
-#else
               width = rewriter.create<arith::TruncIOp>(loc, i32_ty, width);
               height = rewriter.create<arith::TruncIOp>(loc, i32_ty, height);
               rowStride =
@@ -491,12 +489,12 @@ struct Load2DOpConversion
                   mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 1),
                                          opIdx == 0 ? /*A vnni=false*/ 0
                                                     : /*B vnni=true*/ 1));
-#endif
-              // Value loadVal =
-              //     bitcast(load2dOp,
-              //             LLVM::getFixedVectorType(
-              //                 typeConverter->convertType(eltTy),
-              //                 elemsPerLane));
+
+               Value loadVal =
+                   bitcast(load2dOp,
+                           LLVM::getFixedVectorType(
+                               typeConverter->convertType(eltTy),
+                               elemsPerLane));
               // if (opIdx == 0)
               //     KERNEL_PRINTF("A pid=%d sgid=%d, tid=%d, offsetX=%d,
               //     offsetY=%d, val=%f", ValueRange{programId, warpId, laneId,
@@ -505,7 +503,7 @@ struct Load2DOpConversion
               //     KERNEL_PRINTF("B pid=%d sgid=%d, tid=%d, offsetX=%d,
               //     offsetY=%d, val=%f", ValueRange{programId, warpId, laneId,
               //     offsetX, offsetY, loadVal});
-              rets.push_back(load2dOp);
+              rets.push_back(loadVal);
             }
           }
 
@@ -518,11 +516,7 @@ struct Load2DOpConversion
           }
 
           Type llvmResultStructTy = typeConverter->convertType(op.getType());
-          //          Value resultStruct = packLLElements(loc, typeConverter,
-          //          loadedVals,
-          //                                              rewriter,
-          //                                              llvmResultStructTy);
-          Value resultStruct = packLLElements(loc, typeConverter, rets,
+          Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
                                               rewriter, llvmResultStructTy);
           rewriter.replaceOp(op, {resultStruct});
 
