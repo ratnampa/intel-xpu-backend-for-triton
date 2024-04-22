@@ -181,6 +181,87 @@ emitOffsetForDpasLayoutPerCTA(const DpasEncodingAttr &dpasLayout,
 }
 
 static SmallVector<SmallVector<unsigned>>
+emitOffsetForDotOpLayout(const DotOperandEncodingAttr &dotLayout,
+                         RankedTensorType type) {
+
+  if (auto dpasLayout = dotLayout.getParent().dyn_cast<DpasEncodingAttr>()) {
+    ArrayRef<int64_t> shape = type.getShape();
+    SmallVector<SmallVector<unsigned>> offsets;
+    auto shapePerCTA = triton::gpu::getShapePerCTA(type);
+
+    auto opIdx = dotLayout.getOpIdx();
+    SmallVector<int64_t> numReps =
+        dpasLayout.getDPASRepetitions(shapePerCTA, opIdx);
+
+    SmallVector<unsigned> warpShape;
+    if (opIdx == 0) {
+      warpShape = dpasLayout.getShapeA();
+    } else {
+      warpShape = dpasLayout.getShapeB();
+    }
+
+    unsigned warpSize = triton::gpu::getWarpSize(dpasLayout);
+    unsigned numElemPerInstPerThread = product<unsigned>(warpShape) / warpSize;
+
+    unsigned systolicDepth = dpasLayout.getSystolicDepth();
+    unsigned repeatCount = dpasLayout.getRepeatCount();
+    unsigned executionSize = dpasLayout.getExecutionSize();
+    unsigned opsPerChannel = dpasLayout.getOpsPerChannel();
+
+    unsigned rowsPerWarp, numElemPerInstPerRowPerThread;
+    switch (opIdx) {
+    case 0: {
+      assert((opsPerChannel == 4 || opsPerChannel == 2 || opsPerChannel == 1) &&
+             "invalid opsPerChannel number.");
+      SmallVector<unsigned> shapeA = dpasLayout.getShapeA();
+      // Unlike the operand B, to pack the value to i16 for scalar bit width
+      // <=16.
+      unsigned packedOpsPerLane = opsPerChannel == 4 ? 2 : 1;
+      unsigned packedColNum = shapeA[1] / packedOpsPerLane;
+      if (warpSize < packedColNum) {
+        llvm::report_fatal_error(
+            "DpasEncodingAttr sub-group size could not "
+            "be smaller than the threads required per row for A operand.");
+      }
+      rowsPerWarp = warpSize / packedColNum;
+      numElemPerInstPerRowPerThread = packedOpsPerLane;
+    } break;
+    case 1: {
+      if (warpSize < executionSize) {
+        llvm::report_fatal_error(
+            "DpasEncodingAttr sub-group size could not "
+            "be smaller than the execution size for B operand.");
+      }
+      rowsPerWarp = warpSize / executionSize;
+      rowsPerWarp = rowsPerWarp * opsPerChannel;
+      numElemPerInstPerRowPerThread = 1;
+    } break;
+    }
+
+    auto shapePerCTATile = triton::gpu::getShapePerCTATile(dotLayout);
+    int64_t numRepOuter = numReps[opIdx];
+    int64_t numRepK = numReps[(opIdx == 0) ? 1 : 0];
+    for (int dimOuter = 0; dimOuter < numRepOuter; ++dimOuter)
+      for (int k = 0; k < numRepK; ++k)
+        for (unsigned elemId = 0; elemId < numElemPerInstPerThread; ++elemId) {
+          uint32_t repRowIndex =
+              shapePerCTATile[0] * (opIdx == 0 ? dimOuter : k);
+          uint32_t repColIndex =
+              shapePerCTATile[1] * (opIdx == 0 ? k : dimOuter);
+          uint32_t elemRowIndex =
+              (elemId / numElemPerInstPerRowPerThread) * rowsPerWarp;
+          uint32_t elemColIndex = elemId % numElemPerInstPerRowPerThread;
+          offsets.push_back(
+              {repRowIndex + elemRowIndex, repColIndex + elemColIndex});
+        }
+
+    return offsets;
+  } else {
+    llvm_unreachable("unsupported parent layout in emitOffsetForDotOpLayout");
+  }
+}
+
+static SmallVector<SmallVector<unsigned>>
 emitOffsetForDpasLayout(const DpasEncodingAttr &dpasLayout,
                         RankedTensorType type) {
   ArrayRef<int64_t> shape = type.getShape();
@@ -199,6 +280,89 @@ emitOffsetForDpasLayout(const DpasEncodingAttr &dpasLayout,
 // -----------------------------------------------------------------------
 // Dpas layout indices
 // -----------------------------------------------------------------------
+static SmallVector<Value>
+emitBaseIndexForDotOpLayout(Location loc, RewriterBase &rewriter,
+                            const DotOperandEncodingAttr &dotLayout,
+                            RankedTensorType type) {
+
+  if (auto dpasLayout = dotLayout.getParent().dyn_cast<DpasEncodingAttr>()) {
+    Value threadId = getThreadId(rewriter, loc);
+    unsigned warpSize = triton::gpu::getWarpSize(dpasLayout);
+    Value warpId = udiv(threadId, i32_val(warpSize));
+    Value laneId = urem(threadId, i32_val(warpSize));
+
+    const SmallVector<unsigned> warpsPerCTA = dpasLayout.getWarpsPerCTA();
+    SmallVector<unsigned> order = triton::gpu::getOrder(dpasLayout);
+    auto shapePerCTA = triton::gpu::getShapePerCTA(type);
+
+    SmallVector<unsigned> warpShape;
+    auto opIdx = dotLayout.getOpIdx();
+    if (opIdx == 0) {
+      warpShape = dpasLayout.getShapeA();
+    } else {
+      warpShape = dpasLayout.getShapeB();
+    }
+    SmallVector<int64_t> numReps =
+        dpasLayout.getDPASRepetitions(shapePerCTA, opIdx);
+
+    SmallVector<Value> multiDimWarpId =
+        mlir::LLVM::delinearize(rewriter, loc, warpId, warpsPerCTA, order);
+
+    Value rowWarpId =
+        urem(multiDimWarpId[0],
+             i32_val(mlir::ceil<unsigned>(shapePerCTA[0], warpShape[0])));
+    Value colWarpId =
+        urem(multiDimWarpId[1],
+             i32_val(mlir::ceil<unsigned>(shapePerCTA[1], warpShape[1])));
+    Value rowWarpOffset = mul(rowWarpId, i32_val(warpShape[0]));
+    Value colWarpOffset = mul(colWarpId, i32_val(warpShape[1]));
+
+    // Compute the 2-dim coordinates of the first element in the warp operated
+    // own by this thread.
+    unsigned systolicDepth = dpasLayout.getSystolicDepth();
+    unsigned repeatCount = dpasLayout.getRepeatCount();
+    unsigned executionSize = dpasLayout.getExecutionSize();
+    unsigned opsPerChannel = dpasLayout.getOpsPerChannel();
+
+    Value laneRowIndex, laneColIndex;
+    switch (opIdx) {
+    case 0: {
+      assert((opsPerChannel == 4 || opsPerChannel == 2 || opsPerChannel == 1) &&
+             "invalid opsPerChannel number.");
+      SmallVector<unsigned> shapeA = dpasLayout.getShapeA();
+      // Unlike the operand B, to pack the value to i16 for scalar bit width
+      // <=16.
+      unsigned packedOpsPerLane = opsPerChannel == 4 ? 2 : 1;
+      unsigned packedColNum = shapeA[1] / packedOpsPerLane;
+      if (warpSize < packedColNum) {
+        llvm::report_fatal_error(
+            "DpasEncodingAttr sub-group size could not "
+            "be smaller than the threads required per row for A operand.");
+      }
+      laneRowIndex = udiv(laneId, i32_val(packedColNum));
+      laneColIndex = urem(laneId, i32_val(packedColNum));
+      laneColIndex = mul(laneColIndex, i32_val(packedOpsPerLane));
+    } break;
+    case 1: {
+      if (warpSize < executionSize) {
+        llvm::report_fatal_error(
+            "DpasEncodingAttr sub-group size could not "
+            "be smaller than the execution size for B operand.");
+      }
+      laneRowIndex = udiv(laneId, i32_val(executionSize));
+      laneRowIndex = mul(laneRowIndex, i32_val(opsPerChannel));
+      laneColIndex = urem(laneId, i32_val(executionSize));
+    } break;
+    }
+
+    SmallVector<Value> multiDimBase = {add(laneRowIndex, rowWarpOffset),
+                                       add(laneColIndex, colWarpOffset)};
+    return multiDimBase;
+  } else {
+    llvm_unreachable(
+        "unsupported parent layout in emitBaseIndexForDotOpLayout");
+  }
+}
 
 static SmallVector<Value>
 emitBaseIndexForDpasLayout(Location loc, RewriterBase &rewriter,
@@ -332,6 +496,8 @@ emitBaseIndexForLayout(Location loc, RewriterBase &rewriter, Attribute layout,
     result.erase(result.begin() + sliceLayout.getDim());
     // CTAOffset has been added in emitBaseIndexForLayout of parentLayout
     return result;
+  } else if (auto dotLayout = layout.dyn_cast<DotOperandEncodingAttr>()) {
+    result = emitBaseIndexForDotOpLayout(loc, rewriter, dotLayout, type);
   } else {
     llvm_unreachable("unsupported emitBaseIndexForLayout");
   }
@@ -349,6 +515,9 @@ static SmallVector<SmallVector<unsigned>>
 emitOffsetForLayout(Attribute layout, RankedTensorType type) {
   if (auto dpasLayout = layout.dyn_cast<DpasEncodingAttr>()) {
     return emitOffsetForDpasLayout(dpasLayout, type);
+  }
+  if (auto dotLayout = layout.dyn_cast<DotOperandEncodingAttr>()) {
+    return emitOffsetForDotOpLayout(dotLayout, type);
   }
   if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>())
     return ::intel::emitOffsetForSliceLayout(sliceLayout, type);
