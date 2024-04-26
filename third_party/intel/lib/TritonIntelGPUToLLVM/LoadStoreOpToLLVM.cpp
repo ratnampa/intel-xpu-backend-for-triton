@@ -287,7 +287,7 @@ struct LoadOpConversion
     }
 
     SmallVector<Value> loadedVals;
-    for (auto &ret : rets) {
+    for (Value &ret : rets) {
       VectorType loadTy = cast<VectorType>(unpackType);
       for (size_t i = 0; i < loadTy.getNumElements(); ++i) {
         Value loaded = extract_element(ret, i32_val(i));
