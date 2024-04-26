@@ -177,11 +177,11 @@ struct LoadOpConversion
     if (layoutEncoding == nullptr)
       return failure();
     DotOperandEncodingAttr dotLayout =
-        layoutEncoding.dyn_cast<DotOperandEncodingAttr>();
+        dyn_cast<DotOperandEncodingAttr>(layoutEncoding);
     if (dotLayout == nullptr)
       return failure();
     DpasEncodingAttr dpasLayout =
-        dotLayout.getParent().dyn_cast<DpasEncodingAttr>();
+        dyn_cast<DpasEncodingAttr>(dotLayout.getParent());
     if (dpasLayout == nullptr)
       return failure();
 
@@ -288,7 +288,7 @@ struct LoadOpConversion
 
     SmallVector<Value> loadedVals;
     for (auto &ret : rets) {
-      VectorType loadTy = unpackType.cast<VectorType>();
+      VectorType loadTy = cast<VectorType>(unpackType);
       for (size_t i = 0; i < loadTy.getNumElements(); ++i) {
         Value loaded = extract_element(ret, i32_val(i));
         loadedVals.push_back(loaded);
