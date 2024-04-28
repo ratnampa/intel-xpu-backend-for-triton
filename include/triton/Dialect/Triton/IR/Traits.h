@@ -37,6 +37,8 @@ LogicalResult verifySameLoadStoreOperandsShape(Operation *op);
 
 LogicalResult verifySameLoadStoreOperandsAndResultShape(Operation *op);
 
+bool verifyLoadStorePointerAndValueType(Type valueType, Type ptrType);
+
 } // namespace impl
 
 template <class ConcreteType>

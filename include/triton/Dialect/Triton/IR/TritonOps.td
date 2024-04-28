@@ -231,12 +231,12 @@ def TT_LoadOp : TT_Op<"load", [
   SameLoadStoreOperandsAndResultEncoding,
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-  TypesMatchWith<"result matches ptr type", "ptr", "result", "getPointeeType($_self)">,
-  TypesMatchWith<"mask type matches ptr type", "ptr", "mask", "getI1SameShape(getPointeeType($_self))",
-                 "($_op.getOperands().size() <= 1) || std::equal_to<>()">,
-  TypesMatchWith<"other matches ptr type", "ptr", "other", "getPointeeType($_self)",
-                 "($_op.getOperands().size() <= 2) || std::equal_to<>()">
+  TypesMatchWith<"infer ptr type from result type", "result", "ptr", "$_self",
+                 "mlir::OpTrait::impl::verifyLoadStorePointerAndValueType">,
+  TypesMatchWith<"infer mask type from result type or none", "result", "mask", "getI1SameShape($_self)",
+                "($_op.getOperands().size() <= 1) || std::equal_to<>()">,
+  TypesMatchWith<"infer other type from result type or none", "result", "other", "$_self",
+                "($_op.getOperands().size() <= 2) || std::equal_to<>()">
 ]> {
     let summary = "Load from a tensor of pointers or from a tensor pointer";
 
@@ -276,27 +276,8 @@ def TT_LoadOp : TT_Op<"load", [
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile)>
     ];
 
-    // Specify `cacheModifier` and `evictionPolicy` explicitly in the
-    // assemblyFormat instead of as part of attr-dict so that they get printed
-    // as strings rather than opaque integers.
-    //
-    // Note there's no comma between `other` and `cacheModifier` and between
-    // `cacheModifier` and `evictionPolicy`.  This is due to an apparent
-    // limitation in the MLIR custom-format parser.  In oilist, the initial
-    // keywords of each clause have to be unique, so they can't be `,`.
-    //
-    // Even if we gave up on order-independence and used vanilla optional
-    // clauses, the format (`,` `foo` `=` $foo^)? (`,` `bar` `=` $bar^)?  will
-    // not match the string ", bar = 0" because after the initial comma (first
-    // token of the first optional clause) we expect to see "foo".
-    let assemblyFormat = [{
-      $ptr (`,` $mask^)? (`,` $other^)?
-      oilist(
-        `cacheModifier` `=` $cache |
-        `evictionPolicy` `=` $evict
-      )
-      attr-dict `:` type($ptr)
-    }];
+    // Format: `tt.load operands attrs : optional(type(ptr)) -> type(result)`
+    let hasCustomAssemblyFormat = 1;
 
     let hasCanonicalizer = 1;
 }
