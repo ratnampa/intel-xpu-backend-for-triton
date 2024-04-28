@@ -95,6 +95,7 @@ class XPUBackend(BaseBackend):
     def parse_options(self, opts) -> Any:
         args = {k: opts[k] for k in XPUOptions.__dataclass_fields__.keys() if k in opts}
         args["allow_fp8e4nv"] = True
+        args["threads_per_warp"] = 16
         return XPUOptions(**args)
 
     def pack_metadata(self, metadata):
@@ -108,7 +109,7 @@ class XPUBackend(BaseBackend):
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         passes.common.add_inliner(pm)
-        passes.ttir.add_rewrite_tensor_pointer(pm)
+        # passes.ttir.add_rewrite_tensor_pointer(pm)
         passes.ttir.add_combine(pm)
         passes.common.add_canonicalizer(pm)
         passes.ttir.add_reorder_broadcast(pm)
@@ -130,20 +131,20 @@ class XPUBackend(BaseBackend):
         pm.enable_debug()
         passes.ttir.add_convert_to_ttgpuir(pm, opt.num_warps, opt.threads_per_warp, opt.num_ctas, device_arch)
         # optimize TTGIR
-        passes.ttgpuir.add_coalesce(pm)
         # TODO(Qingyi): Move PlanCTAPass to the front of CoalescePass
         intel.passes.ttnvgpuir.add_plan_cta(pm, cluster_info)
-        passes.ttgpuir.add_remove_layout_conversions(pm)
+        intel.passes.ttgpuir.add_remove_layout_conversions(pm)
         passes.ttgpuir.add_optimize_thread_locality(pm)
         intel.passes.ttgpuir.add_accelerate_matmul(pm, device_arch)
-        passes.ttgpuir.add_remove_layout_conversions(pm)
+        intel.passes.ttgpuir.add_remove_layout_conversions(pm)
         if opt.optimize_epilogue:
             passes.ttgpuir.add_optimize_epilogue(pm)
+        intel.passes.ttgpuir.add_rewrite_tensor_pointer(pm, device_arch)
         passes.ttgpuir.add_optimize_dot_operands(pm)
         passes.common.add_cse(pm)
         passes.ttgpuir.add_prefetch(pm)
         passes.ttgpuir.add_optimize_dot_operands(pm)
-        passes.ttgpuir.add_remove_layout_conversions(pm)
+        intel.passes.ttgpuir.add_remove_layout_conversions(pm)
         passes.ttgpuir.add_reduce_data_duplication(pm)
         passes.ttgpuir.add_reorder_instructions(pm)
         passes.common.add_cse(pm)

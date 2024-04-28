@@ -100,8 +100,8 @@ import triton.language as tl
 @triton.autotune(
     configs=[
         # FIXME: Once tl.dot uses DPAS put back the workload commented out.
-        #triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=4,
-        #              num_warps=4),
+        triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=4,
+                     num_warps=4),
         triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4,
                       num_warps=4),
         triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4,
@@ -220,17 +220,62 @@ def matmul(a, b):
 #
 # Still we can test our matrix multiplication with block pointers against a native torch implementation (i.e., cuBLAS).
 
-torch.manual_seed(0)
-a = torch.randn((512, 512), device='xpu', dtype=torch.float16)
-b = torch.randn((512, 512), device='xpu', dtype=torch.float16)
-triton_output = matmul(a, b)
-torch_output = torch.matmul(a, b)
-print(f"triton_output={triton_output}")
-print(f"torch_output={torch_output}")
+# torch.manual_seed(0)
+# a = torch.randn((512, 512), device='xpu', dtype=torch.float16)
+# b = torch.randn((512, 512), device='xpu', dtype=torch.float16)
+# triton_output = matmul(a, b)
+# torch_output = torch.matmul(a, b)
+# print(f"triton_output={triton_output}")
+# print(f"torch_output={torch_output}")
 
 # Note: the torch.matmul and Triton implementations uses different
 # algorithms so we need to adjust tolerance.
-if torch.allclose(triton_output, torch_output, atol=1e-4, rtol=1e-3):
-    print("✅ Triton and Torch match")
-else:
-    print("❌ Triton and Torch differ")
+# if torch.allclose(triton_output, torch_output, atol=1e-4, rtol=1e-3):
+#     print("✅ Triton and Torch match")
+# else:
+#     print("❌ Triton and Torch differ")
+
+@triton.testing.perf_report(
+    triton.testing.Benchmark(
+        # argument names to use as an x-axis for the plot
+        x_names=['M', 'N', 'K'],
+        x_vals=[          
+            # [5120, 5120, 4096],
+            # [4, 4096, 512],
+            [128 * i, 128 * i, 128 * i] for i in [4, 8, 10, 16, 20, 30, 32, 40]
+        ],  # different possible values for `x_name`
+        line_arg='provider',
+        # argument name whose value corresponds to a different line in the plot
+        # possible values for `line_arg``
+        line_vals=['triton'],
+        # label name for the lines
+        line_names=["Triton"],
+        # line styles
+        #styles=[('green', '-'), ('green', '--'), ('blue', '-'), ('blue', '--')],
+        ylabel="TFLOPS",  # label name for the y-axis
+        plot_name="matmul-performance",
+        # name for the plot. Used also as a file name for saving the plot.
+        args={},
+    ))
+def benchmark(M, N, K, provider):
+    a = torch.randn((M, K), device='xpu', dtype=torch.float16)
+    b = torch.randn((K, N), device='xpu', dtype=torch.float16)
+    quantiles = [0.5, 0.2, 0.8]
+
+    # calculate tflops for oneDNN kernel 
+    def calculate_tflops(ms):
+        return 2 * M * N * K * 1e-12 / (ms * 1e-3)
+    
+    if provider == 'onednn':
+        ms, min_ms, max_ms = triton.testing.do_bench(lambda: torch.matmul(a, b), rep=100, quantiles=quantiles,
+                                                     fast_flush=False)
+        print(f"oneDNN Peak TFlops {calculate_tflops(min_ms)}")                                                
+    if provider == 'triton':
+        ms, min_ms, max_ms = triton.testing.do_bench(lambda: matmul(a, b), rep=100, quantiles=quantiles,
+                                                    fast_flush=False)
+
+    return calculate_tflops(ms), calculate_tflops(min_ms), calculate_tflops(max_ms)
+
+
+benchmark.run(show_plots=True, print_data=True)
+
