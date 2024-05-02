@@ -44,7 +44,7 @@ runs:
 
     - name: Load wheels from cache
       id: wheels-cache
-      uses: ./${{ inputs.triton_repo_path }}.github/actions/load
+      uses: ./${{ inputs.triton_repo_path }}/.github/actions/load
       with:
         path: ~/wheels
         key: wheels-py${{ inputs.python_version }}-${{ steps.run_id.outputs.run_id }}
