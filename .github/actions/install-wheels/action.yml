@@ -20,6 +20,9 @@ inputs:
     default: 'pip install'
   python_version:
     required: true
+  triton_repo_path:
+    description: Path to the Triton repository if it is checked out in another repo CI
+    default: .
 
 runs:
   using: "composite"
@@ -41,7 +44,7 @@ runs:
 
     - name: Load wheels from cache
       id: wheels-cache
-      uses: ./.github/actions/load
+      uses: ./${{ inputs.triton_repo_path }}.github/actions/load
       with:
         path: ~/wheels
         key: wheels-py${{ inputs.python_version }}-${{ steps.run_id.outputs.run_id }}
@@ -68,7 +71,7 @@ runs:
 
     - name: Save wheels to cache
       if: ${{ steps.wheels-cache.outputs.status == 'miss' }}
-      uses: ./.github/actions/save
+      uses: ./${{ inputs.triton_repo_path }}/.github/actions/save
       with:
         path: ${{ steps.wheels-cache.outputs.path }}
         dest: ${{ steps.wheels-cache.outputs.dest }}
