@@ -8,10 +8,8 @@ Users can pass command-line arguments to specify matrix dimensions and iteration
 """
 
 import argparse
-import time
 
 import torch
-import intel_extension_for_pytorch
 import triton
 import triton.language as tl
 import triton.tools.experimental_descriptor
@@ -515,6 +513,7 @@ def torch_matmul(a, b):
         c = torch.matmul(a, b)
     return c
 
+
 @benchmark_suit.perf_report(
     benchmark_suit.Benchmark(
         # argument names to use as an x-axis for the plot
@@ -577,8 +576,9 @@ def validate(M, N, K, dtype):
     if tma_persistent_result is not None:
         # print("torch_result:", torch_result.to(torch.float16).cpu())
         # print("tma_persistent_result:", tma_persistent_result.to(torch.float16).cpu())
-        naive_vs_tma_persistent = "✅" if torch.allclose(torch_result.to(torch.float16).cpu(),
-                                                        tma_persistent_result.to(torch.float16).cpu(), atol=1.0) else "❌"
+        naive_vs_tma_persistent = "✅" if torch.allclose(
+            torch_result.to(torch.float16).cpu(),
+            tma_persistent_result.to(torch.float16).cpu(), atol=1.0) else "❌"
     # if device_tma_persistent_result is not None:
     #     naive_vs_device_tma_persistent = "✅" if torch.allclose(cublas_result.to(
     #         torch.float16), device_tma_persistent_result.to(torch.float16), atol=1.0) else "❌"
