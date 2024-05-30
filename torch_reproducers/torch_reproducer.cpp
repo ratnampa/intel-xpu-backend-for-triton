@@ -415,8 +415,8 @@ at::Tensor launchKernel(sycl::queue* stream, sycl::kernel* kernel, const torch::
 }
 
 int main() {
-  auto a = load_tensor("../../a.pt");
-  auto b = load_tensor("../../b.pt");
+  auto a = load_tensor("a.pt");
+  auto b = load_tensor("b.pt");
   std::cout << "Tensor a: " << a.sizes() << ", " << a.scalar_type() << std::endl;
   std::cout << "Tensor b: " << b.sizes() << ", " << b.scalar_type() << std::endl;
 
@@ -439,7 +439,6 @@ int main() {
   std::cout << "Loaded kernel with " << n_regs << " registers and " << n_spills << " register spills." << std::endl;
 
   auto output = launchKernel(&q, kernel, a, b);
-  std::cout << "Kernel return output: " << output[1] << std::endl;
-
+  std::cout << "Kernel return output: " << output[53][508] << std::endl;
   write_tensor("cpp_outs.pt", output);
 }

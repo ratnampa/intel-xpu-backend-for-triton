@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 project(reproducer)
 
 set(CMAKE_CXX_COMPILER icpx)
+set(BUILD_SHARED_LIBS OFF)
 
 list(APPEND CMAKE_PREFIX_PATH "/opt/intel/oneapi/tbb/latest/lib/cmake/tbb/")
 
