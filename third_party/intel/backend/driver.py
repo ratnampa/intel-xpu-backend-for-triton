@@ -27,6 +27,7 @@ def compile_module_from_src(src, name):
     cache_path = cache.get_file(f"{name}.so")
     if cache_path is None:
         with tempfile.TemporaryDirectory() as tmpdir:
+            print("### src_path ###")
             src_path = os.path.join(tmpdir, "main.cpp")
             with open(src_path, "w") as f:
                 f.write(src)
@@ -383,10 +384,13 @@ class XPULauncher(object):
         constants = {cst_key(key): value for key, value in constants.items()}
         signature = {cst_key(key): value for key, value in src.signature.items()}
         src = make_launcher(constants, signature, ids)
+        with open('/tmp/src', 'w') as f:
+            f.write(src)
         mod = compile_module_from_src(src, "__triton_launcher")
         self.launch = mod.launch
 
     def __call__(self, *args, **kwargs):
+        import pdb; pdb.set_trace()
         self.launch(*args, **kwargs)
 
 

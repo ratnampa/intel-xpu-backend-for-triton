@@ -39,6 +39,13 @@ auto load_tensor(const std::string& filename) {
   return torch::pickle_load(bytes).toTensor();
 }
 
+void write_tensor(const std::string& filename, torch::Tensor& tensor) {
+  std::ofstream outs(filename, std::ios::binary | std::ios::trunc);
+  auto output_bytes = torch::pickle_save(tensor);
+
+  outs.write(output_bytes.data(), output_bytes.size());
+}
+
 std::vector<char> read_spirv(const std::string& filename) {
   std::ifstream ins(filename, std::ios::binary);
   if (!ins.is_open()) {
@@ -312,12 +319,31 @@ static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ, i
     }
     assert(num_params == expected_num_params && "number of kernel param not matched");
 
-    sycl::buffer<float> a_buf(reinterpret_cast<float*>(arg0), sycl::range<1>(256*160));
-    sycl::buffer<float> b_buf(reinterpret_cast<float*>(arg1), sycl::range<1>(160*512));
-    sycl::buffer<float> out_buf(reinterpret_cast<float*>(arg2), sycl::range<1>(256*512));
-    
+    // sycl::buffer<float> a_buf(reinterpret_cast<float*>(arg0), sycl::range<1>(256*160));
+    // sycl::buffer<float> b_buf(reinterpret_cast<float*>(arg1), sycl::range<1>(160*512));
+    // sycl::buffer<float> out_buf(reinterpret_cast<float*>(arg2), sycl::range<1>(256*512));
+    auto a_dev = sycl::malloc_device<float>(256*160, stream);
+    auto b_dev = sycl::malloc_device<float>(160*512, stream);
+    auto output_dev = sycl::malloc_device<float>(256*512, stream);
+
+    params[0] = &a_dev;
+    params[1] = &b_dev;
+    params[2] = &output_dev;
+
+    stream.submit([&](sycl::handler &cgh){
+      cgh.memcpy(a_dev, arg0, 256*160*sizeof(float));
+    });
+    stream.submit([&](sycl::handler &cgh){
+      cgh.memcpy(b_dev, arg1, 160*512*sizeof(float));
+    });
+    stream.submit([&](sycl::handler &cgh){
+      cgh.memcpy(output_dev, arg2, 256*512*sizeof(float));
+    });
+    stream.wait();
+
     // Submit the imported kernel.
     auto cgf = [&](sycl::handler &cgh) {
+    #if 0
         // create accessors for sycl buffers and override params 
       sycl::accessor a_acc(a_buf, cgh, sycl::read_only);
       params[0] = reinterpret_cast<void*>(const_cast<float*>(&a_acc[0]));
@@ -327,6 +353,7 @@ static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ, i
 
       sycl::accessor out_acc(out_buf, cgh, sycl::write_only);
       params[2] = &out_acc[0];
+    #endif 
 
       set_scalar_arg(cgh, 0, sizeof(void*), params[0]); set_scalar_arg(cgh, 1, sizeof(void*), params[1]); set_scalar_arg(cgh, 2, sizeof(void*), params[2]); set_scalar_arg(cgh, 3, sizeof(int32_t), params[3]); set_scalar_arg(cgh, 4, sizeof(int32_t), params[4]); set_scalar_arg(cgh, 5, sizeof(int32_t), params[5]); set_scalar_arg(cgh, 6, sizeof(int32_t), params[6]); set_scalar_arg(cgh, 7, sizeof(int32_t), params[7]); set_scalar_arg(cgh, 8, sizeof(int32_t), params[8]);
       if (shared_memory) {
@@ -339,6 +366,21 @@ static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ, i
       }
       };
     auto event = stream.submit(cgf);
+
+    stream.wait();
+
+    // copy back
+    stream.submit([&](sycl::handler &cgh){
+      cgh.memcpy(arg0, a_dev, 256*160*sizeof(float));
+    });
+    stream.submit([&](sycl::handler &cgh){
+      cgh.memcpy(arg1, b_dev, 160*512*sizeof(float));
+    });
+    stream.submit([&](sycl::handler &cgh){
+      cgh.memcpy(arg2, output_dev, 256*512*sizeof(float));
+    });
+    stream.wait();
+
   }
 
 at::Tensor launchKernel(sycl::queue* stream, sycl::kernel* kernel, const torch::Tensor& a, const torch::Tensor& b) {
@@ -369,8 +411,6 @@ at::Tensor launchKernel(sycl::queue* stream, sycl::kernel* kernel, const torch::
 
   sycl_kernel_launch(gridX, gridY, gridZ, num_warps, threads_per_warp, shared_memory, *stream, *kernel, tensor_ptr(a), tensor_ptr(b), tensor_ptr(output), _arg3, _arg4, _arg5, _arg6, _arg7, _arg8, _arg9, _arg10, _arg11);
 
-  stream->wait();
-
   return output;
 }
 
@@ -399,5 +439,7 @@ int main() {
   std::cout << "Loaded kernel with " << n_regs << " registers and " << n_spills << " register spills." << std::endl;
 
   auto output = launchKernel(&q, kernel, a, b);
-  std::cout << "Kernel return output: " << output.sizes() << std::endl;
+  std::cout << "Kernel return output: " << output[1] << std::endl;
+
+  write_tensor("cpp_outs.pt", output);
 }
