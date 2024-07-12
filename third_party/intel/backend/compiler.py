@@ -140,10 +140,10 @@ class XPUBackend(BaseBackend):
         dev_prop['sub_group_sizes'] = tgt_prop.get('sub_group_sizes', None)
         dev_prop['has_fp64'] = tgt_prop.get('has_fp64', None)
         dev_prop['has_subgroup_matrix_multiply_accumulate'] = tgt_prop.get('has_subgroup_matrix_multiply_accumulate',
-                                                                           False)
+                                                                           True)
         dev_prop['has_subgroup_matrix_multiply_accumulate_tensor_float32'] = tgt_prop.get(
-            'has_subgroup_matrix_multiply_accumulate_tensor_float32', False)
-        dev_prop['has_subgroup_2d_block_io'] = tgt_prop.get('has_subgroup_2d_block_io', False)
+            'has_subgroup_matrix_multiply_accumulate_tensor_float32', True)
+        dev_prop['has_subgroup_2d_block_io'] = tgt_prop.get('has_subgroup_2d_block_io', True)
         dev_prop['has_bfloat16_conversions'] = tgt_prop.get('has_bfloat16_conversions', True)
         return dev_prop
 
