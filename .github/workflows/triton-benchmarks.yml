@@ -19,7 +19,7 @@ jobs:
   build:
     name: Triton benchmarks
     runs-on:
-      - ${{ inputs.runner_label || 'max1550' }}
+      - ${{ inputs.runner_label || 'A770' }}
     timeout-minutes: 720
     defaults:
       run:
@@ -125,7 +125,7 @@ jobs:
   benchmark-attention:
     name: Benchmark flash attention
     runs-on:
-      - ${{ inputs.runner_label || 'max1550' }}
+      - ${{ inputs.runner_label || 'A770' }}
     timeout-minutes: 720
     defaults:
       run:
@@ -240,7 +240,7 @@ jobs:
   benchmark-gemm:
     name: GEMM benchmarks
     runs-on:
-      - ${{ inputs.runner_label || 'max1550' }}
+      - ${{ inputs.runner_label || 'A770' }}
     timeout-minutes: 720
     defaults:
       run:
