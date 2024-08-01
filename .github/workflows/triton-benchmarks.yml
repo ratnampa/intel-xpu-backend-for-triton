@@ -101,7 +101,7 @@ jobs:
           python fused_softmax.py --reports $REPORTS
           source ../../scripts/capture-hw-details.sh
           python ../../scripts/build_report.py $REPORTS/softmax-performance.csv $REPORTS/softmax-triton-report.csv --benchmark softmax --compiler triton --param_cols "N" --tflops_col Triton-TFlops-max --hbm_col "Triton-GB/s-max"
-          python ../../scripts/build_report.py $REPORTS/softmax-performance.csv $REPORTS/softmax-xetla-report.csv --benchmark softmax --compiler xetla --param_cols "N" --tflops_col XeTLA-TFlops-max --hbm_col "XeTLA-GB/s-max"
+          # python ../../scripts/build_report.py $REPORTS/softmax-performance.csv $REPORTS/softmax-xetla-report.csv --benchmark softmax --compiler xetla --param_cols "N" --tflops_col XeTLA-TFlops-max --hbm_col "XeTLA-GB/s-max"
 
 
       - name: Run micro benchmark
@@ -338,7 +338,7 @@ jobs:
           python gemm_benchmark.py --reports $REPORTS
           source ../../scripts/capture-hw-details.sh
           python ../../scripts/build_report.py $REPORTS/matmul-performance.csv $REPORTS/gemm-triton-report.csv --benchmark gemm --compiler triton --param_cols "B,M,K,N" --tflops_col Triton-TFlops-max --hbm_col "Triton-GB/s-max"
-          python ../../scripts/build_report.py $REPORTS/matmul-performance.csv $REPORTS/gemm-xetla-report.csv --benchmark gemm --compiler xetla --param_cols "B,M,K,N" --tflops_col XeTLA-TFlops-max --hbm_col "XeTLA-GB/s-max"
+          # python ../../scripts/build_report.py $REPORTS/matmul-performance.csv $REPORTS/gemm-xetla-report.csv --benchmark gemm --compiler xetla --param_cols "B,M,K,N" --tflops_col XeTLA-TFlops-max --hbm_col "XeTLA-GB/s-max"
 
       - name: Save pip cache
         if: ${{ steps.pip-cache.outputs.status == 'miss' }}
