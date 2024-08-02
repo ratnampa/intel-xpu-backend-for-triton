@@ -81,7 +81,7 @@ jobs:
           source ../../scripts/capture-hw-details.sh
           python ../../scripts/build_report.py $REPORTS/softmax-performance.csv $REPORTS/softmax-triton-report.csv --benchmark softmax --compiler triton --param_cols "N" --tflops_col Triton-TFlops-max --hbm_col "Triton-GB/s-max"
           python ../../scripts/build_report.py $REPORTS/softmax-performance.csv $REPORTS/softmax-xetla-report.csv --benchmark softmax --compiler xetla --param_cols "N" --tflops_col XeTLA-TFlops-max --hbm_col "XeTLA-GB/s-max"
-          python ../../scripts/build_report.py $REPORTS/softmax-performance.csv $REPORTS/softmax-torch-report.csv --benchmark softmax --compiler torch --param_cols "B,M,K,N" --tflops_col torch-native-TFlops-max --hbm_col "torch-native-GB/s-max"
+          python ../../scripts/build_report.py $REPORTS/softmax-performance.csv $REPORTS/softmax-torch-report.csv --benchmark softmax --compiler torch --param_cols "N" --tflops_col torch-native-TFlops-max --hbm_col "torch-native-GB/s-max"
 
       - name: Run Triton GEMM kernel benchmark
         run: |
