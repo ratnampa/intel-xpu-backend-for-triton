@@ -114,12 +114,14 @@ def softmax(x):
             # 'torch-native',
             # 'torch-jit',
             'xetla',
+            'torch-native',
         ],  # possible values for `line_arg``
         line_names=[
             "Triton",
             # "Torch (native)",
             # "Torch (jit)",
             "XeTLA",
+            "torch-native",
         ],  # label name for the lines
         styles=[('blue', '-'), ('green', '-'), ('green', '--'), ('black', ':')],  # line styles
         ylabel=["GB/s", "TFlops"],  # label name for the y-axis
