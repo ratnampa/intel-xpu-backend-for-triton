@@ -93,7 +93,7 @@ jobs:
           SYCL_PROGRAM_COMPILE_OPTIONS=" -vc-codegen -vc-disable-indvars-opt -doubleGRF -Xfinalizer ' -printregusage -enableBCR -DPASTokenReduction ' " \
           rm -rf ~/.triton/cache
           python gemm_benchmark.py --reports $REPORTS
-          cp ~/.triton/cache/*ttgir $REPORTS/
+          cp -R ~/.triton/cache $REPORTS/cache
           source ../../scripts/capture-hw-details.sh
           python ../../scripts/build_report.py $REPORTS/matmul-performance.csv $REPORTS/gemm-triton-report.csv --benchmark gemm --compiler triton --param_cols "B,M,K,N" --tflops_col Triton-TFlops-max --hbm_col "Triton-GB/s-max"
           # python ../../scripts/build_report.py $REPORTS/matmul-performance.csv $REPORTS/gemm-xetla-report.csv --benchmark gemm --compiler xetla --param_cols "B,M,K,N" --tflops_col XeTLA-TFlops-max --hbm_col "XeTLA-GB/s-max"
