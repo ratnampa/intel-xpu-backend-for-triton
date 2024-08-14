@@ -1514,6 +1514,11 @@ def multiple_of(x: tl.tensor, values: List[int]) -> tl.tensor:
     x.handle.set_attr("tt.divisibility", ir.make_attr(values, x.handle.get_context()))
     return x
 
+def matrix_dimensions(x: tl.tensor, values: List[int]) -> tl.tensor:
+    if max(1, len(x.shape)) != len(values):
+        raise ValueError("Shape of input to matrix_dimensions does not match the length of values")
+    x.handle.set_attr("tt.dimensions", ir.make_attr(values, x.handle.get_context()))
+    return x
 
 def max_contiguous(x: tl.tensor, values: List[int]) -> tl.tensor:
     if len(x.shape) != len(values):

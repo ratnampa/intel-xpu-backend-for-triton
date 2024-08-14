@@ -2167,6 +2167,21 @@ def multiple_of(input, values, _builder=None):
     values = [x.value for x in values]
     return semantic.multiple_of(input, values)
 
+@builtin
+def matrix_dimensions(input, values, _builder=None):
+    """
+    Let the compiler know that the matrix in :code:`input` is of dimensions :code:`value`.
+    """
+    if isinstance(values, constexpr):
+        values = [values]
+    for i, d in enumerate(values):
+        if not isinstance(d, constexpr):
+            raise TypeError(f"values element {i} must have type `constexpr`")
+        if not isinstance(d.value, int):
+            raise TypeError(f"values element {i} must have type `constexpr[int]`, got `constexpr[{type(d.value)}]")
+    values = [x.value for x in values]
+    return semantic.matrix_dimensions(input, values)
+
 
 @builtin
 def max_contiguous(input, values, _builder=None):

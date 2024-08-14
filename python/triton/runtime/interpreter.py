@@ -990,6 +990,7 @@ def _patch_lang_core(lang):
     lang.dtype.to_ir = _new_to_ir
     lang.multiple_of = partial(_set_attr, name="tt.divisiblity")
     lang.max_contiguous = partial(_set_attr, name="tt.contiguity")
+    lang.matrix_dimensions = partial(_set_attr, name="tt.contiguity")
     lang.max_constancy = partial(_set_attr, name="tt.constancy")
 
     _patch_reduce_scan()
