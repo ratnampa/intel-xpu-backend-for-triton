@@ -8,7 +8,7 @@
 
 namespace mlir::triton::intel {
 
-constexpr int patternBenefitAddSPIRVEnv = 30;
+constexpr int patternBenefitAddSpatialExtents = 30;
 
 // Custom Arith Dialect patterns.
 void populateArithOpsToLLVMPatterns(

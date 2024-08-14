@@ -110,7 +110,7 @@ llvm.func @triton_gen.named_barrier(%barrier_id : i32, %thread_group_count : i32
 // CHECK-DAG: llvm.func spir_funccc @_Z30sub_group_clustered_reduce_xorij(i32, i32) -> i32 attributes {passthrough = ["convergent"]}
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 32>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 32>
 } {
   llvm.func @triton_gen.sub_group_reduce() {
     %0 = llvm.mlir.constant(0 : i32) : i32
@@ -151,7 +151,7 @@ module attributes {
 // CHECK-DAG: llvm.func spir_funccc @_Z32sub_group_non_uniform_reduce_xori(i32) -> i32
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 16>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 16>
 } {
   llvm.func @triton_gen.sub_group_reduce() {
     %0 = llvm.mlir.constant(0 : i32) : i32
@@ -193,7 +193,7 @@ module attributes {
 // CHECK-DAG: llvm.func spir_funccc @_Z40sub_group_non_uniform_scan_inclusive_xori(i32) -> i32 attributes {passthrough = ["convergent"]}
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 16>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 16>
 } {
   llvm.func @triton_gen.sub_group_scan() {
     %0 = llvm.mlir.constant(0 : i32) : i32

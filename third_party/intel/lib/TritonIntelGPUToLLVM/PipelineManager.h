@@ -17,7 +17,7 @@
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Dialect/SPIRV/IR/TargetAndABI.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/IR/PatternMatch.h"
 
 #include "intel/include/GPUToTritonGEN/GPUToTritonGENPass.h"
@@ -136,39 +136,38 @@ private:
   int numWarps{0};
 };
 
-struct AddSPIRVEnvPattern : public mlir::OpRewritePattern<ModuleOp> {
+struct AddSpatialExtentsPattern : public mlir::OpRewritePattern<ModuleOp> {
 
   using mlir::OpRewritePattern<ModuleOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(ModuleOp op,
                                 PatternRewriter &rewriter) const override {
-    if (spirv::lookupTargetEnv(op)) {
-      return failure();
+
+    auto spatialExtent = mlir::gpu::lookupSpatialExtents(op);
+    if (spatialExtent && spatialExtent.getReqdSubgroupSize()) {
+      assert(triton::gpu::TritonGPUDialect::getThreadsPerWarp(op) ==
+             spatialExtent.getReqdSubgroupSize().getValue());
+      // spatial extent already exists, no work need
+      return success();
     }
 
     int subgroupSize = triton::gpu::TritonGPUDialect::getThreadsPerWarp(op);
 
-    auto resourceLimit = spirv::getDefaultResourceLimits(rewriter.getContext());
-    auto newResourceLimit = rewriter.getAttr<spirv::ResourceLimitsAttr>(
-        resourceLimit.getMaxComputeSharedMemorySize(),
-        resourceLimit.getMaxComputeWorkgroupInvocations(),
-        resourceLimit.getMaxComputeWorkgroupSize(), subgroupSize,
-        resourceLimit.getMinSubgroupSize(), resourceLimit.getMaxSubgroupSize(),
-        resourceLimit.getCooperativeMatrixPropertiesKhr(),
-        resourceLimit.getCooperativeMatrixPropertiesNv());
-    auto triple = spirv::VerCapExtAttr::get(
-        spirv::Version::V_1_2,
-        {spirv::Capability::GroupNonUniform, spirv::Capability::Addresses,
-         spirv::Capability::Float16Buffer, spirv::Capability::Int64,
-         spirv::Capability::Int16, spirv::Capability::Int8,
-         spirv::Capability::Kernel, spirv::Capability::Linkage,
-         spirv::Capability::Vector16, spirv::Capability::GenericPointer,
-         spirv::Capability::Groups, spirv::Capability::Float64},
-        {}, rewriter.getContext());
-    auto newTargetEnv = spirv::TargetEnvAttr::get(triple, newResourceLimit);
-    rewriter.modifyOpInPlace(op, [op, newTargetEnv] {
-      op->setAttr(spirv::getTargetEnvAttrName(), newTargetEnv);
+    auto reqdSubgroupSizeAttr = rewriter.getI32IntegerAttr(subgroupSize);
+    DenseI32ArrayAttr reqdWorkgroupSizeAttr{};
+    DenseI32ArrayAttr maxWorkgroupSizeAttr{};
+    if (spatialExtent) {
+      reqdWorkgroupSizeAttr = spatialExtent.getReqdWorkgroupSize();
+      maxWorkgroupSizeAttr = spatialExtent.getMaxWorkgroupSize();
+    }
+    auto newSpatialExtents = rewriter.getAttr<mlir::gpu::SpatialExtentsAttr>(
+        reqdSubgroupSizeAttr, reqdWorkgroupSizeAttr, maxWorkgroupSizeAttr);
+    rewriter.modifyOpInPlace(op, [op, newSpatialExtents] {
+      op->setAttr(
+          ::mlir::gpu::GPUDialect::SpatialExtentsAttrHelper::getNameStr(),
+          newSpatialExtents);
     });
+
     return success();
   }
 };
@@ -211,10 +210,10 @@ public:
     using namespace mlir;
     using namespace mlir::triton;
 
-    // should run before other patterns that need the SPIRV-ENV attr
+    // should run before other patterns that need the SpatialExtentsAttr
     // (e.g. patterns that output triton_gen.sub_group_reduce)
-    patterns.add<AddSPIRVEnvPattern>(&typeConverter.getContext(),
-                                     patternBenefitAddSPIRVEnv);
+    patterns.add<AddSpatialExtentsPattern>(&typeConverter.getContext(),
+                                           patternBenefitAddSpatialExtents);
 
     if (isAdvancedPathEnabled) {
       intel::populateArithOpsToLLVMPatterns(typeConverter, patterns, benefit);

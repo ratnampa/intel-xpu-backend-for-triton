@@ -69,7 +69,7 @@ llvm.func @triton_gen.named_barrier_wait(%barrier_id : i32) {
 // -----
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 32>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 32>
 } {
   llvm.func @triton_gen.sub_group_reduce() {
     // CHECK-LABEL: triton_gen.sub_group_reduce
@@ -95,7 +95,7 @@ module attributes {
 // -----
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 32>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 32>
 } {
   llvm.func @triton_gen.sub_group_scan() {
     // CHECK-LABEL: triton_gen.sub_group_scan

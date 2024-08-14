@@ -8,5 +8,6 @@ add_triton_library(TritonGENToLLVM
   LINK_LIBS PUBLIC
   MLIRLLVMDialect
   MLIRSPIRVDialect
+  MLIRGPUDialect
   TritonIntelUtils
 )

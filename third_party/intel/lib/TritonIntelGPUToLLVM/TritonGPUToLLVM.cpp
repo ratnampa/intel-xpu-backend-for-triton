@@ -3,9 +3,9 @@
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 
 #include "intel/include/Dialect/TritonGEN/IR/TritonGENDialect.h"
 #include "intel/include/Dialect/TritonIntelGPU/IR/Dialect.h"
@@ -57,8 +57,9 @@ public:
     addIllegalDialect<triton::gpu::intel::TritonIntelGPUDialect>();
     addIllegalDialect<mlir::gpu::GPUDialect>();
     addLegalOp<mlir::UnrealizedConversionCastOp>();
-    addDynamicallyLegalOp<ModuleOp>(
-        [](ModuleOp op) { return spirv::lookupTargetEnv(op) != nullptr; });
+    addDynamicallyLegalOp<ModuleOp>([](ModuleOp op) {
+      return mlir::gpu::lookupSpatialExtents(op) != nullptr;
+    });
   }
 };
 
@@ -68,8 +69,7 @@ struct ConvertTritonGPUToLLVM
   using ConvertTritonIntelGPUToLLVMBase::ConvertTritonIntelGPUToLLVMBase;
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<LLVM::LLVMDialect, TritonGEN::TritonGENDialect,
-                    spirv::SPIRVDialect>();
+    registry.insert<LLVM::LLVMDialect, TritonGEN::TritonGENDialect>();
   }
 
   void runOnOperation() override {

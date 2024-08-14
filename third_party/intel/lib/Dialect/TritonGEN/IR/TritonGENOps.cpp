@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "intel/include/Dialect/TritonGEN/IR/TritonGENDialect.h"
-#include "mlir/Dialect/SPIRV/IR/TargetAndABI.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "triton/Tools/Sys/GetEnv.hpp"
 #include "llvm/ADT/STLExtras.h"
@@ -53,9 +53,10 @@ template <typename Op> static LogicalResult verifyMatrixInput(Op op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult TritonGEN::SubGroupReduceOp::verify() {
-  spirv::TargetEnvAttr attr = spirv::lookupTargetEnv(*this);
-  if (!attr)
-    return this->emitOpError("expecting valid target env attribute");
+  auto spatialExtents = mlir::gpu::lookupSpatialExtents(*this);
+  if (!(spatialExtents && spatialExtents.getReqdSubgroupSize()))
+    return this->emitOpError(
+        "expecting gpu.spatial_extents with reqdSubgroupSize");
 
   if (getSize() < 1 || getSize() > TritonGEN::getSubgroupSize(*this) ||
       !llvm::isPowerOf2_32(getSize()))

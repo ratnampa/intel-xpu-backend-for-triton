@@ -17,7 +17,7 @@ llvm.func @triton_gen.illegal_cache_controls_attr(%arg0: !llvm.ptr) {
 // -----
 
 llvm.func @triton_gen.sub_group_reduce() {
-  // expected-error @+2 {{'triton_gen.sub_group_reduce' op expecting valid target env attribute}}
+  // expected-error @+2 {{'triton_gen.sub_group_reduce' op expecting gpu.spatial_extents with reqdSubgroupSize}}
   %0 = llvm.mlir.constant(0 : i32) : i32
   %1 = triton_gen.sub_group_reduce add %0 {size = 16} : i32
   llvm.return
@@ -26,7 +26,7 @@ llvm.func @triton_gen.sub_group_reduce() {
 // -----
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 16>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 16>
 } {
   llvm.func @triton_gen.sub_group_reduce() {
     // expected-error @+2 {{'triton_gen.sub_group_reduce' op expecting size to be a power of 2 between 1 and subgroup size}}
@@ -39,7 +39,7 @@ module attributes {
 // -----
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 16>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 16>
 } {
   llvm.func @triton_gen.sub_group_reduce() {
     // expected-error @+2 {{'triton_gen.sub_group_reduce' op expecting size to be a power of 2 between 1 and subgroup size}}
@@ -52,7 +52,7 @@ module attributes {
 // -----
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 16>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 16>
 } {
   llvm.func @triton_gen.sub_group_reduce() {
     // expected-error @+2 {{'triton_gen.sub_group_reduce' op expecting size to be a power of 2 between 1 and subgroup size}}

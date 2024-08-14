@@ -1,7 +1,7 @@
 // RUN: triton-opt -convert-gpu-to-tritongen %s | FileCheck %s
 
 module attributes {
-  spirv.target_env = #spirv.target_env<#spirv.vce<v1.4, [Kernel, Addresses, GroupNonUniformShuffle, Int64], []>, #spirv.resource_limits<subgroup_size = 16>>
+  gpu.spatial_extents = #gpu.spatial_extents<reqdSubgroupSize = 16>
 } {
 
 gpu.module @kernels {
