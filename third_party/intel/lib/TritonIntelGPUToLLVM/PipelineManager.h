@@ -113,13 +113,6 @@ struct FuncOpConversion : public ConvertOpToLLVMPattern<triton::FuncOp> {
       newFuncOp.setLinkage(LLVM::Linkage::External);
     }
 
-    NamedAttrList attrs;
-    attrs.append(TritonGEN::TritonGENDialect::getMaxWorkGroupSizeAttrName(),
-                 rewriter.getI32ArrayAttr({threadsPerWarp * numWarps, 1, 1}));
-    attrs.append(TritonGEN::TritonGENDialect::getReqdSubGroupSizeAttrName(),
-                 rewriter.getI32ArrayAttr({threadsPerWarp}));
-    newFuncOp->setDialectAttrs(attrs);
-
     if (!LLVM::isKernel(funcOp)) {
       newFuncOp.setPassthroughAttr(
           ArrayAttr::get(ctx, rewriter.getStringAttr("noinline")));
@@ -143,30 +136,64 @@ struct AddSpatialExtentsPattern : public mlir::OpRewritePattern<ModuleOp> {
   LogicalResult matchAndRewrite(ModuleOp op,
                                 PatternRewriter &rewriter) const override {
 
-    auto spatialExtent = mlir::gpu::lookupSpatialExtents(op);
-    if (spatialExtent && spatialExtent.getReqdSubgroupSize()) {
-      assert(triton::gpu::TritonGPUDialect::getThreadsPerWarp(op) ==
-             spatialExtent.getReqdSubgroupSize().getValue());
-      // spatial extent already exists, no work need
+    int subgroupSize = triton::gpu::TritonGPUDialect::getThreadsPerWarp(op);
+    int numSubgroups = triton::gpu::TritonGPUDialect::getNumWarps(op);
+
+    auto spatialExtents = mlir::gpu::lookupSpatialExtents(op);
+
+    if (!spatialExtents) {
+      auto reqdSubgroupSize = rewriter.getI32IntegerAttr(subgroupSize);
+      DenseI32ArrayAttr reqdWorkgroupSize{};
+      DenseI32ArrayAttr maxWorkgroupSize =
+          rewriter.getDenseI32ArrayAttr({subgroupSize * numSubgroups, 1, 1});
+      auto newSpatialExtents = rewriter.getAttr<mlir::gpu::SpatialExtentsAttr>(
+          reqdSubgroupSize, reqdWorkgroupSize, maxWorkgroupSize);
+      rewriter.modifyOpInPlace(op, [op, newSpatialExtents] {
+        op->setAttr(
+            ::mlir::gpu::GPUDialect::SpatialExtentsAttrHelper::getNameStr(),
+            newSpatialExtents);
+      });
       return success();
     }
 
-    int subgroupSize = triton::gpu::TritonGPUDialect::getThreadsPerWarp(op);
-
-    auto reqdSubgroupSizeAttr = rewriter.getI32IntegerAttr(subgroupSize);
-    DenseI32ArrayAttr reqdWorkgroupSizeAttr{};
-    DenseI32ArrayAttr maxWorkgroupSizeAttr{};
-    if (spatialExtent) {
-      reqdWorkgroupSizeAttr = spatialExtent.getReqdWorkgroupSize();
-      maxWorkgroupSizeAttr = spatialExtent.getMaxWorkgroupSize();
+    bool modify = false;
+    IntegerAttr reqdSubgroupSize = spatialExtents.getReqdSubgroupSize();
+    if (reqdSubgroupSize && reqdSubgroupSize.getValue() != subgroupSize) {
+      return failure();
+    } else {
+      reqdSubgroupSize = rewriter.getI32IntegerAttr(subgroupSize);
+      modify = true;
     }
-    auto newSpatialExtents = rewriter.getAttr<mlir::gpu::SpatialExtentsAttr>(
-        reqdSubgroupSizeAttr, reqdWorkgroupSizeAttr, maxWorkgroupSizeAttr);
-    rewriter.modifyOpInPlace(op, [op, newSpatialExtents] {
-      op->setAttr(
-          ::mlir::gpu::GPUDialect::SpatialExtentsAttrHelper::getNameStr(),
-          newSpatialExtents);
-    });
+
+    DenseI32ArrayAttr reqdWorkgroupSize = spatialExtents.getReqdWorkgroupSize();
+    if (reqdWorkgroupSize) {
+      if (reqdWorkgroupSize.size() != 3 and
+          reqdWorkgroupSize[0] != subgroupSize * numSubgroups and
+          reqdWorkgroupSize[1] != 1 and reqdWorkgroupSize[2] != 1)
+        return failure();
+    }
+
+    DenseI32ArrayAttr maxWorkgroupSize = spatialExtents.getMaxWorkgroupSize();
+    if (maxWorkgroupSize) {
+      if (maxWorkgroupSize.size() != 3 and
+          maxWorkgroupSize[0] != subgroupSize * numSubgroups and
+          maxWorkgroupSize[1] != 1 and maxWorkgroupSize[2] != 1)
+        return failure();
+    } else {
+      maxWorkgroupSize =
+          rewriter.getDenseI32ArrayAttr({subgroupSize * numSubgroups, 1, 1});
+      modify = true;
+    }
+
+    if (modify) {
+      auto newSpatialExtents = rewriter.getAttr<mlir::gpu::SpatialExtentsAttr>(
+          reqdSubgroupSize, reqdWorkgroupSize, maxWorkgroupSize);
+      rewriter.modifyOpInPlace(op, [op, newSpatialExtents] {
+        op->setAttr(
+            ::mlir::gpu::GPUDialect::SpatialExtentsAttrHelper::getNameStr(),
+            newSpatialExtents);
+      });
+    }
 
     return success();
   }

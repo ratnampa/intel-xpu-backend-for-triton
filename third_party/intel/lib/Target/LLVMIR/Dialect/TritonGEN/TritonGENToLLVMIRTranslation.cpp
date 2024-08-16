@@ -13,6 +13,7 @@
 #include "Target/LLVMIR/Dialect/TritonGEN/TritonGENToLLVMIRTranslation.h"
 
 #include "Dialect/TritonGEN/IR/TritonGENDialect.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/MLIRContext.h"
@@ -36,6 +37,7 @@ public:
                  NamedAttribute attribute,
                  LLVM::ModuleTranslation &moduleTranslation) const final {
     StringRef attrName = attribute.getName().getValue();
+    llvm::dbgs() << "\n\nhello from amend: " << attrName << "\n\n";
     if (attrName ==
         triton::TritonGEN::TritonGENDialect::getCacheControlsAttrName()) {
       auto decorationAttr =
@@ -49,8 +51,46 @@ public:
       return handleDecorationCacheControl(op, instructions.front(),
                                           decorationAttr);
     }
-    if (attrName.starts_with("triton_gen"))
-      return handleTritonGenAttr(op, attribute, moduleTranslation);
+    if (isKernel(op)) {
+      auto spatialExtents = mlir::gpu::lookupSpatialExtents(op);
+      llvm::dbgs() << "setting metadata: " << (spatialExtents ? "yes" : "no")
+                   << '\n';
+      if (spatialExtents) {
+        llvm::Function *llvmFunc = moduleTranslation.lookupFunction(
+            cast<LLVM::LLVMFuncOp>(op).getName());
+        llvm::LLVMContext &llvmContext = moduleTranslation.getLLVMContext();
+        auto addMetaData = [llvmFunc, &llvmContext](StringRef name,
+                                                    Attribute attribute) {
+          SmallVector<llvm::Metadata *, 3> metadata;
+          llvm::Type *i64 = llvm::IntegerType::get(llvmContext, 64);
+          for (int64_t i : extractFromIntegerArrayAttr<int64_t>(attribute)) {
+            llvm::Constant *constant = llvm::ConstantInt::get(i64, i);
+            metadata.push_back(llvm::ConstantAsMetadata::get(constant));
+          }
+          llvm::MDNode *node = llvm::MDNode::get(llvmContext, metadata);
+          llvm::dbgs() << "setting md: " << name << '\n';
+          llvmFunc->setMetadata(name, node);
+        };
+        if (spatialExtents.getReqdSubgroupSize()) {
+          addMetaData("intel_reqd_sub_group_size",
+                      spatialExtents.getReqdSubgroupSize());
+        }
+        if (spatialExtents.getReqdWorkgroupSize()) {
+          addMetaData("reqd_work_group_size",
+                      spatialExtents.getReqdWorkgroupSize());
+        }
+        if (spatialExtents.getMaxWorkgroupSize()) {
+          addMetaData("max_work_group_size",
+                      spatialExtents.getMaxWorkgroupSize());
+        }
+      }
+    } else {
+      auto fn = dyn_cast<LLVM::LLVMFuncOp>(op);
+      if (fn) {
+        llvm::dbgs() << "function not kernel: ";
+        fn.dump();
+      }
+    }
     return success();
   }
 
@@ -103,43 +143,10 @@ private:
     return success();
   }
 
-  LogicalResult
-  handleTritonGenAttr(Operation *op, NamedAttribute attribute,
-                      LLVM::ModuleTranslation &moduleTranslation) const {
-    llvm::LLVMContext &llvmContext = moduleTranslation.getLLVMContext();
-    llvm::Function *llvmFunc =
-        moduleTranslation.lookupFunction(cast<LLVM::LLVMFuncOp>(op).getName());
-    if (isKernel(op))
-      amendKernel(llvmContext, llvmFunc, attribute);
-    return success();
-  }
-
   // Checks if the given operation is a kernel function.
   bool isKernel(Operation *op) const {
     auto fn = dyn_cast<LLVM::LLVMFuncOp>(op);
     return fn && fn.getCConv() == LLVM::CConv::SPIR_KERNEL;
-  }
-
-  // The attribute is converted into metadata and added to the function.
-  void amendKernel(llvm::LLVMContext &llvmContext, llvm::Function *llvmFunc,
-                   NamedAttribute attribute) const {
-    StringRef name = attribute.getName().getValue();
-    assert((name == triton::TritonGEN::TritonGENDialect::
-                        getMaxWorkGroupSizeAttrName() ||
-            name == triton::TritonGEN::TritonGENDialect::
-                        getReqdWorkGroupSizeAttrName() ||
-            name == triton::TritonGEN::TritonGENDialect::
-                        getReqdSubGroupSizeAttrName()) &&
-           "Unexpected attribute");
-    SmallVector<llvm::Metadata *, 3> metadata;
-    llvm::Type *i64 = llvm::IntegerType::get(llvmContext, 64);
-    for (int64_t i :
-         extractFromIntegerArrayAttr<int64_t>(attribute.getValue())) {
-      llvm::Constant *constant = llvm::ConstantInt::get(i64, i);
-      metadata.push_back(llvm::ConstantAsMetadata::get(constant));
-    }
-    llvm::MDNode *node = llvm::MDNode::get(llvmContext, metadata);
-    llvmFunc->setMetadata(name.drop_front(11), node);
   }
 };
 } // namespace

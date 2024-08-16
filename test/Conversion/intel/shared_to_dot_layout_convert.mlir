@@ -7,9 +7,10 @@
 #dot_operand_b = #triton_gpu.dot_op<{opIdx=1, parent=#dpas, kWidth=2}>
 
 module attributes {"triton_gpu.num-warps" = 32 : i32, "triton_gpu.threads-per-warp" = 16 : i32} {
+  // CHECK: module attributes {{{.*}}gpu.spatial_extents<reqdSubgroupSize = 16 : i32, maxWorkgroupSize = [512, 1, 1]>
   // CHECK-LABEL: llvm.func spir_kernelcc @convert_dot(
   // CHECK-SAME:    %[[VAL_0:.*]]: !llvm.struct<(f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16)>,
-  // CHECK-SAME:    %[[SCRATCH_SLM:.*]]: !llvm.ptr<3>) attributes {triton_gen.intel_reqd_sub_group_size = [16 : i32], {{.*}}} {
+  // CHECK-SAME:    %[[SCRATCH_SLM:.*]]: !llvm.ptr<3>) {
   tt.func @convert_dot(%A: tensor<128x64xf16, #blocked0>) {
     // CHECK-DAG:     %[[CST_128:.*]] = llvm.mlir.constant(128 : i32) : i32
     // CHECK-DAG:     %[[CST_4:.*]] = llvm.mlir.constant(4 : i32) : i32
@@ -89,9 +90,10 @@ module attributes {"triton_gpu.num-warps" = 32 : i32, "triton_gpu.threads-per-wa
 #dot_operand_b = #triton_gpu.dot_op<{opIdx=1, parent=#dpas, kWidth=2}>
 
 module attributes {"triton_gpu.num-warps" = 32 : i32, "triton_gpu.threads-per-warp" = 16 : i32} {
+  // CHECK: module attributes {{{.*}}gpu.spatial_extents<reqdSubgroupSize = 16 : i32, maxWorkgroupSize = [512, 1, 1]>
   // CHECK-LABEL: llvm.func spir_kernelcc @convert_dot(
   // CHECK-SAME:    %[[VAL_0:.*]]: !llvm.struct<(f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16)>,
-  // CHECK-SAME:    %[[SCRATCH_SLM:.*]]: !llvm.ptr<3>) attributes {triton_gen.intel_reqd_sub_group_size = [16 : i32], {{.*}}} {
+  // CHECK-SAME:    %[[SCRATCH_SLM:.*]]: !llvm.ptr<3>) {
   tt.func @convert_dot(%A: tensor<128x64xf16, #blocked0>) {
     // CHECK-DAG:     %[[CST_128:.*]] = llvm.mlir.constant(128 : i32) : i32
     // CHECK-DAG:     %[[CST_32:.*]] = llvm.mlir.constant(32 : i32) : i32
@@ -172,9 +174,10 @@ module attributes {"triton_gpu.num-warps" = 32 : i32, "triton_gpu.threads-per-wa
 #dot_operand_b = #triton_gpu.dot_op<{opIdx=1, parent=#dpas, kWidth=2}>
 
 module attributes {"triton_gpu.num-warps" = 32 : i32, "triton_gpu.threads-per-warp" = 16 : i32} {
+  // CHECK: module attributes {{{.*}}gpu.spatial_extents<reqdSubgroupSize = 16 : i32, maxWorkgroupSize = [512, 1, 1]>
   // CHECK-LABEL: llvm.func spir_kernelcc @convert_dot(
   // CHECK-SAME:    %[[VAL_1:.*]]: !llvm.struct<(f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16)>,
-  // CHECK-SAME:    %[[SCRATCH_SLM:.*]]: !llvm.ptr<3>) attributes {triton_gen.intel_reqd_sub_group_size = [16 : i32], {{.*}}} {
+  // CHECK-SAME:    %[[SCRATCH_SLM:.*]]: !llvm.ptr<3>) {
   tt.func @convert_dot(%B: tensor<64x256xf16, #blocked1>) {
     // CHECK-DAG:     %[[CST_128:.*]] = llvm.mlir.constant(128 : i32) : i32
     // CHECK-DAG:     %[[CST_256:.*]] = llvm.mlir.constant(256 : i32) : i32
