@@ -52,6 +52,10 @@ env:
   BENCHMARK_REPO: weishi-deng/benchmark.git
   IGC_ShaderDumpEnable: 1
   IGC_DumpToCustomDir: inductor_log
+  NEO_CACHE_PERSISTENT: 0
+  NEOReadDebugKeys: 1
+  PrintDebugSettings: 1
+  RebuildPrecompiledKernels: 1
 
 jobs:
   run_tests:
