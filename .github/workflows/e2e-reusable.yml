@@ -51,7 +51,7 @@ env:
   PYTHON_VERSION: "3.10"
   BENCHMARK_REPO: weishi-deng/benchmark.git
   IGC_ShaderDumpEnable: 1
-  IGC_DumpToCustomDir: inductor_log
+  IGC_DumpToCustomDir: /tmp/igc_dumps
   NEO_CACHE_PERSISTENT: 0
   NEOReadDebugKeys: 1
   PrintDebugSettings: 1
@@ -321,6 +321,7 @@ jobs:
           if [[ -d torch_compile_debug ]]; then
             cp -rT torch_compile_debug inductor_log
           fi
+          cp -r /tmp/igc_dumps inductor_log/
 
       - name: Upload test logs
         uses: actions/upload-artifact@v4
