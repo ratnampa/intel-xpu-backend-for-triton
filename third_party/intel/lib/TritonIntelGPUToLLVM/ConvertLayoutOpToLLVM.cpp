@@ -10,6 +10,9 @@
 #include "triton/Dialect/TritonGPU/IR/LinearLayoutConversions.h"
 #include "triton/Dialect/TritonGPU/Transforms/Utility.h"
 
+#include <iostream>
+
+
 using ::mlir::LLVM::getSharedMemoryObjectFromStruct;
 using ::mlir::LLVM::getStridesFromShapeAndOrder;
 using ::mlir::LLVM::linearize;
@@ -444,6 +447,11 @@ private:
   const triton::intel::TargetInfo &targetInfo;
 };
 
+void alex_debug() {
+  printf("DEBUG\n");
+}
+
+
 struct ConvertLayoutOpUsingLinearLayoutsConversion
     : public ConvertOpToLLVMPattern<ConvertLayoutOp> {
   // Set benefit to 2 so that this pattern applies before other convert-layout
@@ -455,20 +463,30 @@ struct ConvertLayoutOpUsingLinearLayoutsConversion
   LogicalResult
   matchAndRewrite(ConvertLayoutOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    std::cout << "ConvertLayoutOpUsingLinearLayoutsConversion " << std::endl;
+    op.dump();
     MLIRContext *ctx = op.getContext();
     const auto &shape = op.getType().getShape();
+    std::cout << "\nShape size: " << shape.size() << std::endl;
+    for (size_t i = 0; i < shape.size(); i++) {
+      std::cout << i << " -> " << shape[i] << std::endl;
+    }
     std::optional<LinearLayout> srcLayout;
     auto srcTy = op.getSrc().getType();
+    llvm::errs() << "srcTy: " << srcTy << "\n";
     srcLayout = gpu::toLinearLayout(shape, srcTy.getEncoding());
 
     std::optional<LinearLayout> dstLayout;
     auto dstTy = op.getType();
-
+    llvm::errs() << "dstTy: " << dstTy << "\n";
     dstLayout = gpu::toLinearLayout(shape, dstTy.getEncoding());
 
     if (!srcLayout.has_value() || !dstLayout.has_value()) {
       return failure();
     }
+
+    std::cout << "srcLayout: " << srcLayout->toString() << std::endl;
+    std::cout << "dstLayout: " << dstLayout->toString() << std::endl;
     // There are four cases to handle.
     //
     //  1. Transfer between values in the same thread, in which case we simply
@@ -484,7 +502,14 @@ struct ConvertLayoutOpUsingLinearLayoutsConversion
     // We can tell which case we're in by examining `conversion`.  If e.g. the
     // block -> block mapping is {1, 2, 4, ...} then there's no movement between
     // data in different CTAs and we know we're not in case 4.
-    LinearLayout conversion = srcLayout->invertAndCompose(*dstLayout);
+    
+    LinearLayout conversion = dstLayout->invertAndCompose(*srcLayout);
+
+    std::cout << "conversion: " << conversion.toString() << std::endl;
+
+    std::cout << "conversion compose: " << conversion.compose(*srcLayout).toString() << std::endl;
+
+    alex_debug();
 
     int numLanes = conversion.getInDimSize(str_attr("lane"));
     int numWarps = conversion.getInDimSize(str_attr("warp"));
@@ -539,11 +564,34 @@ struct ConvertLayoutOpUsingLinearLayoutsConversion
            ArrayRef{kRegister});
 
     auto inVals = unpackLLElements(loc, adaptor.getSrc(), rewriter);
+    llvm::errs() << "Ins:\n";
+    for(size_t i = 0; i < inVals.size(); i++) {
+      llvm::errs() << i << " : " << inVals[i] << "\n";
+    }
+#if 0
     SmallVector<Value> outVals(conversion.getOutDimSize(kRegister));
+    llvm::errs() << "Outs size: " << outVals.size() << "\n";
     for (int i = 0; i < conversion.getInDimSize(kRegister); i++) {
       auto dstIdx = conversion.apply({{kRegister, i}});
+      auto dstIdx_val = dstIdx.begin()->second;
       outVals[dstIdx.begin()->second] = inVals[i];
+      llvm::errs() << dstIdx_val << " : (" << i << ", " << outVals[dstIdx_val] << ")\n";
     }
+#else
+    SmallVector<Value> outVals;
+    outVals.resize(conversion.getInDimSize(kRegister));
+    // TODO: might want to assert here that the inVals and outVals sizes match? 
+    llvm::errs() << "Outs size: " << outVals.size() << "\n";
+
+    for (int i = 0; i < conversion.getInDimSize(kRegister); i++) {
+      auto srcIdx = conversion.apply({{kRegister, i}});
+      auto srcIdx_val = srcIdx.begin()->second;
+      outVals[i] = inVals[srcIdx.begin()->second];
+      llvm::errs() << srcIdx_val << " : (" << i << ", " << outVals[i] << ")\n";
+    }
+#endif 
+    std::cout << "transferWithinThread " << op << std::endl;
+    alex_debug();
     Value result = packLLElements(loc, getTypeConverter(), outVals, rewriter,
                                   op.getType());
     rewriter.replaceOp(op, result);
