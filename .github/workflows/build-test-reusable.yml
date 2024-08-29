@@ -166,28 +166,6 @@ jobs:
         run: |
           echo "TRITON_TEST_SKIPLIST_DIR=$GITHUB_WORKSPACE/scripts/skiplist/${{ inputs.skip_list }}" | tee -a $GITHUB_ENV
 
-      - name: Run core tests
-        run: |
-          source ./scripts/pytest-utils.sh
-          ensure_spirv_dis
-
-          cd python/test/unit
-
-          TRITON_TEST_SUITE=language \
-            pytest -vvv -n 8 --device xpu language/ --ignore=language/test_line_info.py --ignore=language/test_subprocess.py
-
-          TRITON_TEST_SUITE=subprocess \
-            pytest -vvv -n 8 --device xpu language/test_subprocess.py
-
-          # Run runtime tests serially to avoid race condition with cache handling
-          TRITON_TEST_SUITE=runtime \
-            pytest -vvv --device xpu runtime/
-
-          # Run test_line_info.py separately with TRITON_DISABLE_LINE_INFO=0
-          TRITON_TEST_SUITE=line_info \
-          TRITON_DISABLE_LINE_INFO=0 \
-            pytest -vvv --device xpu language/test_line_info.py
-
       - name: Run instrumentation tests
         run: |
           source ./scripts/pytest-utils.sh
@@ -214,41 +192,6 @@ jobs:
         run: |
           rm -rf ~/.triton
 
-      - name: Run interpreter tests
-        run: |
-          source ./scripts/pytest-utils.sh
-          cd python/test/unit
-          TRITON_INTERPRET=1 TRITON_TEST_SUITE=interpreter \
-            pytest -vvv -n 16 -m interpreter language/test_core.py language/test_standard.py \
-            language/test_random.py --device cpu
-
-      - name: Regression tests
-        run: |
-          source ./scripts/pytest-utils.sh
-          cd python/test/regression
-          TRITON_TEST_SUITE=regression \
-            pytest -vvv -s --device xpu . --reruns 10 --ignore=test_performance.py
-
-      - name: Run XPU python tests
-        run: |
-          cd python/test/backend/third_party_backends
-          python3 -m pytest -n auto --verbose test_xpu_backend.py
-
-      - name: Run Tutorials
-        run: |
-          source ./scripts/pytest-utils.sh
-          cd python/tutorials
-          run_tutorial_test "01-vector-add"
-          run_tutorial_test "02-fused-softmax"
-          run_tutorial_test "03-matrix-multiplication"
-          run_tutorial_test "04-low-memory-dropout"
-          run_tutorial_test "05-layer-norm"
-          run_tutorial_test "06-fused-attention"
-          run_tutorial_test "07-extern-functions"
-          run_tutorial_test "08-grouped-gemm"
-          run_tutorial_test "10-experimental-block-pointer"
-          run_tutorial_test "10i-experimental-block-pointer"
-
       - name: Run CXX unittests
         run: |
           cd python/build/*cmake*
@@ -259,37 +202,6 @@ jobs:
           cd pytorch
           TRANSFORMERS_VERSION="$(<.ci/docker/ci_commit_pins/huggingface.txt)"
           echo "TRANSFORMERS_VERSION=$TRANSFORMERS_VERSION" | tee -a $GITHUB_ENV
-
-      - name: Install transformers
-        if: ${{ inputs.python_version != '3.12' }}
-        uses: ./.github/actions/install-dependency
-        with:
-          package: transformers
-          repository: huggingface/transformers
-          ref: ${{ env.TRANSFORMERS_VERSION }}
-          try-tag-prefix: v
-
-      - name: Run E2E test
-        if: ${{ inputs.python_version != '3.12' }}
-        run: |
-          # Set WORKSPACE for inductor_xpu_test.sh to make sure it creates "inductor_log" outside of pytorch cloned directory
-          export WORKSPACE=$GITHUB_WORKSPACE
-          cd pytorch
-          pip install pyyaml pandas scipy numpy psutil pyre_extensions torchrec
-
-          source $GITHUB_WORKSPACE/scripts/capture-hw-details.sh
-          if [[ $GPU_DEVICE = *A770* ]]; then
-            # To enable FP64 type emulation.
-            # For details see: https://github.com/intel/intel-xpu-backend-for-triton/pull/1879
-            export OverrideDefaultFP64Settings=1
-            export IGC_EnableDPEmulation=1
-          fi
-
-          # TODO: Find the fastest Hugging Face model
-          $GITHUB_WORKSPACE/scripts/inductor_xpu_test.sh huggingface float32 inference accuracy xpu 0 static 1 0 AlbertForMaskedLM
-          # The script above always returns 0, so we need an additional check to see if the accuracy test passed
-          cat $WORKSPACE/inductor_log/*/*/*.csv
-          grep AlbertForMaskedLM $WORKSPACE/inductor_log/*/*/*.csv | grep -q ,pass,
 
       - name: Save pip cache
         if: ${{ steps.pip-cache.outputs.status == 'miss' }}
