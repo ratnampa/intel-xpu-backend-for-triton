@@ -135,15 +135,9 @@ run_unit_tests() {
   echo "******      Running Triton CXX unittests     ******"
   echo "***************************************************"
 
-  set -x
-  UNIT_TEST_DIR=$TRITON_PROJ_BUILD/"$(ls $TRITON_PROJ_BUILD)"
-  ls $TRITON_PROJ_BUILD
-
-
-
-  if [ ! -d "${UNIT_TEST_DIR}" ]; then
+  UNIT_TEST_DIR="$(ls -1 $TRITON_PROJ_BUILD/bdist*)" || {
     echo "Not found '${UNIT_TEST_DIR}'. Build Triton please" ; exit 2
-  fi
+  }
   cd $UNIT_TEST_DIR
   ctest .
 
