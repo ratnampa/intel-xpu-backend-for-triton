@@ -37,8 +37,8 @@ on:
     branches:
       - llvm-target
   push:
-    branches:
-      - llvm-target
+    #    branches:
+    #      - llvm-target
 
 permissions: read-all
 
