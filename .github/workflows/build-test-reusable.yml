@@ -58,6 +58,7 @@ permissions: read-all
 env:
   TRITON_DISABLE_LINE_INFO: 1
   TEST_UNSKIP: ${{ inputs.enable_unskip }}
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   integration-tests:
@@ -143,7 +144,7 @@ jobs:
 
       - name: Run core tests
         run: |
-          bash -v -x scripts/test-triton.sh          
+          bash -v -x scripts/test-triton.sh
 
       - name: Run instrumentation tests
         run: |
