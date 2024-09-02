@@ -134,6 +134,8 @@ run_unit_tests() {
   echo "***************************************************"
   echo "******      Running Triton CXX unittests     ******"
   echo "***************************************************"
+  find $TRITON_PROJ_BUILD -type f
+
   UNIT_TEST_DIR=$TRITON_PROJ_BUILD/"$(ls $TRITON_PROJ_BUILD)"
   if [ ! -d "${UNIT_TEST_DIR}" ]; then
     echo "Not found '${UNIT_TEST_DIR}'. Build Triton please" ; exit 2
