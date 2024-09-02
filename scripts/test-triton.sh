@@ -144,10 +144,9 @@ run_unit_tests() {
   echo "***************************************************"
   echo "******       Running Triton LIT tests        ******"
   echo "***************************************************"
-  LIT_TEST_DIR=$TRITON_PROJ_BUILD/"$(ls $TRITON_PROJ_BUILD)"/test
-  if [ ! -d "${LIT_TEST_DIR}" ]; then
+  LIT_TEST_DIR=$(ls -1 $TRITON_PROJ_BUILD/bdist*/test) || {
     echo "Not found '${LIT_TEST_DIR}'. Build Triton please" ; exit 4
-  fi
+}
   lit -v "${LIT_TEST_DIR}"
 }
 
