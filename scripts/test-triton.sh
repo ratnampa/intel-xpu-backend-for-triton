@@ -135,7 +135,7 @@ run_unit_tests() {
   echo "******      Running Triton CXX unittests     ******"
   echo "***************************************************"
 
-  UNIT_TEST_DIR="$(ls -1 $TRITON_PROJ_BUILD/bdist*)" || {
+  UNIT_TEST_DIR="$(ls -1d $TRITON_PROJ_BUILD/bdist*)" || {
     echo "Not found '${UNIT_TEST_DIR}'. Build Triton please" ; exit 2
   }
   cd $UNIT_TEST_DIR
@@ -144,7 +144,7 @@ run_unit_tests() {
   echo "***************************************************"
   echo "******       Running Triton LIT tests        ******"
   echo "***************************************************"
-  LIT_TEST_DIR=$(ls -1 $TRITON_PROJ_BUILD/cmake*/test) || {
+  LIT_TEST_DIR=$(ls -1d $TRITON_PROJ_BUILD/cmake*/test) || {
     echo "Not found '${LIT_TEST_DIR}'. Build Triton please" ; exit 4
   }
   lit -v "${LIT_TEST_DIR}"
