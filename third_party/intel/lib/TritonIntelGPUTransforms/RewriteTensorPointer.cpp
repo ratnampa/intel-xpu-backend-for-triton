@@ -51,18 +51,20 @@ bool shouldRemove(tt::MakeTensorPtrOp &op, bool isUsedByStoreOp) {
   ArrayRef<int32_t> order = op.getOrder();
   ArrayRef<int64_t> tensorShape = tensorType.getShape();
 
-  // TODO: support column-major tensor
+  unsigned rank = order.size();
+  if (rank != 2)
+    return true;
+
+  unsigned fastChangeDim = order[0];
   // HW 2D block read instruction has restriction on pitch divisibility
-  if (strides.size() == 2) {
-    auto pitch = strides[0];
-    // Across Intel platforms, the strictest pitch restriction is to be a
-    // multiple of OWord(128 bits).
-    if (!ttgi::isDivisible(pitch, 128 / tensorType.getElementTypeBitWidth()))
-      return true;
-  }
+  auto pitch = strides[fastChangeDim ^ 1];
+  // Across Intel platforms, the strictest pitch restriction is to be a
+  // multiple of OWord(128 bits).
+  if (!ttgi::isDivisible(pitch, 128 / tensorType.getElementTypeBitWidth()))
+    return true;
 
   // HW 2D block read instruction only supports contiguous accessing.
-  auto fastChangeStride = strides[1];
+  auto fastChangeStride = strides[fastChangeDim];
   if (auto stride = fastChangeStride.getDefiningOp<arith::ConstantOp>()) {
     if (auto strideInt = dyn_cast<IntegerAttr>(stride.getValue()))
       return strideInt.getInt() != 1;
@@ -285,8 +287,8 @@ private:
   DenseMap<unsigned, Value> cachedOffsetWithRange;
 };
 
-void getBackwardSliceImpl(Value val, SetVector<Value> *backwardSlice,
-                          bool excludeBlockArgs = false) {
+void getBackwardSlice(Value val, SetVector<Value> *backwardSlice,
+                      bool excludeBlockArgs = false) {
   Operation *op = val.getDefiningOp();
   if (!op) {
     op = cast<BlockArgument>(val).getOwner()->getParentOp();
@@ -314,19 +316,19 @@ void getBackwardSliceImpl(Value val, SetVector<Value> *backwardSlice,
       for (auto &yieldOp : yieldOps) {
         auto yeildArg = yieldOp->getOperand(iterArgIdx);
         if (backwardSlice->count(yeildArg) == 0) {
-          getBackwardSliceImpl(yeildArg, backwardSlice, true);
+          getBackwardSlice(yeildArg, backwardSlice, true);
         }
       }
       auto initArg = forOp.getInitArgs()[iterArgIdx];
       if (backwardSlice->count(initArg) == 0)
-        getBackwardSliceImpl(initArg, backwardSlice);
+        getBackwardSlice(initArg, backwardSlice);
     }
   } else {
     for (const auto &en : llvm::enumerate(op->getOperands())) {
       auto operand = en.value();
       if (auto *definingOp = operand.getDefiningOp()) {
         if (backwardSlice->count(operand) == 0)
-          getBackwardSliceImpl(operand, backwardSlice);
+          getBackwardSlice(operand, backwardSlice);
       } else if (auto blockArg = dyn_cast<BlockArgument>(operand)) {
         if (excludeBlockArgs)
           continue;
@@ -337,7 +339,7 @@ void getBackwardSliceImpl(Value val, SetVector<Value> *backwardSlice,
         if (parentOp && backwardSlice->count(operand) == 0) {
           assert(parentOp->getNumRegions() == 1 &&
                  parentOp->getRegion(0).getBlocks().size() == 1);
-          getBackwardSliceImpl(operand, backwardSlice);
+          getBackwardSlice(operand, backwardSlice);
         }
       } else {
         llvm_unreachable("No definingOp and not a block argument.");
@@ -747,7 +749,7 @@ public:
   void runOnOperation() override {
     ModuleOp mod = getOperation();
 
-#if 1
+#if 0
     mod.walk([this](Operation *op) {
       if (llvm::isa<triton::LoadOp, triton::StoreOp>(op)) {
         auto src = op->getOperand(0);
@@ -757,7 +759,7 @@ public:
         }
         if (triton::isTensorPointerType(src.getType())) {
           SetVector<Value> slices;
-          getBackwardSliceImpl(src, &slices);
+          getBackwardSlice(src, &slices);
           for (auto val : slices) {
             if (Operation *op = val.getDefiningOp()) {
               if (auto makeTensorPtrOp =
