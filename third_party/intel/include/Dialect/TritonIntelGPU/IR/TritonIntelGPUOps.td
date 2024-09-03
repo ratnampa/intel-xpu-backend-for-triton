@@ -141,4 +141,52 @@ def TTIG_BroadcastOp : TTIG_Op<"broadcast", [Pure, SameOperandsAndResultElementT
   }];
 }
 
+def TTIG_GetStrideOp : TTIG_Op<"get_stride", [Pure]> {
+  let summary = "Tensor descriptor get stride operation";
+  let description = [{
+    The `get_stride` operation extracts the stride of the described tensor for the given axis.
+    Example:
+     ```mlir
+      %stride0 = triton_intel_gpu.get_stride %desc, 0 : nv_tma_desc_type -> uint64
+      ```
+  }];
+  let arguments = (ins TT_PtrLike:$base, I32Attr:$index);
+  let results = (outs TT_Type:$res);
+  let assemblyFormat = [{
+    $base `,` $index attr-dict `:` type($base) `->` type($res)
+  }];
+}
+
+def TTIG_GetShapeOp : TTIG_Op<"get_shape", [Pure]> {
+  let summary = "Tensor descriptor get shape operation";
+  let description = [{
+    The `get_shape` operation extracts the parent tensor dimension of the described tensor for the given axis.
+    Example:
+     ```mlir
+      %shape0 = triton_intel_gpu.get_shape %desc, 0 : nv_tma_desc_type -> uint64
+      ```
+  }];
+  let arguments = (ins TT_PtrLike:$base, I32Attr:$index);
+  let results = (outs TT_Type:$res);
+  let assemblyFormat = [{
+    $base `,` $index attr-dict `:` type($base) `->` type($res)
+  }];
+}
+
+def TTIG_GetTensorPointerOp : TTIG_Op<"get_tensor_pointer", [Pure]> {
+  let summary = "Tensor descriptor get pointer operation";
+  let description = [{
+    The `get_pointer` operation extracts the pointer to the tensor of the described tensor for the given axis.
+    Example:
+     ```mlir
+      %tensor = triton_intel_gpu.get_tensor_pointer %desc : nv_tma_desc_type -> tensor<...>
+      ```
+  }];
+  let arguments = (ins TT_PtrLike:$base);
+  let results = (outs TT_TensorOrTensorPtr:$res);
+  let assemblyFormat = [{
+    $base attr-dict `:` type($base) `->` type($res)
+  }];  
+}
+
 #endif

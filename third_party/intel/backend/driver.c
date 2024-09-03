@@ -268,6 +268,57 @@ static PyObject *initDevices(PyObject *self, PyObject *args) {
   return Py_BuildValue("(i)", deviceCount);
 }
 
+// Simple helper to experiment creating TMA descriptors on the host.
+// This is a useful to test TMA operations independently.
+static PyObject *fill1DTMADescriptor(PyObject *self, PyObject *args) {
+  unsigned long long global_address;
+  uint64_t dim;
+  uint32_t tensorDims;
+  unsigned long long elementSize;
+  unsigned long long desc_address;
+  if (!PyArg_ParseTuple(args, "KKiiK", &global_address, &dim,
+                        &tensorDims, &elementSize, &desc_address)) {
+    return NULL;
+  }
+  uint64_t globalStride = {dim * elementSize};
+  uint32_t elementStride = 1;
+  unsigned long long rank = 1;
+
+  std::vector<unsigned long long> info {desc_address, elementSize, rank,
+      global_address, dim, 0, globalStride, 0, tensorDims, 0, elementStride, 0};
+  std::memcpy((void*)desc_address, (void*)info.data(),
+	      12*sizeof(unsigned long long));
+
+  return Py_None;
+}
+
+// Simple helper to experiment creating TMA descriptors on the host.
+// This is a useful to test TMA operations independently.
+static PyObject *fill2DTMADescriptor(PyObject *self, PyObject *args) {
+  unsigned long long global_address;
+  uint64_t dims[2];
+  uint32_t tensorDims[2];
+  unsigned long long elementSize;
+  unsigned long long desc_address;
+  if (!PyArg_ParseTuple(args, "KKKiiiK", &global_address, &dims[1], &dims[0],
+                        &tensorDims[1], &tensorDims[0], &elementSize,
+                        &desc_address)) {
+    return NULL;
+  }
+  uint64_t globalStrides[2] = {dims[0] * elementSize,
+                               dims[0] * dims[1] * elementSize};
+  uint32_t elementStrides[2] = {1, 1};
+  unsigned long long rank = 2;
+
+  std::vector<unsigned long long> info {desc_address, elementSize, rank,
+      global_address, dims[0], dims[1], globalStrides[0], globalStrides[1],
+      tensorDims[0], tensorDims[1], elementStrides[0], elementStrides[1]};
+  std::memcpy((void*)desc_address, (void*)info.data(),
+	      12*sizeof(unsigned long long));
+  return Py_None;
+}
+
+
 static PyMethodDef ModuleMethods[] = {
     {"load_binary", loadBinary, METH_VARARGS,
      "Load provided SPV into ZE driver"},
@@ -277,6 +328,8 @@ static PyMethodDef ModuleMethods[] = {
      "Initialize the ZE GPU context"},
     {"init_devices", initDevices, METH_VARARGS,
      "Initialize the ZE GPU devices and return device count"},
+    {"fill_1d_tma_descriptor", fill1DTMADescriptor, METH_VARARGS, "doc"},
+    {"fill_2d_tma_descriptor", fill2DTMADescriptor, METH_VARARGS, "doc"},
     {NULL, NULL, 0, NULL} // sentinel
 };
 

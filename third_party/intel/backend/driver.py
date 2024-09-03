@@ -110,6 +110,8 @@ class XPUUtils(object):
         mod = compile_module_from_src(Path(os.path.join(dirname, "driver.c")).read_text(), "spirv_utils")
         self.load_binary = mod.load_binary
         self.get_device_properties = mod.get_device_properties
+        self.fill_1d_tma_descriptor = mod.fill_1d_tma_descriptor
+        self.fill_2d_tma_descriptor = mod.fill_2d_tma_descriptor
         self.context = mod.init_context(self.get_sycl_queue())
         self.device_count = mod.init_devices(self.get_sycl_queue())
         self.current_device = 0 if self.device_count[0] > 0 else -1
@@ -149,6 +151,7 @@ def ty_to_cpp(ty):
         "fp32": "float",
         "f32": "float",
         "fp64": "double",
+        "nvTmaDesc": "TensorDescriptor",
     }[ty]
 
 
@@ -159,6 +162,8 @@ def make_launcher(constants, signature, ids):
 
     def _extracted_type(ty):
         if ty[0] == '*':
+            return "PyObject*"
+        if ty == "nvTmaDesc":
             return "PyObject*"
         return ty_to_cpp(ty)
 
@@ -181,6 +186,16 @@ def make_launcher(constants, signature, ids):
     args_format = ''.join([format_of(_extracted_type(ty)) for ty in signature.values()])
     format = "iiiOOOOOO" + args_format
     args_list = ', ' + ', '.join(f"&_arg{i}" for i, ty in signature.items()) if len(signature) > 0 else ''
+
+    internal_args_list = []
+    for i, ty in signature.items():
+        if ty[0] == "*":
+            internal_args_list.append(f"ptr_info{i}.dev_ptr")
+        elif ty == "nvTmaDesc":
+            # Note: we have to dereference the pointer
+            internal_args_list.append(f"*tma_ptr{i}")
+        else:
+            internal_args_list.append(f"_arg{i}")
 
     # generate glue code
     src = f"""
@@ -215,6 +230,8 @@ def make_launcher(constants, signature, ids):
       void* dev_ptr;
       bool valid;
     }} DevicePtrInfo;
+
+    typedef struct _TensorDescriptor {{ uint64_t info[16]; }} TensorDescriptor;
 
     static inline void checkDevicePointer(DevicePtrInfo *ptr_info, int idx, const sycl::queue &queue) {{
       if (!ptr_info->dev_ptr || !ptr_info->valid) {{
@@ -293,6 +310,9 @@ def make_launcher(constants, signature, ids):
       case sizeof(uint64_t):
       cgh.set_arg(index, *static_cast<const uint64_t*>(value));
       break;
+      case sizeof(TensorDescriptor):
+      cgh.set_arg(index, *static_cast<const TensorDescriptor*>(value));
+      break;
       default:
       assert(false && "wrong scalar size in sycl gen.");
       }}
@@ -331,6 +351,49 @@ def make_launcher(constants, signature, ids):
     auto event = stream.submit(cgf);
   }}
 // end sycl
+
+static inline TensorDescriptor* getTmaDesc(PyObject *obj) {{
+  if (sizeof(TensorDescriptor*) != 8) {{
+    PyErr_SetString(PyExc_SystemError, "getTmaDesc() requires 64-bit compilation");
+    return NULL;
+  }}
+  PyObject *method_handle = PyObject_GetAttrString(obj, "tma_desc_cpu_ptr");
+  if (!method_handle) {{
+    PyErr_SetString(PyExc_TypeError, "tma_desc_cpu_ptr() method does not exist");
+    return NULL;
+  }}
+  PyObject *empty_tuple = PyTuple_New(0);
+  if (!empty_tuple) {{
+    Py_DECREF(method_handle);
+    PyErr_SetString(PyExc_SystemError, "Internal Python error!");
+    return NULL;
+  }}
+  PyObject *method_ret = PyObject_Call(method_handle, empty_tuple, NULL);
+  Py_DECREF(empty_tuple);
+  Py_DECREF(method_handle);
+  if (!method_ret) {{
+    PyErr_SetString(PyExc_SystemError, "Internal Python error!");
+    return NULL;
+  }}
+  if (!PyLong_Check(method_ret)) {{
+    PyErr_SetString(PyExc_TypeError, "tma_desc_cpu_ptr() must return 64-bit int");
+    Py_DECREF(method_ret);
+    return NULL;
+  }}
+  uint64_t ptr_as_uint = PyLong_AsUnsignedLongLong(method_ret);
+  Py_DECREF(method_ret);
+  if (!ptr_as_uint) {{
+    PyErr_SetString(PyExc_ValueError, "received NULL ptr from tma_desc_cpu_ptr()");
+    return NULL;
+  }}
+  if (ptr_as_uint % 64 != 0) {{
+    PyErr_SetString(PyExc_ValueError, "tma_desc_cpu_ptr() must be 64-byte aligned" );
+    return NULL;
+  }}
+  return (TensorDescriptor*)(ptr_as_uint);
+}}
+
+
     static PyObject* launch(PyObject* self, PyObject* args) {{
 
       int gridX, gridY, gridZ;
@@ -382,7 +445,8 @@ def make_launcher(constants, signature, ids):
       sycl::kernel kernel = *kernel_ptr;
 
       {"; ".join([f"DevicePtrInfo ptr_info{i} = getPointer(_arg{i}, {i}, stream); if (!ptr_info{i}.valid) return NULL;" if ty[0] == "*" else "" for i, ty in signature.items()])};
-      sycl_kernel_launch(gridX, gridY, gridZ, num_warps, threads_per_warp, shared_memory, stream, kernel {',' + ', '.join(f"ptr_info{i}.dev_ptr" if ty[0]=="*" else f"_arg{i}" for i, ty in signature.items()) if len(signature) > 0 else ''});
+      {"".join([f"TensorDescriptor* tma_ptr{i} = getTmaDesc(_arg{i}); if (!tma_ptr{i}) return NULL;" if ty == "nvTmaDesc" else "" for i, ty in signature.items()])};
+      sycl_kernel_launch(gridX, gridY, gridZ, num_warps, threads_per_warp, shared_memory, stream, kernel {',' + ', '.join(internal_args_list) if len(internal_args_list) > 0 else ''});
 
       if(launch_exit_hook != Py_None){{
         PyObject* args = Py_BuildValue("(O)", launch_metadata);
