@@ -11,6 +11,7 @@ add_triton_library(TritonIntelGPUTransforms
   RewriteTensorPointer.cpp
   ScheduleLoad.cpp
   Utility.cpp
+  TMAMaterialize.cpp
 
   DEPENDS
   TritonIntelGPUTransformsIncGen
