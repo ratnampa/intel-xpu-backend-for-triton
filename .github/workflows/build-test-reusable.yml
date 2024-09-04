@@ -148,7 +148,17 @@ jobs:
 
           cd python/test/unit
 
-          TRITON_TEST_SUITE=language \
+          OverrideDefaultFP64Settings=0
+          IGC_EnableDPEmulation=0
+          source $GITHUB_WORKSPACE/scripts/capture-hw-details.sh
+          if [[ $GPU_DEVICE = *A770* ]]; then
+            # To enable FP64 type emulation.
+            # For details see: https://github.com/intel/intel-xpu-backend-for-triton/pull/1879
+            OverrideDefaultFP64Settings=1
+            IGC_EnableDPEmulation=1
+          fi
+
+          OverrideDefaultFP64Settings=$OverrideDefaultFP64Settings IGC_EnableDPEmulation=$IGC_EnableDPEmulation TRITON_TEST_SUITE=language \
             pytest -vvv -n 8 --device xpu language/ --ignore=language/test_line_info.py --ignore=language/test_subprocess.py
 
           TRITON_TEST_SUITE=subprocess \
