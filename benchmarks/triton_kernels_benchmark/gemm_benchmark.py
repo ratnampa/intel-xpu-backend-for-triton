@@ -10,12 +10,93 @@ To compare the performance to XeTLA kernel.
 import torch
 import triton
 import triton.language as tl
+import triton.tools.experimental_descriptor
 
 import triton_kernels_benchmark as benchmark_suit
 import xetla_kernel
 
 if benchmark_suit.USE_IPEX_OPTION:
     import intel_extension_for_pytorch  # type: ignore # noqa: F401
+
+
+@triton.jit
+def matmul_kernel_tma_persistent(a_desc_ptr, b_desc_ptr, c_desc_ptr,  #
+                                 # Matrix dimensions
+                                 M: tl.constexpr, N: tl.constexpr, K: tl.constexpr, BLOCK_SIZE_M: tl.constexpr,  #
+                                 BLOCK_SIZE_N: tl.constexpr,  #
+                                 BLOCK_SIZE_K: tl.constexpr,  #
+                                 GROUP_SIZE_M: tl.constexpr  #
+                                 ):
+    pid = tl.program_id(axis=0)
+    num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
+    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
+    num_pid_in_group = GROUP_SIZE_M * num_pid_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * GROUP_SIZE_M
+    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    offs_am = pid_m * BLOCK_SIZE_M
+    offs_bn = pid_n * BLOCK_SIZE_N
+
+    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+    for offs_k in range(0, K, BLOCK_SIZE_K):
+        a = tl._experimental_descriptor_load(a_desc_ptr, [offs_am, offs_k], [BLOCK_SIZE_M, BLOCK_SIZE_K], tl.float16)
+        b = tl._experimental_descriptor_load(b_desc_ptr, [offs_k, offs_bn], [BLOCK_SIZE_K, BLOCK_SIZE_N], tl.float16)
+        accumulator = tl.dot(a, b, accumulator)
+
+    c = accumulator.to(tl.float16)
+
+    tl._experimental_descriptor_store(c_desc_ptr, c, [offs_am, offs_bn])
+
+
+def matmul_tma_persistent(a, b):
+    # Autotuner does not work with TMA. Use manual config.
+    configs = {
+        torch.float8_e4m3fn: {
+            "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 128, "GROUP_SIZE_M": 8, "num_stages": 4,
+            "num_warps": 32
+        }, torch.float16: {
+            "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64, "GROUP_SIZE_M": 4, "num_stages": 3,
+            "num_warps": 32
+        }
+    }
+
+    # Check constraints.
+    assert a.shape[1] == b.shape[0], "Incompatible dimensions"  # b is transposed
+    assert a.dtype == b.dtype, "Incompatible dtypes"
+
+    M, K = a.shape
+    K, N = b.shape
+    dtype = a.dtype
+
+    c = torch.zeros((M, N), device=a.device, dtype=dtype)
+    desc_a = triton.tools.experimental_descriptor.create_2d_tma_descriptor(a.data_ptr(), M, K,
+                                                                           configs[dtype]["BLOCK_SIZE_M"],
+                                                                           configs[dtype]["BLOCK_SIZE_K"],
+                                                                           a.element_size())
+    desc_b = triton.tools.experimental_descriptor.create_2d_tma_descriptor(b.data_ptr(), K, N,
+                                                                           configs[dtype]["BLOCK_SIZE_K"],
+                                                                           configs[dtype]["BLOCK_SIZE_N"],
+                                                                           b.element_size())
+    desc_c = triton.tools.experimental_descriptor.create_2d_tma_descriptor(c.data_ptr(), M, N,
+                                                                           configs[dtype]["BLOCK_SIZE_M"],
+                                                                           configs[dtype]["BLOCK_SIZE_N"],
+                                                                           c.element_size())
+
+    grid = lambda META: (triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(N, META['BLOCK_SIZE_N']), )
+    matmul_kernel_tma_persistent[grid](
+        desc_a, desc_b, desc_c,  #
+        M, N, K,  #
+        BLOCK_SIZE_M=configs[dtype]["BLOCK_SIZE_M"],  #
+        BLOCK_SIZE_N=configs[dtype]["BLOCK_SIZE_N"],  #
+        BLOCK_SIZE_K=configs[dtype]["BLOCK_SIZE_K"],  #
+        GROUP_SIZE_M=configs[dtype]["GROUP_SIZE_M"],  #
+        num_stages=configs[dtype]["num_stages"],  #
+        num_warps=configs[dtype]["num_warps"],  #
+        grf_mode='large')
+    return c
 
 
 @triton.autotune(
@@ -202,35 +283,13 @@ def matmul(a, b, c):
         # argument names to use as an x-axis for the plot
         x_names=['B', 'M', 'K', 'N'],
         # different possible values for `x_name`
-        x_vals=[[1, 1024 * i, 1024 * i, 1024 * i] for i in [1, 2, 4, 8]] +  #
-        [  #
-            [1, 1, 5120, 13824],  #
-            [1, 4, 4096, 12288],  #
-            [1, 512, 8192, 8192],  #
-            [1, 512, 8192, 32768],  #
-            [1, 512, 32768, 8192],  #
-            [1, 1024, 16384, 8192],  #
-            [1, 1024, 28672, 8192],  #
-            [1, 3072, 4096, 3072],  # FIXME: Remove this case when gemm_streamk_benchmark works
-            [1, 4096, 16384, 8192],  #
-            [1, 8192, 16384, 1024],  #
-            [1, 8192, 16384, 4096],  #
-            [1, 16384, 1024, 8192],  #
-            [1, 16384, 4096, 8192],  #
-            [1, 16384, 8192, 1024],  #
-            [1, 16384, 8192, 4096],  #
-            [4, 32768, 128, 4096],  #
-            [4, 32768, 4096, 128],  #
-            [32, 4096, 4096, 128],  #
-            [4096, 8, 128, 16384],  #
-            [4096, 8, 16384, 128]
-        ],
+        x_vals=[[1, 1024 * i, 1024 * i, 1024 * i] for i in [1, 2, 4, 8]],
         line_arg='provider',
         # argument name whose value corresponds to a different line in the plot
         # possible values for `line_arg``
-        line_vals=['triton', 'xetla'],
+        line_vals=['triton-blockptr', 'triton-tma'],
         # label name for the lines
-        line_names=['Triton', 'XeTLA'],
+        line_names=['BlockPtr', 'TMA'],
         # line styles
         styles=[('green', '-'), ('green', '--'), ('blue', '-'), ('blue', '--')],
         ylabel=['GB/s', 'TFlops'],  # label name for the y-axis
@@ -240,18 +299,18 @@ def matmul(a, b, c):
     ))
 def benchmark(B, M, N, K, provider):
     if B == 1:
-        a = torch.rand((M, K), device='xpu', dtype=torch.bfloat16)
-        b = torch.rand((K, N), device='xpu', dtype=torch.bfloat16)
+        a = torch.rand((M, K), device='xpu', dtype=torch.float16)
+        b = torch.rand((K, N), device='xpu', dtype=torch.float16)
     else:
-        a = torch.rand((B, M, K), device='xpu', dtype=torch.bfloat16)
-        b = torch.rand((B, K, N), device='xpu', dtype=torch.bfloat16)
+        a = torch.rand((B, M, K), device='xpu', dtype=torch.float16)
+        b = torch.rand((B, K, N), device='xpu', dtype=torch.float16)
 
     quantiles = [0.5, 0.0, 1.0]
 
     if provider == 'onednn':
         _, min_ms, max_ms, mean_ms, cv = benchmark_suit.do_bench(lambda: torch.matmul(a, b), warmup=10, rep=10,
                                                                  quantiles=quantiles, fast_flush=False)
-    elif provider == 'triton':
+    elif provider == 'triton-blockptr':
         assert len(a.shape) == len(b.shape), 'Incompatible sizes'
         if len(a.shape) == 3:
             c = torch.empty((B, M, N), device='xpu', dtype=torch.float32)
@@ -260,8 +319,15 @@ def benchmark(B, M, N, K, provider):
             c = torch.empty((M, N), device='xpu', dtype=torch.float32)
         triton_fn = lambda: matmul(a, b, c)
         torch_fn = lambda: torch.matmul(a, b).to(torch.float32)
-        rtol = 1e-2 if a.dtype == torch.bfloat16 else 1e-3
-        benchmark_suit.assert_close(triton_fn(), torch_fn(), atol=1e-4, rtol=rtol, err_msg='triton to torch')
+        rtol = 1e-2 if a.dtype == torch.float16 else 1e-3
+        benchmark_suit.assert_close(triton_fn(), torch_fn(), atol=1e-4, rtol=rtol, err_msg='triton-blockptr to torch')
+        _, min_ms, max_ms, mean_ms, cv = benchmark_suit.do_bench(triton_fn, warmup=10, rep=10, quantiles=quantiles,
+                                                                 fast_flush=False)
+    elif provider == 'triton-tma':
+        triton_fn = lambda: matmul_tma_persistent(a, b)
+        torch_fn = lambda: torch.matmul(a, b).to(torch.float32)
+        rtol = 1e-2 if a.dtype == torch.float16 else 1e-3
+        benchmark_suit.assert_close(triton_fn(), torch_fn(), atol=1e-4, rtol=rtol, err_msg='triton-tma to torch')
         _, min_ms, max_ms, mean_ms, cv = benchmark_suit.do_bench(triton_fn, warmup=10, rep=10, quantiles=quantiles,
                                                                  fast_flush=False)
     elif provider == 'xetla':
