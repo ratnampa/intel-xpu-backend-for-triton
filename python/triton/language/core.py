@@ -2172,6 +2172,8 @@ def matrix_dimensions(input, values, _builder=None):
     """
     Let the compiler know that the matrix in :code:`input` is of dimensions :code:`value`.
     """
+    if not isinstance(values, pointer_type):
+        raise TypeError(f"input must have type `pointer_type`")
     if isinstance(values, constexpr):
         values = [values]
     for i, d in enumerate(values):
