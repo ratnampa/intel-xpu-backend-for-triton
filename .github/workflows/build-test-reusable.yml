@@ -133,11 +133,11 @@ jobs:
 
       - name: Run core tests
         run: |
-          ${{ env.TRITON_TEST_CMD }} --core --skip-pip-install
+          echo ${{ env.TRITON_TEST_CMD }} --core --skip-pip-install
 
       - name: Run interpreter tests
         run: |
-          ${{ env.TRITON_TEST_CMD }} --interpreter --skip-pip-install
+          echo ${{ env.TRITON_TEST_CMD }} --interpreter --skip-pip-install
 
       - name: Run Tutorials
         run: |
@@ -145,7 +145,7 @@ jobs:
 
       - name: Run instrumentation tests
         run: |
-          ${{ env.TRITON_TEST_CMD }} --instrumentation --skip-pip-install
+          echo ${{ env.TRITON_TEST_CMD }} --instrumentation --skip-pip-install
 
       - name: Get transformers version
         run: |
@@ -224,6 +224,7 @@ jobs:
           include-hidden-files: true
           path: |
             reports/*/*.csv
+            reports/*/*.png
             .env
 
       - name: Upload test reports

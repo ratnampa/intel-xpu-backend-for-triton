@@ -26,6 +26,9 @@ class CustomMark(triton.testing.Mark):  # pylint: disable=too-few-public-methods
             for file in pathlib.Path(tmp_dir).glob('*.csv'):
                 print(f'Report file: {file.name}')
                 shutil.move(file, self.reports_path)
+            for file in pathlib.Path(tmp_dir).glob('*.png'):
+                print(f'Report file: {file.name}')
+                shutil.move(file, self.reports_path)
             return result
 
 
