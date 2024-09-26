@@ -141,7 +141,7 @@ jobs:
 
       - name: Run Tutorials
         run: |
-          export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
+          export ZE_FLAT_DEVICE_HIERARCHY=FLAT
           ${{ env.TRITON_TEST_CMD }} --tutorial --skip-pip-install
 
       - name: Run instrumentation tests
