@@ -34,7 +34,7 @@ namespace {
 ///   and does not have DpasEncoding
 ///   - the tensor pointer pitch is not divisible by Qword bitwidth
 ///   - the tensor pointer is not contiguous on memory
-bool shouldRemove(tt::MakeTensorPtrOp &op, bool isUsedByStoreOp) {
+bool shouldRemove(tt::MakeTensorPtrOp &op, bool isUsedByStoreOp, bool isUsedByBlockLoadOp) {
   LDBG("Considering removal of: " << op);
   if (!op->getParentOfType<ModuleOp>()->hasAttr(
           ttgi::TritonIntelGPUDialect::getSupportSG2DBlockAttrName()))
@@ -45,51 +45,19 @@ bool shouldRemove(tt::MakeTensorPtrOp &op, bool isUsedByStoreOp) {
   auto tensorType = cast<RankedTensorType>(ptrType.getPointeeType());
   LDBG("Op tensor type: " << tensorType);
 
-  if (!ttgi::hasDotDpasEncoding(tensorType) &&
+  const bool hasDotDpasEncoding = ttgi::hasDotDpasEncoding(tensorType);
+  LDBG("Has dot dpas encoding: " << hasDotDpasEncoding);
+  LDBG("Used by store op: " << isUsedByStoreOp);
+  if (!hasDotDpasEncoding &&
       !(isUsedByStoreOp && ttgi::hasDpasEncoding(tensorType)))
     return true;
 
-  TypedValue<triton::PointerType> base = op.getBase();
-  Operation::operand_range shape = op.getShape();
-  unsigned rank = shape.size();
-  Operation::operand_range strides = op.getStrides();
-  Operation::operand_range offsets = op.getOffsets();
-  ArrayRef<int32_t> order = op.getOrder();
-  ArrayRef<int64_t> tensorShape = tensorType.getShape();
-
-  int fastChangeDim = -1;
-  for (size_t i = 0; i < strides.size(); ++i) {
-    if (mlir::triton::gpu::intel::isConstant(strides[i], 1)) {
-      fastChangeDim = i;
-      break;
-    }
+  LDBG("Used by block load op: " << isUsedByBlockLoadOp);
+  if (isUsedByBlockLoadOp) {
+    return false; 
   }
 
-  LDBG("fastChangeDim: " << fastChangeDim);
-  if (fastChangeDim < 0) {
-    return true;
-  }
-
-  LDBG("Tensor type element type bit width: "
-       << tensorType.getElementTypeBitWidth());
-  if (fastChangeDim == rank - 2 && tensorType.getElementTypeBitWidth() == 8) {
-    // TODO: column major layout w/ fp8 has performance regression
-    return true;
-  }
-
-  // HW 2D block read instruction has restriction on pitch divisibility
-  if (fastChangeDim >= (rank - 2)) {
-    auto pitch = strides[(fastChangeDim == rank - 1) ? rank - 2 : rank - 1];
-    LDBG("Pitch: " << pitch);
-    // Across Intel platforms, the strictest pitch restriction is to be a
-    // multiple of OWord(128 bits).
-    if (!ttgi::isDivisible(pitch, 128 / tensorType.getElementTypeBitWidth())) {
-      return true;
-    }
-
-    return false;
-  }
-  return true;
+  return true; 
 }
 
 /// The `RewritedInfo` struct is used to store information about a rewritten
@@ -710,11 +678,21 @@ public:
       });
     };
 
+    auto usedByBlockLoadOp = [](Value val) {
+      return llvm::any_of(val.getUsers(), [](Operation* user) {
+        if (/*llvm::isa<triton::LoadOp>(user) &&*/ user->getAttr(ttgi::TritonIntelGPUDialect::getBlockIOAttrName())) {
+          return true;
+        } else {
+          return false; 
+        }
+      });
+    };
+
     auto markTensorPointerForRemoval = [this](Value val,
-                                              bool isUsedByStoreOp = false) {
+                                              bool isUsedByStoreOp = false, bool isUsedByBlockLoadOp = false) {
       if (tt::isTensorPointerType(val.getType())) {
         tt::MakeTensorPtrOp makeTensorPtrOp = getMakeTensorPtrOp(val);
-        if (shouldRemove(makeTensorPtrOp, isUsedByStoreOp))
+        if (shouldRemove(makeTensorPtrOp, isUsedByStoreOp, isUsedByBlockLoadOp))
           valueToRemove.insert(val);
       }
     };
@@ -722,7 +700,7 @@ public:
     mod.walk([&](Operation *op) {
       if (llvm::isa<tt::MakeTensorPtrOp>(op)) {
         Value result = op->getResult(0);
-        markTensorPointerForRemoval(result, usedByStoreOp(result));
+        markTensorPointerForRemoval(result, usedByStoreOp(result), usedByBlockLoadOp(result));
       } else if (llvm::isa<tt::AdvanceOp, tt::LoadOp, tt::StoreOp>(op)) {
         markTensorPointerForRemoval(op->getOperand(0),
                                     llvm::isa<tt::StoreOp>(op));
