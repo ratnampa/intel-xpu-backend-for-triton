@@ -105,7 +105,7 @@ build_llvm() {
   if [ ! -d "$LLVM_PROJ" ]; then
     echo "**** Cloning $LLVM_PROJ ****"
     cd $BASE
-    LLVM_COMMIT_ID="8c11fe882ddd4b73efbb1d9f93f8083e3db0e543"
+    LLVM_COMMIT_ID="96d86f363e5625584149e91acbd2a7e8165447f9"
     git clone --recurse-submodules --jobs 8 https://github.com/FMarno/llvm-project.git llvm
     cd llvm
     git checkout $LLVM_COMMIT_ID
