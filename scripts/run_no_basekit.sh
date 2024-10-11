@@ -12,12 +12,15 @@ install_conda() {
     find /opt/intel/oneapi/mkl/2025.0/lib/ \( -name '*.so' -or -name '*.so.*' \) -exec cp -n {} $HOME/miniforge3/envs/triton/lib \;
     find /opt/intel/oneapi/compiler/2024.1/lib/ \( -name '*.so' -or -name '*.so.*' \) -exec cp -n {} $HOME/miniforge3/envs/triton/lib \;
 
+
+    python -m venv ./.venv; source ./.venv/bin/activate
+    export LD_LIBRARY_PATH=$HOME/miniforge3/envs/triton/lib:$LD_LIBRARY_PATH:$VIRTUAL_ENV/lib
+    export CPATH=$CPATH:$VIRTUAL_ENV/include:$VIRTUAL_ENV/include/sycl:$HOME/miniforge3/envs/triton/include
+
     wget https://files.pythonhosted.org/packages/cc/1e/d74e608f0c040e4f72dbfcd3b183f39570f054d08de39cc431f153220d90/intel_sycl_rt-2024.1.2-py2.py3-none-manylinux1_x86_64.whl
     pip install ./intel_sycl_rt-2024.1.2-py2.py3-none-manylinux1_x86_64.whl dpcpp_cpp_rt==2024.1.2
 
     ln -snf /opt/intel/oneapi/compiler/2024.1/include/sycl $HOME/miniforge3/envs/triton/include/sycl
-    ls -l $HOME/miniforge3/envs/triton/include/sycl/
-    exit 1
 }
 
 script_dir=$(dirname "$0")
